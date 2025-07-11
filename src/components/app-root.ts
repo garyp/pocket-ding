@@ -112,7 +112,7 @@ export class AppRoot extends LitElement {
 
   private async loadSettings() {
     try {
-      this.settings = await DatabaseService.getSettings();
+      this.settings = await DatabaseService.getSettings() || null;
     } catch (error) {
       console.error('Failed to load settings:', error);
     }

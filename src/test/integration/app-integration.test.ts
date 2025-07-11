@@ -92,8 +92,7 @@ function findTextInShadowDOM(element: Element, text: string): Element | null {
     const walker = document.createTreeWalker(
       root,
       NodeFilter.SHOW_ELEMENT,
-      null,
-      false
+      null
     );
     
     let node;
@@ -130,40 +129,6 @@ function findTextInShadowDOM(element: Element, text: string): Element | null {
   return searchInElement(element);
 }
 
-// Helper function to find element by text in shadow DOM recursively
-function findElementByText(element: Element, text: string): Element | null {
-  function searchInElement(root: Element | ShadowRoot): Element | null {
-    const walker = document.createTreeWalker(
-      root,
-      NodeFilter.SHOW_ELEMENT,
-      null,
-      false
-    );
-    
-    let node;
-    while (node = walker.nextNode()) {
-      if (node.textContent?.includes(text)) {
-        return node as Element;
-      }
-    }
-    
-    // Also search in nested shadow roots
-    const elements = root.querySelectorAll('*');
-    for (const el of elements) {
-      if (el.shadowRoot) {
-        const found = searchInElement(el.shadowRoot);
-        if (found) return found;
-      }
-    }
-    
-    return null;
-  }
-  
-  if (element.shadowRoot) {
-    return searchInElement(element.shadowRoot);
-  }
-  return searchInElement(element);
-}
 
 // Helper function to find a specific button by text in shadow DOM
 function findButtonByText(element: Element, text: string): HTMLElement | null {
@@ -259,8 +224,6 @@ describe('App Integration Tests', () => {
         expect(configButton).toBeTruthy();
       });
 
-      const configButton = findButtonByText(appRoot, 'Configure Settings') as HTMLElement;
-      
       // Set the view directly since navigation isn't working in tests
       // Also need to set settings to non-null to bypass the setup screen check
       (appRoot as any).settings = {};
@@ -298,8 +261,6 @@ describe('App Integration Tests', () => {
       });
 
       // Navigate to settings
-      const configButton = findButtonByText(appRoot, 'Configure Settings') as HTMLElement;
-      
       // Set the view directly since navigation isn't working in tests
       // Also need to set settings to non-null to bypass the setup screen check
       (appRoot as any).settings = {};

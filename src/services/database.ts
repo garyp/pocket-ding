@@ -32,7 +32,7 @@ export class DatabaseService {
   }
 
   static async getUnreadBookmarks(): Promise<LocalBookmark[]> {
-    return await db.bookmarks.where('unread').equals(true).toArray();
+    return await db.bookmarks.where('unread').equals(1).toArray();
   }
 
   static async saveReadProgress(progress: ReadProgress): Promise<void> {

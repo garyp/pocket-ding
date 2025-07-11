@@ -287,7 +287,7 @@ export class SettingsPanel extends LitElement {
         ${this.testStatus !== 'idle' ? html`
           <sl-alert
             variant=${this.testStatus === 'success' ? 'success' : this.testStatus === 'error' ? 'danger' : 'neutral'}
-            ?open=${this.testStatus !== 'idle'}
+            open
             class="status-message"
           >
             ${this.testMessage}

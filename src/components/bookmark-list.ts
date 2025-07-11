@@ -190,14 +190,6 @@ export class BookmarkList extends LitElement {
   }
 
 
-  private async handleManualSync() {
-    // This method is not used anymore, but keeping for potential future use
-    const settings = await DatabaseService.getSettings();
-    if (settings) {
-      await this.syncBookmarks(settings);
-    }
-  }
-
   private async loadBookmarks() {
     try {
       this.isLoading = true;

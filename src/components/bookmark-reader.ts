@@ -17,7 +17,6 @@ export class BookmarkReader extends LitElement {
   @state() private readProgress = 0;
   @state() private scrollPosition = 0;
 
-  private contentRef: HTMLElement | null = null;
   private scrollObserver: IntersectionObserver | null = null;
   private progressSaveTimeout: number | null = null;
 
@@ -255,7 +254,7 @@ export class BookmarkReader extends LitElement {
 
     try {
       this.isLoading = true;
-      this.bookmark = await DatabaseService.getBookmark(this.bookmarkId);
+      this.bookmark = await DatabaseService.getBookmark(this.bookmarkId) || null;
       
       if (this.bookmark) {
         // Load saved reading progress

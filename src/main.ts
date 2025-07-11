@@ -1,4 +1,4 @@
-import { LitElement, html, css } from 'lit';
+import { css } from 'lit';
 import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
 import './components/app-root';
 

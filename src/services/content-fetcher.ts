@@ -48,7 +48,7 @@ export class ContentFetcher {
         charThreshold: 500,
         classesToPreserve: [],
         keepClasses: false,
-        serializer: (el) => el.innerHTML,
+        serializer: (el) => (el as Element).innerHTML,
         disableJSONLD: false,
         allowedVideoRegex: /https?:\/\/(www\.)?(youtube|vimeo)\.com/i
       });
@@ -57,7 +57,7 @@ export class ContentFetcher {
       
       return {
         content: html,
-        readability_content: article ? article.content : html
+        readability_content: article?.content || html
       };
     } catch (error) {
       console.error('Failed to fetch bookmark content:', error);
