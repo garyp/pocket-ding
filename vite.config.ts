@@ -68,6 +68,13 @@ export default defineConfig({
   server: {
     fs: {
       allow: ['..']
+    },
+    proxy: {
+      '/api': {
+        target: 'https://linkding.realify.com',
+        changeOrigin: true,
+        secure: true
+      }
     }
   },
   assetsInclude: ['**/*.svg']

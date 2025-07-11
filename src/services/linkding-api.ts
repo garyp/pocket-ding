@@ -10,7 +10,10 @@ export class LinkdingAPI {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}/api${endpoint}`;
+    // Use proxy in development, direct URL in production
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const url = isDevelopment ? `/api${endpoint}` : `${this.baseUrl}/api${endpoint}`;
+    
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -67,7 +70,12 @@ export class LinkdingAPI {
   }
 
   async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
-    const url = `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
+    // Use proxy in development, direct URL in production
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const url = isDevelopment 
+      ? `/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`
+      : `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
+    
     const response = await fetch(url, {
       headers: {
         'Authorization': `Token ${this.token}`,
