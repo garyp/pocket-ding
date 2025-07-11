@@ -199,7 +199,7 @@ describe('App Integration Tests', () => {
       });
 
       await waitFor(() => {
-        const welcomeText = findTextInShadowDOM(appRoot, 'Welcome to Linkding Reader');
+        const welcomeText = findTextInShadowDOM(appRoot, 'Welcome to Pocket Ding');
         const configButton = findTextInShadowDOM(appRoot, 'Configure Settings');
         expect(welcomeText).toBeTruthy();
         expect(configButton).toBeTruthy();

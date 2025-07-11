@@ -10,8 +10,10 @@ export class LinkdingAPI {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    // Use proxy in development, direct URL in production
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // Use proxy in development, direct URL in production and tests
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    const isDevelopment = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+      && !isTestEnvironment;
     const url = isDevelopment ? `/api${endpoint}` : `${this.baseUrl}/api${endpoint}`;
     
     const response = await fetch(url, {
@@ -70,8 +72,10 @@ export class LinkdingAPI {
   }
 
   async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
-    // Use proxy in development, direct URL in production
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // Use proxy in development, direct URL in production and tests
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    const isDevelopment = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+      && !isTestEnvironment;
     const url = isDevelopment 
       ? `/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`
       : `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;

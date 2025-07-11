@@ -107,7 +107,13 @@ export class AppRoot extends LitElement {
   override async connectedCallback() {
     super.connectedCallback();
     await this.loadSettings();
+    this.setupRouting();
     this.isLoading = false;
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('popstate', this.handlePopState);
   }
 
   private async loadSettings() {
@@ -118,27 +124,97 @@ export class AppRoot extends LitElement {
     }
   }
 
+  private setupRouting() {
+    // Skip routing in test environments
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    if (isTestEnvironment) {
+      return;
+    }
+    
+    // Handle initial route
+    this.handleRoute();
+    // Listen for browser back/forward buttons
+    window.addEventListener('popstate', this.handlePopState);
+  }
+
+  private handlePopState = () => {
+    this.handleRoute();
+  };
+
+  private handleRoute() {
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    
+    if (path === '/settings') {
+      this.currentView = 'settings';
+    } else if (path === '/reader') {
+      this.currentView = 'reader';
+      const bookmarkId = params.get('id');
+      if (bookmarkId) {
+        this.selectedBookmarkId = parseInt(bookmarkId, 10);
+      }
+    } else {
+      this.currentView = 'bookmarks';
+      this.selectedBookmarkId = null;
+    }
+  }
+
+  private updateUrl(view: string, bookmarkId?: number) {
+    // Skip URL updates in test environments
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    if (isTestEnvironment) {
+      return;
+    }
+    
+    let url = '/';
+    let title = 'Pocket Ding';
+    
+    switch (view) {
+      case 'settings':
+        url = '/settings';
+        title = 'Settings - Pocket Ding';
+        break;
+      case 'reader':
+        url = bookmarkId ? `/reader?id=${bookmarkId}` : '/reader';
+        title = 'Reading - Pocket Ding';
+        break;
+      case 'bookmarks':
+      default:
+        url = '/';
+        title = 'Pocket Ding';
+        break;
+    }
+    
+    window.history.pushState({ view, bookmarkId }, title, url);
+    document.title = title;
+  }
+
   private handleBackClick() {
     if (this.currentView === 'reader') {
       this.currentView = 'bookmarks';
       this.selectedBookmarkId = null;
+      this.updateUrl('bookmarks');
     } else if (this.currentView === 'settings') {
       this.currentView = 'bookmarks';
+      this.updateUrl('bookmarks');
     }
   }
 
   private handleSettingsClick() {
     this.currentView = 'settings';
+    this.updateUrl('settings');
   }
 
   private handleBookmarkSelect(e: CustomEvent) {
     this.selectedBookmarkId = e.detail.bookmarkId;
     this.currentView = 'reader';
+    this.updateUrl('reader', this.selectedBookmarkId);
   }
 
   private async handleSettingsSave(e: CustomEvent) {
     this.settings = e.detail.settings;
     this.currentView = 'bookmarks';
+    this.updateUrl('bookmarks');
     
     // Wait for the bookmark list to render, then trigger sync
     await this.updateComplete;
