@@ -32,6 +32,7 @@ export interface LocalBookmark extends LinkdingBookmark {
   read_progress?: number;
   reading_mode?: 'original' | 'readability';
   is_synced?: boolean;
+  needs_read_sync?: boolean;
 }
 
 export interface ReadProgress {

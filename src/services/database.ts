@@ -25,6 +25,12 @@ export class LinkdingDatabase extends Dexie {
       settings: '++id, linkding_url, linkding_token',
       syncMetadata: '++id, last_sync_timestamp'
     });
+    this.version(3).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync',
+      readProgress: '++id, bookmark_id, last_read_at',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp'
+    });
   }
 }
 
@@ -77,5 +83,26 @@ export class DatabaseService {
   static async setLastSyncTimestamp(timestamp: string): Promise<void> {
     await db.syncMetadata.clear();
     await db.syncMetadata.add({ last_sync_timestamp: timestamp });
+  }
+
+  static async markBookmarkAsRead(bookmarkId: number): Promise<void> {
+    const bookmark = await db.bookmarks.get(bookmarkId);
+    if (bookmark) {
+      bookmark.unread = false;
+      bookmark.needs_read_sync = true;
+      await db.bookmarks.put(bookmark);
+    }
+  }
+
+  static async getBookmarksNeedingReadSync(): Promise<LocalBookmark[]> {
+    return await db.bookmarks.where('needs_read_sync').equals(1).toArray();
+  }
+
+  static async markBookmarkReadSynced(bookmarkId: number): Promise<void> {
+    const bookmark = await db.bookmarks.get(bookmarkId);
+    if (bookmark) {
+      bookmark.needs_read_sync = false;
+      await db.bookmarks.put(bookmark);
+    }
   }
 }

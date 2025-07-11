@@ -19,6 +19,8 @@ export class BookmarkReader extends LitElement {
 
   private scrollObserver: IntersectionObserver | null = null;
   private progressSaveTimeout: number | null = null;
+  private readMarkTimeout: number | null = null;
+  private hasBeenMarkedAsRead = false;
 
   static override styles = css`
     :host {
@@ -254,6 +256,7 @@ export class BookmarkReader extends LitElement {
 
     try {
       this.isLoading = true;
+      this.hasBeenMarkedAsRead = false; // Reset for new bookmark
       this.bookmark = await DatabaseService.getBookmark(this.bookmarkId) || null;
       
       if (this.bookmark) {
@@ -276,6 +279,7 @@ export class BookmarkReader extends LitElement {
     // Set up scroll tracking after content loads
     await this.updateComplete;
     this.setupScrollTracking();
+    this.setupReadMarking();
   }
 
   private setupScrollTracking() {
@@ -364,6 +368,23 @@ export class BookmarkReader extends LitElement {
     }
   }
 
+  private setupReadMarking() {
+    // Mark bookmark as read after 3 seconds of viewing
+    if (this.bookmark && this.bookmark.unread && !this.hasBeenMarkedAsRead) {
+      this.readMarkTimeout = window.setTimeout(async () => {
+        if (this.bookmark && this.bookmark.unread) {
+          try {
+            await DatabaseService.markBookmarkAsRead(this.bookmark.id);
+            this.hasBeenMarkedAsRead = true;
+            console.log(`Marked bookmark ${this.bookmark.id} as read`);
+          } catch (error) {
+            console.error('Failed to mark bookmark as read:', error);
+          }
+        }
+      }, 3000); // 3 seconds
+    }
+  }
+
   private cleanupObserver() {
     if (this.scrollObserver) {
       this.scrollObserver.disconnect();
@@ -372,6 +393,10 @@ export class BookmarkReader extends LitElement {
     if (this.progressSaveTimeout) {
       clearTimeout(this.progressSaveTimeout);
       this.progressSaveTimeout = null;
+    }
+    if (this.readMarkTimeout) {
+      clearTimeout(this.readMarkTimeout);
+      this.readMarkTimeout = null;
     }
   }
 

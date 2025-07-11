@@ -84,6 +84,9 @@ export class SyncService {
         onProgress?.(processed, total);
       }
 
+      // Sync read status back to Linkding
+      await this.syncReadStatusToLinkding(api);
+
       // Update last sync timestamp on successful completion
       await DatabaseService.setLastSyncTimestamp(syncStartTime);
       
@@ -108,5 +111,30 @@ export class SyncService {
     // Clear last sync timestamp to force full sync
     await DatabaseService.setLastSyncTimestamp('');
     await this.syncBookmarks(settings, onProgress);
+  }
+
+  private static async syncReadStatusToLinkding(api: LinkdingAPI): Promise<void> {
+    try {
+      const bookmarksNeedingSync = await DatabaseService.getBookmarksNeedingReadSync();
+      
+      for (const bookmark of bookmarksNeedingSync) {
+        try {
+          console.log(`Syncing read status for bookmark ${bookmark.id} to Linkding`);
+          await api.markBookmarkAsRead(bookmark.id);
+          await DatabaseService.markBookmarkReadSynced(bookmark.id);
+          console.log(`Successfully synced read status for bookmark ${bookmark.id}`);
+        } catch (error) {
+          console.error(`Failed to sync read status for bookmark ${bookmark.id}:`, error);
+          // Continue with other bookmarks even if one fails
+        }
+      }
+      
+      if (bookmarksNeedingSync.length > 0) {
+        console.log(`Synced read status for ${bookmarksNeedingSync.length} bookmarks`);
+      }
+    } catch (error) {
+      console.error('Failed to sync read status to Linkding:', error);
+      // Don't throw here - we don't want read sync failures to break the main sync
+    }
   }
 }

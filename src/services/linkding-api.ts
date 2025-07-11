@@ -55,6 +55,13 @@ export class LinkdingAPI {
     return await this.request<LinkdingBookmark>(`/bookmarks/${id}/`);
   }
 
+  async markBookmarkAsRead(id: number): Promise<LinkdingBookmark> {
+    return await this.request<LinkdingBookmark>(`/bookmarks/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ unread: false }),
+    });
+  }
+
   static async testConnection(settings: AppSettings): Promise<boolean> {
     try {
       const api = new LinkdingAPI(settings.linkding_url, settings.linkding_token);
