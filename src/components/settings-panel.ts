@@ -301,6 +301,16 @@ export class SettingsPanel extends LitElement {
               ` : 'Test Connection'}
             </sl-button>
           </div>
+          
+          ${this.testStatus !== 'idle' ? html`
+            <sl-alert
+              variant=${this.testStatus === 'success' ? 'success' : this.testStatus === 'error' ? 'danger' : 'neutral'}
+              open
+              class="status-message"
+            >
+              ${this.testMessage}
+            </sl-alert>
+          ` : ''}
         </div>
         
         <div class="form-section">
@@ -367,16 +377,6 @@ export class SettingsPanel extends LitElement {
             </sl-select>
           </div>
         </div>
-
-        ${this.testStatus !== 'idle' ? html`
-          <sl-alert
-            variant=${this.testStatus === 'success' ? 'success' : this.testStatus === 'error' ? 'danger' : 'neutral'}
-            open
-            class="status-message"
-          >
-            ${this.testMessage}
-          </sl-alert>
-        ` : ''}
         
         <div class="form-actions">
           <sl-button

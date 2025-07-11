@@ -210,25 +210,24 @@ export class AppRoot extends LitElement {
       `;
     }
 
-    if (!this.settings) {
-      return html`
-        <div class="setup-required">
-          <div class="setup-card">
-            <h2>Welcome to Linkding Reader</h2>
-            <p>To get started, you need to configure your Linkding server connection.</p>
-            <sl-button
-              variant="primary"
-              @click=${this.handleSettingsClick}
-            >
-              Configure Settings
-            </sl-button>
-          </div>
-        </div>
-      `;
-    }
-
     switch (this.currentView) {
       case 'bookmarks':
+        if (!this.settings) {
+          return html`
+            <div class="setup-required">
+              <div class="setup-card">
+                <h2>Welcome to Pocket Ding</h2>
+                <p>To get started, you need to configure your Linkding server connection.</p>
+                <sl-button
+                  variant="primary"
+                  @click=${this.handleSettingsClick}
+                >
+                  Configure Settings
+                </sl-button>
+              </div>
+            </div>
+          `;
+        }
         return html`
           <bookmark-list
             @bookmark-selected=${this.handleBookmarkSelect}

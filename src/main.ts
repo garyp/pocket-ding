@@ -5,18 +5,19 @@ import './components/app-root';
 // Set Shoelace base path for bundled assets
 setBasePath('/assets/');
 
-// Register service worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('SW registered: ', registration);
-      })
-      .catch((registrationError) => {
-        console.log('SW registration failed: ', registrationError);
-      });
-  });
-}
+// Register service worker with VitePWA
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({
+  onNeedRefresh() {
+    // Show a prompt to user
+    console.log('A new version is available. Please refresh to update.');
+  },
+  onOfflineReady() {
+    // Show a ready to work offline to user
+    console.log('App is ready to work offline');
+  },
+});
 
 // Create and mount the app
 const app = document.createElement('app-root');
