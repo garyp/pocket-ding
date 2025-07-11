@@ -5,6 +5,9 @@ import type { AppSettings, LinkdingBookmark, LocalBookmark } from '../../types';
 vi.mock('../../services/linkding-api', () => ({
   LinkdingAPI: vi.fn().mockImplementation(() => ({
     getAllBookmarks: vi.fn(),
+    getBookmarkAssets: vi.fn(),
+    downloadAsset: vi.fn(),
+    markBookmarkAsRead: vi.fn(),
   })),
 }));
 
@@ -14,6 +17,10 @@ vi.mock('../../services/database', () => ({
     saveBookmark: vi.fn(),
     getLastSyncTimestamp: vi.fn(),
     setLastSyncTimestamp: vi.fn(),
+    getAssetsByBookmarkId: vi.fn(),
+    saveAsset: vi.fn(),
+    getBookmarksNeedingReadSync: vi.fn(),
+    markBookmarkReadSynced: vi.fn(),
   },
 }));
 
@@ -99,6 +106,9 @@ describe('SyncService', () => {
     // Setup API mock
     mockApi = {
       getAllBookmarks: vi.fn(),
+      getBookmarkAssets: vi.fn(),
+      downloadAsset: vi.fn(),
+      markBookmarkAsRead: vi.fn(),
     };
     (LinkdingAPI as any).mockImplementation(() => mockApi);
 
@@ -107,6 +117,10 @@ describe('SyncService', () => {
     (DatabaseService.saveBookmark as any).mockResolvedValue(undefined);
     (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
     (DatabaseService.setLastSyncTimestamp as any).mockResolvedValue(undefined);
+    (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+    (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
+    (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([]);
+    (DatabaseService.markBookmarkReadSynced as any).mockResolvedValue(undefined);
 
     // Setup content fetcher mock
     (ContentFetcher.fetchBookmarkContent as any).mockResolvedValue({
@@ -295,6 +309,158 @@ describe('SyncService', () => {
 
       // Should not throw
       await expect(SyncService.backgroundSync(settingsWithAutoSync)).resolves.not.toThrow();
+    });
+  });
+
+  describe('Asset Syncing', () => {
+    const mockAssets = [
+      {
+        id: 1,
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'Page Snapshot',
+        file_size: 12345,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+      },
+      {
+        id: 2,
+        asset_type: 'document',
+        content_type: 'application/pdf',
+        display_name: 'Document.pdf',
+        file_size: 54321,
+        status: 'pending' as const,
+        date_created: '2024-01-01T10:30:00Z',
+      },
+    ];
+
+    beforeEach(() => {
+      // Reset mocks for asset tests
+      mockApi.getBookmarkAssets.mockResolvedValue([]);
+      mockApi.downloadAsset.mockResolvedValue(new ArrayBuffer(8));
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+      (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
+    });
+
+    it('should sync completed assets for bookmarks', async () => {
+      mockApi.getAllBookmarks.mockResolvedValue([mockRemoteBookmarks[0]]);
+      mockApi.getBookmarkAssets.mockResolvedValue(mockAssets);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(mockApi.getBookmarkAssets).toHaveBeenCalledWith(1);
+      expect(mockApi.downloadAsset).toHaveBeenCalledWith(1, 1); // Only completed asset
+      expect(mockApi.downloadAsset).not.toHaveBeenCalledWith(1, 2); // Pending asset skipped
+      expect(DatabaseService.saveAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          bookmark_id: 1,
+          asset_type: 'snapshot',
+          content_type: 'text/html',
+          display_name: 'Page Snapshot',
+          content: expect.any(ArrayBuffer),
+          cached_at: expect.any(String),
+        })
+      );
+    });
+
+    it('should skip assets that already exist and are cached', async () => {
+      const existingAsset = {
+        id: 1,
+        bookmark_id: 1,
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'Page Snapshot',
+        file_size: 12345,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+        content: new ArrayBuffer(8),
+        cached_at: '2024-01-01T10:30:00Z',
+      };
+
+      mockApi.getAllBookmarks.mockResolvedValue([mockRemoteBookmarks[0]]);
+      mockApi.getBookmarkAssets.mockResolvedValue([mockAssets[0]]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([existingAsset]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(mockApi.downloadAsset).not.toHaveBeenCalled();
+      expect(DatabaseService.saveAsset).not.toHaveBeenCalled();
+    });
+
+    it('should handle asset download errors gracefully', async () => {
+      mockApi.getAllBookmarks.mockResolvedValue([mockRemoteBookmarks[0]]);
+      mockApi.getBookmarkAssets.mockResolvedValue([mockAssets[0]]);
+      mockApi.downloadAsset.mockRejectedValue(new Error('Download failed'));
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+
+      // Should not throw
+      await expect(SyncService.syncBookmarks(mockSettings)).resolves.not.toThrow();
+      
+      expect(DatabaseService.saveAsset).not.toHaveBeenCalled();
+    });
+
+    it('should handle asset API errors gracefully', async () => {
+      mockApi.getAllBookmarks.mockResolvedValue([mockRemoteBookmarks[0]]);
+      mockApi.getBookmarkAssets.mockRejectedValue(new Error('API error'));
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+
+      // Should not throw
+      await expect(SyncService.syncBookmarks(mockSettings)).resolves.not.toThrow();
+    });
+
+    it('should only download completed assets', async () => {
+      const allStatusAssets = [
+        { ...mockAssets[0], status: 'complete' as const },
+        { ...mockAssets[1], status: 'pending' as const },
+        { id: 3, asset_type: 'test', content_type: 'text/plain', display_name: 'Test', file_size: 100, status: 'failure' as const, date_created: '2024-01-01T11:00:00Z' },
+      ];
+
+      mockApi.getAllBookmarks.mockResolvedValue([mockRemoteBookmarks[0]]);
+      mockApi.getBookmarkAssets.mockResolvedValue(allStatusAssets);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(mockApi.downloadAsset).toHaveBeenCalledTimes(1);
+      expect(mockApi.downloadAsset).toHaveBeenCalledWith(1, 1); // Only the completed asset
+    });
+
+    it('should sync read status back to Linkding', async () => {
+      const bookmarkNeedingSync = { ...mockLocalBookmarks[0], needs_read_sync: true };
+      
+      mockApi.getAllBookmarks.mockResolvedValue([]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+      (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([bookmarkNeedingSync]);
+      mockApi.markBookmarkAsRead.mockResolvedValue(mockRemoteBookmarks[0]);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(mockApi.markBookmarkAsRead).toHaveBeenCalledWith(1);
+      expect(DatabaseService.markBookmarkReadSynced).toHaveBeenCalledWith(1);
+    });
+
+    it('should handle read sync errors gracefully', async () => {
+      const bookmarkNeedingSync = { ...mockLocalBookmarks[0], needs_read_sync: true };
+      
+      mockApi.getAllBookmarks.mockResolvedValue([]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+      (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([bookmarkNeedingSync]);
+      mockApi.markBookmarkAsRead.mockRejectedValue(new Error('Read sync failed'));
+
+      // Should not throw
+      await expect(SyncService.syncBookmarks(mockSettings)).resolves.not.toThrow();
+      
+      expect(DatabaseService.markBookmarkReadSynced).not.toHaveBeenCalled();
     });
   });
 });

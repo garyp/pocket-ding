@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { LocalBookmark, ReadProgress, AppSettings } from '../types';
+import type { LocalBookmark, ReadProgress, AppSettings, LocalAsset } from '../types';
 
 interface SyncMetadata {
   id?: number;
@@ -11,6 +11,7 @@ export class LinkdingDatabase extends Dexie {
   readProgress!: Table<ReadProgress>;
   settings!: Table<AppSettings>;
   syncMetadata!: Table<SyncMetadata>;
+  assets!: Table<LocalAsset>;
 
   constructor() {
     super('LinkdingReaderDB');
@@ -30,6 +31,13 @@ export class LinkdingDatabase extends Dexie {
       readProgress: '++id, bookmark_id, last_read_at',
       settings: '++id, linkding_url, linkding_token',
       syncMetadata: '++id, last_sync_timestamp'
+    });
+    this.version(4).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync',
+      readProgress: '++id, bookmark_id, last_read_at',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp',
+      assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
     });
   }
 }
@@ -104,5 +112,28 @@ export class DatabaseService {
       bookmark.needs_read_sync = false;
       await db.bookmarks.put(bookmark);
     }
+  }
+
+  static async saveAsset(asset: LocalAsset): Promise<void> {
+    await db.assets.put(asset);
+  }
+
+  static async getAssetsByBookmarkId(bookmarkId: number): Promise<LocalAsset[]> {
+    return await db.assets.where('bookmark_id').equals(bookmarkId).toArray();
+  }
+
+  static async getCompletedAssetsByBookmarkId(bookmarkId: number): Promise<LocalAsset[]> {
+    return await db.assets
+      .where('bookmark_id').equals(bookmarkId)
+      .and(asset => asset.status === 'complete')
+      .toArray();
+  }
+
+  static async getAsset(id: number): Promise<LocalAsset | undefined> {
+    return await db.assets.get(id);
+  }
+
+  static async deleteAssetsByBookmarkId(bookmarkId: number): Promise<void> {
+    await db.assets.where('bookmark_id').equals(bookmarkId).delete();
   }
 }

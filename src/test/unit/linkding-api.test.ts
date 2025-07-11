@@ -122,4 +122,91 @@ describe('LinkdingAPI', () => {
     );
     expect(result).toEqual(mockBookmarks);
   });
+
+  describe('Asset Methods', () => {
+    it('should fetch bookmark assets', async () => {
+      const mockAssets = [
+        {
+          id: 1,
+          asset_type: 'snapshot',
+          content_type: 'text/html',
+          display_name: 'Page Snapshot',
+          file_size: 12345,
+          status: 'complete' as const,
+          date_created: '2024-01-01T10:00:00Z',
+        },
+        {
+          id: 2,
+          asset_type: 'document',
+          content_type: 'application/pdf',
+          display_name: 'Document.pdf',
+          file_size: 54321,
+          status: 'complete' as const,
+          date_created: '2024-01-01T10:30:00Z',
+        },
+      ];
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockAssets),
+      });
+      global.fetch = mockFetch;
+
+      const result = await api.getBookmarkAssets(123);
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://linkding.example.com/api/bookmarks/123/assets/',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Token test-token',
+            'Content-Type': 'application/json',
+          }),
+        })
+      );
+      expect(result).toEqual(mockAssets);
+    });
+
+    it('should download asset as ArrayBuffer', async () => {
+      const mockContent = new ArrayBuffer(8);
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(mockContent),
+      });
+      global.fetch = mockFetch;
+
+      const result = await api.downloadAsset(123, 456);
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://linkding.example.com/api/bookmarks/123/assets/456/download/',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Token test-token',
+          }),
+        })
+      );
+      expect(result).toBe(mockContent);
+    });
+
+    it('should handle asset fetch errors', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      });
+      global.fetch = mockFetch;
+
+      await expect(api.getBookmarkAssets(123)).rejects.toThrow('API request failed: 404 Not Found');
+    });
+
+    it('should handle asset download errors', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+      });
+      global.fetch = mockFetch;
+
+      await expect(api.downloadAsset(123, 456)).rejects.toThrow('Failed to download asset: 403 Forbidden');
+    });
+  });
 });

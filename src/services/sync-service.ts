@@ -1,7 +1,7 @@
 import { LinkdingAPI } from './linkding-api';
 import { ContentFetcher } from './content-fetcher';
 import { DatabaseService } from './database';
-import type { LocalBookmark, AppSettings } from '../types';
+import type { LocalBookmark, AppSettings, LocalAsset } from '../types';
 
 export class SyncService {
   private static isSyncing = false;
@@ -78,6 +78,9 @@ export class SyncService {
           }
 
           await DatabaseService.saveBookmark(bookmarkToSave);
+          
+          // Sync assets for this bookmark
+          await this.syncBookmarkAssets(api, remoteBookmark.id);
         }
 
         processed++;
@@ -135,6 +138,58 @@ export class SyncService {
     } catch (error) {
       console.error('Failed to sync read status to Linkding:', error);
       // Don't throw here - we don't want read sync failures to break the main sync
+    }
+  }
+
+  private static async syncBookmarkAssets(api: LinkdingAPI, bookmarkId: number): Promise<void> {
+    try {
+      // Get remote assets for this bookmark
+      const remoteAssets = await api.getBookmarkAssets(bookmarkId);
+      
+      // Filter to only completed assets
+      const completedAssets = remoteAssets.filter(asset => asset.status === 'complete');
+      
+      // Get existing local assets
+      const localAssets = await DatabaseService.getAssetsByBookmarkId(bookmarkId);
+      
+      // Sync each completed asset
+      for (const remoteAsset of completedAssets) {
+        const existingAsset = localAssets.find(a => a.id === remoteAsset.id);
+        
+        // Skip if asset already exists and is cached
+        if (existingAsset?.content && existingAsset.cached_at) {
+          continue;
+        }
+        
+        try {
+          // Download asset content
+          const content = await api.downloadAsset(bookmarkId, remoteAsset.id);
+          
+          const localAsset: LocalAsset = {
+            ...remoteAsset,
+            bookmark_id: bookmarkId,
+            content,
+            cached_at: new Date().toISOString()
+          };
+          
+          await DatabaseService.saveAsset(localAsset);
+          console.log(`Downloaded asset ${remoteAsset.id} for bookmark ${bookmarkId}`);
+        } catch (error) {
+          console.error(`Failed to download asset ${remoteAsset.id} for bookmark ${bookmarkId}:`, error);
+        }
+      }
+      
+      // Clean up assets that no longer exist remotely
+      const remoteAssetIds = new Set(completedAssets.map(a => a.id));
+      for (const localAsset of localAssets) {
+        if (!remoteAssetIds.has(localAsset.id)) {
+          // TODO: Remove this asset from local storage
+          console.log(`Asset ${localAsset.id} no longer exists remotely, should be cleaned up`);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to sync assets for bookmark ${bookmarkId}:`, error);
+      // Don't throw - continue with other bookmarks
     }
   }
 }

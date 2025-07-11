@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { LocalBookmark, AppSettings, ReadProgress } from '../../types';
+import type { LocalBookmark, AppSettings, ReadProgress, LocalAsset } from '../../types';
 
 // Mock the database module
 vi.mock('../../services/database', () => {
@@ -23,6 +23,7 @@ vi.mock('../../services/database', () => {
     readProgress: mockTable,
     settings: mockTable,
     syncMetadata: mockTable,
+    assets: mockTable,
     open: vi.fn().mockResolvedValue(undefined),
   };
 
@@ -40,6 +41,14 @@ vi.mock('../../services/database', () => {
       clearAll: vi.fn(),
       getLastSyncTimestamp: vi.fn(),
       setLastSyncTimestamp: vi.fn(),
+      saveAsset: vi.fn(),
+      getAssetsByBookmarkId: vi.fn(),
+      getCompletedAssetsByBookmarkId: vi.fn(),
+      getAsset: vi.fn(),
+      deleteAssetsByBookmarkId: vi.fn(),
+      markBookmarkAsRead: vi.fn(),
+      getBookmarksNeedingReadSync: vi.fn(),
+      markBookmarkReadSynced: vi.fn(),
     },
   };
 });
@@ -67,6 +76,19 @@ describe('DatabaseService', () => {
     date_modified: '2024-01-01T10:00:00Z',
   };
 
+  const mockAsset: LocalAsset = {
+    id: 1,
+    bookmark_id: 1,
+    asset_type: 'snapshot',
+    content_type: 'text/html',
+    display_name: 'Page Snapshot',
+    file_size: 12345,
+    status: 'complete',
+    date_created: '2024-01-01T10:00:00Z',
+    content: new ArrayBuffer(8),
+    cached_at: '2024-01-01T10:30:00Z',
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     
@@ -82,6 +104,14 @@ describe('DatabaseService', () => {
     (DatabaseService.clearAll as any).mockResolvedValue(undefined);
     (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
     (DatabaseService.setLastSyncTimestamp as any).mockResolvedValue(undefined);
+    (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
+    (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+    (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+    (DatabaseService.getAsset as any).mockResolvedValue(null);
+    (DatabaseService.deleteAssetsByBookmarkId as any).mockResolvedValue(undefined);
+    (DatabaseService.markBookmarkAsRead as any).mockResolvedValue(undefined);
+    (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([]);
+    (DatabaseService.markBookmarkReadSynced as any).mockResolvedValue(undefined);
   });
 
   it('should save a bookmark', async () => {
@@ -148,5 +178,60 @@ describe('DatabaseService', () => {
 
     await DatabaseService.setLastSyncTimestamp(timestamp);
     expect(DatabaseService.setLastSyncTimestamp).toHaveBeenCalledWith(timestamp);
+  });
+
+  describe('Asset Methods', () => {
+    it('should save an asset', async () => {
+      await DatabaseService.saveAsset(mockAsset);
+      expect(DatabaseService.saveAsset).toHaveBeenCalledWith(mockAsset);
+    });
+
+    it('should get assets by bookmark id', async () => {
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([mockAsset]);
+
+      const result = await DatabaseService.getAssetsByBookmarkId(1);
+      expect(DatabaseService.getAssetsByBookmarkId).toHaveBeenCalledWith(1);
+      expect(result).toEqual([mockAsset]);
+    });
+
+    it('should get completed assets by bookmark id', async () => {
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([mockAsset]);
+
+      const result = await DatabaseService.getCompletedAssetsByBookmarkId(1);
+      expect(DatabaseService.getCompletedAssetsByBookmarkId).toHaveBeenCalledWith(1);
+      expect(result).toEqual([mockAsset]);
+    });
+
+    it('should get asset by id', async () => {
+      (DatabaseService.getAsset as any).mockResolvedValue(mockAsset);
+
+      const result = await DatabaseService.getAsset(1);
+      expect(DatabaseService.getAsset).toHaveBeenCalledWith(1);
+      expect(result).toEqual(mockAsset);
+    });
+
+    it('should delete assets by bookmark id', async () => {
+      await DatabaseService.deleteAssetsByBookmarkId(1);
+      expect(DatabaseService.deleteAssetsByBookmarkId).toHaveBeenCalledWith(1);
+    });
+
+    it('should mark bookmark as read', async () => {
+      await DatabaseService.markBookmarkAsRead(1);
+      expect(DatabaseService.markBookmarkAsRead).toHaveBeenCalledWith(1);
+    });
+
+    it('should get bookmarks needing read sync', async () => {
+      const mockBookmarkNeedingSync = { ...mockBookmark, needs_read_sync: true };
+      (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([mockBookmarkNeedingSync]);
+
+      const result = await DatabaseService.getBookmarksNeedingReadSync();
+      expect(DatabaseService.getBookmarksNeedingReadSync).toHaveBeenCalled();
+      expect(result).toEqual([mockBookmarkNeedingSync]);
+    });
+
+    it('should mark bookmark read synced', async () => {
+      await DatabaseService.markBookmarkReadSynced(1);
+      expect(DatabaseService.markBookmarkReadSynced).toHaveBeenCalledWith(1);
+    });
   });
 });

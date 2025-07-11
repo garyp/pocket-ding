@@ -2,11 +2,14 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { DatabaseService } from '../services/database';
-import type { LocalBookmark, ReadProgress } from '../types';
+import { ContentFetcher } from '../services/content-fetcher';
+import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
+import '@shoelace-style/shoelace/dist/components/select/select.js';
+import '@shoelace-style/shoelace/dist/components/option/option.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
@@ -16,6 +19,11 @@ export class BookmarkReader extends LitElement {
   @state() private readingMode: 'original' | 'readability' = 'readability';
   @state() private readProgress = 0;
   @state() private scrollPosition = 0;
+  @state() private selectedContentSource: ContentSourceOption | null = null;
+  @state() private availableContentSources: ContentSourceOption[] = [];
+  @state() private currentContent = '';
+  @state() private currentReadabilityContent = '';
+  @state() private isLoadingContent = false;
 
   private scrollObserver: IntersectionObserver | null = null;
   private progressSaveTimeout: number | null = null;
@@ -47,6 +55,16 @@ export class BookmarkReader extends LitElement {
     .reading-mode-toggle {
       display: flex;
       gap: 0.5rem;
+    }
+
+    .content-source-selector {
+      min-width: 120px;
+    }
+
+    .toolbar-section {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
     }
 
     .progress-section {
@@ -206,6 +224,25 @@ export class BookmarkReader extends LitElement {
       text-decoration: underline;
     }
 
+    .unsupported-content {
+      text-align: center;
+      padding: 2rem;
+      background: var(--sl-color-neutral-50);
+      border: 2px dashed var(--sl-color-neutral-300);
+      border-radius: 8px;
+      margin: 2rem 0;
+    }
+
+    .unsupported-content h2 {
+      color: var(--sl-color-warning-600);
+      margin-bottom: 1rem;
+    }
+
+    .unsupported-content p {
+      color: var(--sl-color-neutral-600);
+      margin-bottom: 0.5rem;
+    }
+
     @media (max-width: 768px) {
       .reader-toolbar {
         padding: 0.5rem;
@@ -269,6 +306,16 @@ export class BookmarkReader extends LitElement {
         } else {
           this.readingMode = this.bookmark.reading_mode || 'readability';
         }
+
+        // Load available content sources
+        this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
+        
+        // Set default content source (prefer first asset if available, otherwise URL)
+        const firstAsset = this.availableContentSources.find(source => source.type === 'asset');
+        this.selectedContentSource = firstAsset || this.availableContentSources.find(source => source.type === 'url') || this.availableContentSources[0] || null;
+        
+        // Load content with preferred source
+        await this.loadContent();
       }
     } catch (error) {
       console.error('Failed to load bookmark:', error);
@@ -280,6 +327,48 @@ export class BookmarkReader extends LitElement {
     await this.updateComplete;
     this.setupScrollTracking();
     this.setupReadMarking();
+  }
+
+  private async loadContent() {
+    if (!this.bookmark || !this.selectedContentSource) return;
+
+    try {
+      this.isLoadingContent = true;
+      
+      // Use cached content if available and appropriate
+      if (this.selectedContentSource.type === 'url' && this.bookmark.content) {
+        this.currentContent = this.bookmark.content;
+        this.currentReadabilityContent = this.bookmark.readability_content || this.bookmark.content;
+        return;
+      }
+
+      // Fetch content using the selected source
+      const result = await ContentFetcher.fetchBookmarkContent(
+        this.bookmark, 
+        this.selectedContentSource.type, 
+        this.selectedContentSource.assetId
+      );
+      this.currentContent = result.content;
+      this.currentReadabilityContent = result.readability_content;
+      
+      console.log(`Loaded content from source: ${result.source}${this.selectedContentSource.assetId ? ` (asset ${this.selectedContentSource.assetId})` : ''}`);
+    } catch (error) {
+      console.error('Failed to load content:', error);
+      this.currentContent = this.createErrorContent();
+      this.currentReadabilityContent = this.currentContent;
+    } finally {
+      this.isLoadingContent = false;
+    }
+  }
+
+  private createErrorContent(): string {
+    return `
+      <div class="fallback-content">
+        <h1>Content Unavailable</h1>
+        <p>Failed to load content from the selected source.</p>
+        <p>Try selecting a different content source or <a href="${this.bookmark?.url}" target="_blank">read online</a>.</p>
+      </div>
+    `;
   }
 
   private setupScrollTracking() {
@@ -405,6 +494,31 @@ export class BookmarkReader extends LitElement {
     this.saveProgress();
   }
 
+  private async handleContentSourceChange(event: any) {
+    const selectedValue = event.target.value;
+    
+    // Parse the value which contains both type and optional assetId
+    const [type, assetIdStr] = selectedValue.split(':');
+    const assetId = assetIdStr ? parseInt(assetIdStr, 10) : undefined;
+    
+    const newSource = this.availableContentSources.find(source => 
+      source.type === type && source.assetId === assetId
+    );
+    
+    if (newSource && newSource !== this.selectedContentSource) {
+      this.selectedContentSource = newSource;
+      await this.loadContent();
+      
+      // Reset scroll position when changing content source
+      const contentElement = this.shadowRoot?.querySelector('.reader-content');
+      if (contentElement) {
+        contentElement.scrollTop = 0;
+      }
+      
+      this.saveProgress();
+    }
+  }
+
   private handleOpenOriginal() {
     if (this.bookmark) {
       window.open(this.bookmark.url, '_blank');
@@ -414,9 +528,18 @@ export class BookmarkReader extends LitElement {
   private renderContent() {
     if (!this.bookmark) return '';
 
+    if (this.isLoadingContent) {
+      return html`
+        <div class="loading-container">
+          <sl-spinner style="font-size: 1.5rem;"></sl-spinner>
+          <p>Loading content...</p>
+        </div>
+      `;
+    }
+
     const content = this.readingMode === 'original' 
-      ? this.bookmark.content 
-      : this.bookmark.readability_content;
+      ? this.currentContent 
+      : this.currentReadabilityContent;
 
     if (!content) {
       return html`
@@ -449,6 +572,10 @@ export class BookmarkReader extends LitElement {
     `;
   }
 
+  private getSourceValue(source: ContentSourceOption): string {
+    return source.assetId ? `${source.type}:${source.assetId}` : source.type;
+  }
+
   override render() {
     if (this.isLoading) {
       return html`
@@ -471,21 +598,36 @@ export class BookmarkReader extends LitElement {
     return html`
       <div class="reader-container">
         <div class="reader-toolbar">
-          <div class="reading-mode-toggle">
-            <sl-button
-              variant=${this.readingMode === 'readability' ? 'primary' : 'default'}
+          <div class="toolbar-section">
+            <sl-select
+              class="content-source-selector"
+              value=${this.selectedContentSource ? this.getSourceValue(this.selectedContentSource) : ''}
               size="small"
-              @click=${() => this.handleReadingModeChange('readability')}
+              @sl-change=${this.handleContentSourceChange}
             >
-              Reader
-            </sl-button>
-            <sl-button
-              variant=${this.readingMode === 'original' ? 'primary' : 'default'}
-              size="small"
-              @click=${() => this.handleReadingModeChange('original')}
-            >
-              Original
-            </sl-button>
+              ${this.availableContentSources.map(source => html`
+                <sl-option value=${this.getSourceValue(source)}>
+                  ${source.label}
+                </sl-option>
+              `)}
+            </sl-select>
+            
+            <div class="reading-mode-toggle">
+              <sl-button
+                variant=${this.readingMode === 'readability' ? 'primary' : 'default'}
+                size="small"
+                @click=${() => this.handleReadingModeChange('readability')}
+              >
+                Reader
+              </sl-button>
+              <sl-button
+                variant=${this.readingMode === 'original' ? 'primary' : 'default'}
+                size="small"
+                @click=${() => this.handleReadingModeChange('original')}
+              >
+                Original
+              </sl-button>
+            </div>
           </div>
           
           <div class="progress-section">

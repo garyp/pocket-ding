@@ -43,10 +43,34 @@ export interface ReadProgress {
   scroll_position: number;
 }
 
+export interface LinkdingAsset {
+  id: number;
+  asset_type: string;
+  content_type: string;
+  display_name: string;
+  file_size: number;
+  status: 'pending' | 'complete' | 'failure';
+  date_created: string;
+}
+
+export interface LocalAsset extends LinkdingAsset {
+  bookmark_id: number;
+  content?: ArrayBuffer;
+  cached_at?: string;
+}
+
 export interface AppSettings {
   linkding_url: string;
   linkding_token: string;
   sync_interval: number;
   auto_sync: boolean;
   reading_mode: 'original' | 'readability';
+}
+
+export type ContentSource = 'asset' | 'url' | 'web_archive' | 'readability';
+
+export interface ContentSourceOption {
+  type: ContentSource;
+  label: string;
+  assetId?: number;
 }

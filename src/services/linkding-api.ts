@@ -1,4 +1,4 @@
-import type { LinkdingBookmark, LinkdingResponse, AppSettings } from '../types';
+import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset } from '../types';
 
 export class LinkdingAPI {
   private baseUrl: string;
@@ -60,6 +60,25 @@ export class LinkdingAPI {
       method: 'PATCH',
       body: JSON.stringify({ unread: false }),
     });
+  }
+
+  async getBookmarkAssets(bookmarkId: number): Promise<LinkdingAsset[]> {
+    return await this.request<LinkdingAsset[]>(`/bookmarks/${bookmarkId}/assets/`);
+  }
+
+  async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
+    const url = `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Token ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
+    }
+
+    return await response.arrayBuffer();
   }
 
   static async testConnection(settings: AppSettings): Promise<boolean> {
