@@ -1,0 +1,492 @@
+import { LitElement, html, css } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { DatabaseService } from '../services/database';
+import { LocalBookmark, ReadProgress } from '../types';
+import '@shoelace-style/shoelace/dist/components/button/button.js';
+import '@shoelace-style/shoelace/dist/components/icon/icon.js';
+import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
+import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
+
+@customElement('bookmark-reader')
+export class BookmarkReader extends LitElement {
+  @property({ type: Number }) bookmarkId: number | null = null;
+  @state() private bookmark: LocalBookmark | null = null;
+  @state() private isLoading = true;
+  @state() private readingMode: 'original' | 'readability' = 'readability';
+  @state() private readProgress = 0;
+  @state() private scrollPosition = 0;
+
+  private contentRef: HTMLElement | null = null;
+  private scrollObserver: IntersectionObserver | null = null;
+  private progressSaveTimeout: number | null = null;
+
+  static styles = css`
+    :host {
+      display: block;
+      height: 100%;
+    }
+
+    .reader-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .reader-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--sl-color-neutral-50);
+      border-bottom: 1px solid var(--sl-color-neutral-200);
+      gap: 1rem;
+    }
+
+    .reading-mode-toggle {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .progress-section {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .progress-text {
+      font-size: 0.875rem;
+      color: var(--sl-color-neutral-600);
+      white-space: nowrap;
+    }
+
+    .reader-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .content-container {
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    .content-container h1,
+    .content-container h2,
+    .content-container h3,
+    .content-container h4,
+    .content-container h5,
+    .content-container h6 {
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      color: var(--sl-color-neutral-900);
+    }
+
+    .content-container p {
+      margin-bottom: 1rem;
+      color: var(--sl-color-neutral-700);
+    }
+
+    .content-container img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      margin: 1rem 0;
+    }
+
+    .content-container a {
+      color: var(--sl-color-primary-600);
+      text-decoration: none;
+    }
+
+    .content-container a:hover {
+      text-decoration: underline;
+    }
+
+    .content-container blockquote {
+      margin: 1rem 0;
+      padding: 1rem;
+      background: var(--sl-color-neutral-50);
+      border-left: 4px solid var(--sl-color-primary-600);
+      border-radius: 4px;
+    }
+
+    .content-container pre {
+      background: var(--sl-color-neutral-100);
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 0.875rem;
+    }
+
+    .content-container code {
+      background: var(--sl-color-neutral-100);
+      padding: 0.125rem 0.25rem;
+      border-radius: 2px;
+      font-size: 0.875rem;
+    }
+
+    .bookmark-header {
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--sl-color-neutral-200);
+    }
+
+    .bookmark-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--sl-color-neutral-900);
+      margin: 0 0 0.5rem 0;
+      line-height: 1.2;
+    }
+
+    .bookmark-meta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      font-size: 0.875rem;
+      color: var(--sl-color-neutral-600);
+    }
+
+    .bookmark-url {
+      color: var(--sl-color-primary-600);
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .bookmark-url:hover {
+      text-decoration: underline;
+    }
+
+    .loading-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .error-message {
+      text-align: center;
+      padding: 2rem;
+      color: var(--sl-color-danger-600);
+    }
+
+    .fallback-content {
+      text-align: center;
+      padding: 2rem;
+      background: var(--sl-color-neutral-50);
+      border-radius: 8px;
+      margin: 2rem 0;
+    }
+
+    .fallback-content h1 {
+      color: var(--sl-color-neutral-900);
+      margin-bottom: 1rem;
+    }
+
+    .fallback-content p {
+      color: var(--sl-color-neutral-600);
+      margin-bottom: 1rem;
+    }
+
+    .fallback-content a {
+      color: var(--sl-color-primary-600);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .fallback-content a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 768px) {
+      .reader-toolbar {
+        padding: 0.5rem;
+        flex-wrap: wrap;
+      }
+      
+      .progress-section {
+        order: 3;
+        flex-basis: 100%;
+        margin-top: 0.5rem;
+      }
+      
+      .reader-content {
+        padding: 0.75rem;
+      }
+      
+      .bookmark-title {
+        font-size: 1.5rem;
+      }
+      
+      .bookmark-meta {
+        font-size: 0.8rem;
+      }
+    }
+  `;
+
+  async connectedCallback() {
+    super.connectedCallback();
+    if (this.bookmarkId) {
+      await this.loadBookmark();
+    }
+  }
+
+  updated(changedProperties: Map<string, any>) {
+    if (changedProperties.has('bookmarkId') && this.bookmarkId) {
+      this.loadBookmark();
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.saveProgress();
+    this.cleanupObserver();
+  }
+
+  private async loadBookmark() {
+    if (!this.bookmarkId) return;
+
+    try {
+      this.isLoading = true;
+      this.bookmark = await DatabaseService.getBookmark(this.bookmarkId);
+      
+      if (this.bookmark) {
+        // Load saved reading progress
+        const progress = await DatabaseService.getReadProgress(this.bookmarkId);
+        if (progress) {
+          this.readProgress = progress.progress;
+          this.scrollPosition = progress.scroll_position;
+          this.readingMode = progress.reading_mode;
+        } else {
+          this.readingMode = this.bookmark.reading_mode || 'readability';
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load bookmark:', error);
+    } finally {
+      this.isLoading = false;
+    }
+
+    // Set up scroll tracking after content loads
+    await this.updateComplete;
+    this.setupScrollTracking();
+  }
+
+  private setupScrollTracking() {
+    this.cleanupObserver();
+    
+    const contentElement = this.shadowRoot?.querySelector('.reader-content');
+    if (!contentElement) return;
+
+    // Restore scroll position
+    if (this.scrollPosition > 0) {
+      contentElement.scrollTop = this.scrollPosition;
+    }
+
+    // Set up intersection observer for progress tracking
+    this.scrollObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            this.updateReadProgress();
+          }
+        });
+      },
+      {
+        root: contentElement,
+        rootMargin: '0px',
+        threshold: 0.1
+      }
+    );
+
+    // Observe content paragraphs
+    const paragraphs = contentElement.querySelectorAll('p');
+    paragraphs.forEach(p => this.scrollObserver?.observe(p));
+
+    // Track scroll position
+    contentElement.addEventListener('scroll', () => {
+      this.scrollPosition = contentElement.scrollTop;
+      this.scheduleProgressSave();
+    });
+  }
+
+  private updateReadProgress() {
+    const contentElement = this.shadowRoot?.querySelector('.reader-content');
+    if (!contentElement) return;
+
+    const scrollTop = contentElement.scrollTop;
+    const scrollHeight = contentElement.scrollHeight;
+    const clientHeight = contentElement.clientHeight;
+    
+    const progress = Math.min(100, Math.max(0, (scrollTop / (scrollHeight - clientHeight)) * 100));
+    this.readProgress = progress;
+    
+    this.scheduleProgressSave();
+  }
+
+  private scheduleProgressSave() {
+    if (this.progressSaveTimeout) {
+      clearTimeout(this.progressSaveTimeout);
+    }
+    
+    this.progressSaveTimeout = window.setTimeout(() => {
+      this.saveProgress();
+    }, 1000);
+  }
+
+  private async saveProgress() {
+    if (!this.bookmark) return;
+
+    const progress: ReadProgress = {
+      bookmark_id: this.bookmark.id,
+      progress: this.readProgress,
+      last_read_at: new Date().toISOString(),
+      reading_mode: this.readingMode,
+      scroll_position: this.scrollPosition
+    };
+
+    try {
+      await DatabaseService.saveReadProgress(progress);
+      
+      // Update bookmark with progress info
+      this.bookmark.read_progress = this.readProgress;
+      this.bookmark.reading_mode = this.readingMode;
+      this.bookmark.last_read_at = progress.last_read_at;
+      await DatabaseService.saveBookmark(this.bookmark);
+    } catch (error) {
+      console.error('Failed to save progress:', error);
+    }
+  }
+
+  private cleanupObserver() {
+    if (this.scrollObserver) {
+      this.scrollObserver.disconnect();
+      this.scrollObserver = null;
+    }
+    if (this.progressSaveTimeout) {
+      clearTimeout(this.progressSaveTimeout);
+      this.progressSaveTimeout = null;
+    }
+  }
+
+  private handleReadingModeChange(mode: 'original' | 'readability') {
+    this.readingMode = mode;
+    this.saveProgress();
+  }
+
+  private handleOpenOriginal() {
+    if (this.bookmark) {
+      window.open(this.bookmark.url, '_blank');
+    }
+  }
+
+  private renderContent() {
+    if (!this.bookmark) return '';
+
+    const content = this.readingMode === 'original' 
+      ? this.bookmark.content 
+      : this.bookmark.readability_content;
+
+    if (!content) {
+      return html`
+        <div class="fallback-content">
+          <h1>${this.bookmark.title}</h1>
+          <p>Content is not available for offline reading.</p>
+          <p>
+            <a href="${this.bookmark.url}" target="_blank">
+              Read online
+            </a>
+          </p>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="bookmark-header">
+        <h1 class="bookmark-title">${this.bookmark.title}</h1>
+        <div class="bookmark-meta">
+          <a href="${this.bookmark.url}" target="_blank" class="bookmark-url">
+            ${this.bookmark.url}
+          </a>
+          <span>•</span>
+          <span>Added ${new Date(this.bookmark.date_added).toLocaleDateString()}</span>
+        </div>
+      </div>
+      <div class="content-container">
+        ${unsafeHTML(content)}
+      </div>
+    `;
+  }
+
+  render() {
+    if (this.isLoading) {
+      return html`
+        <div class="loading-container">
+          <sl-spinner style="font-size: 2rem;"></sl-spinner>
+          <p>Loading article...</p>
+        </div>
+      `;
+    }
+
+    if (!this.bookmark) {
+      return html`
+        <div class="error-message">
+          <h3>Bookmark not found</h3>
+          <p>The requested bookmark could not be loaded.</p>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="reader-container">
+        <div class="reader-toolbar">
+          <div class="reading-mode-toggle">
+            <sl-button
+              variant=${this.readingMode === 'readability' ? 'primary' : 'default'}
+              size="small"
+              @click=${() => this.handleReadingModeChange('readability')}
+            >
+              Reader
+            </sl-button>
+            <sl-button
+              variant=${this.readingMode === 'original' ? 'primary' : 'default'}
+              size="small"
+              @click=${() => this.handleReadingModeChange('original')}
+            >
+              Original
+            </sl-button>
+          </div>
+          
+          <div class="progress-section">
+            <span class="progress-text">
+              ${Math.round(this.readProgress)}% read
+            </span>
+            <sl-progress-bar 
+              value=${this.readProgress}
+              style="flex: 1;"
+            ></sl-progress-bar>
+          </div>
+          
+          <sl-button
+            variant="text"
+            size="small"
+            @click=${this.handleOpenOriginal}
+          >
+            <sl-icon name="box-arrow-up-right"></sl-icon>
+          </sl-button>
+        </div>
+        
+        <div class="reader-content">
+          ${this.renderContent()}
+        </div>
+      </div>
+    `;
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "vite-typescript-starter",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:unit": "vitest run src/test/unit",
+    "test:integration": "vitest run src/test/integration",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^24.0.13",
+    "@vitest/ui": "^3.2.4",
+    "happy-dom": "^18.0.1",
+    "typescript": "^5.5.3",
+    "vite": "^6.3.5",
+    "vite-plugin-pwa": "^1.0.1",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@lit/reactive-element": "^2.1.0",
+    "@mozilla/readability": "^0.6.0",
+    "@shoelace-style/shoelace": "^2.20.1",
+    "dexie": "^4.0.11",
+    "lit": "^3.3.0",
+    "workbox-window": "^7.3.0"
+  }
+}
