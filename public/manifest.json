@@ -1,6 +1,6 @@
 {
-  "name": "Linkding Reader",
-  "short_name": "LinkReader",
+  "name": "Pocket Ding",
+  "short_name": "PocketDing",
   "description": "A PWA reader for Linkding bookmarks",
   "start_url": "/",
   "display": "standalone",
