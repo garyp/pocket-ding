@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
+import { SyncService } from '../services/sync-service';
 import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -11,6 +12,7 @@ import '@shoelace-style/shoelace/dist/components/select/select.js';
 import '@shoelace-style/shoelace/dist/components/option/option.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
+import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
@@ -19,6 +21,9 @@ export class SettingsPanel extends LitElement {
   @state() private isLoading = false;
   @state() private testStatus: 'idle' | 'testing' | 'success' | 'error' = 'idle';
   @state() private testMessage = '';
+  @state() private isFullSyncing = false;
+  @state() private fullSyncProgress = 0;
+  @state() private fullSyncTotal = 0;
 
   static override styles = css`
     :host {
@@ -87,6 +92,26 @@ export class SettingsPanel extends LitElement {
       color: var(--sl-color-danger-600);
       margin-bottom: 1rem;
       font-size: 0.9rem;
+    }
+
+    .sync-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .sync-progress {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: var(--sl-color-primary-50);
+      border-radius: 8px;
+      border: 1px solid var(--sl-color-primary-200);
+    }
+
+    .sync-progress-text {
+      font-size: 0.875rem;
+      color: var(--sl-color-primary-700);
+      margin-bottom: 0.5rem;
     }
 
     @media (max-width: 768px) {
@@ -195,6 +220,43 @@ export class SettingsPanel extends LitElement {
     }
   }
 
+  private async handleFullSync() {
+    if (!this.settings?.linkding_url || !this.settings?.linkding_token) {
+      this.testStatus = 'error';
+      this.testMessage = 'Please save your Linkding settings first.';
+      return;
+    }
+
+    if (!confirm('This will perform a complete resync of all bookmarks. Continue?')) {
+      return;
+    }
+
+    this.isFullSyncing = true;
+    this.fullSyncProgress = 0;
+    this.fullSyncTotal = 0;
+    this.testStatus = 'idle';
+
+    try {
+      await SyncService.fullSync(this.settings, (current, total) => {
+        this.fullSyncProgress = current;
+        this.fullSyncTotal = total;
+      });
+
+      this.testStatus = 'success';
+      this.testMessage = 'Full sync completed successfully!';
+      
+      this.dispatchEvent(new CustomEvent('sync-completed'));
+    } catch (error) {
+      console.error('Full sync failed:', error);
+      this.testStatus = 'error';
+      this.testMessage = `Full sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    } finally {
+      this.isFullSyncing = false;
+      this.fullSyncProgress = 0;
+      this.fullSyncTotal = 0;
+    }
+  }
+
   override render() {
     return html`
       <sl-card class="settings-card">
@@ -265,6 +327,28 @@ export class SettingsPanel extends LitElement {
               .value=${this.formData.sync_interval?.toString() || '60'}
               @sl-input=${(e: any) => this.handleInputChange('sync_interval', parseInt(e.target.value))}
             ></sl-input>
+          </div>
+
+          <div class="sync-actions">
+            <sl-button
+              variant="default"
+              @click=${this.handleFullSync}
+              ?disabled=${this.isFullSyncing || !this.settings?.linkding_url || !this.settings?.linkding_token}
+              ?loading=${this.isFullSyncing}
+            >
+              ${this.isFullSyncing ? 'Syncing...' : 'Force Full Sync'}
+            </sl-button>
+            
+            ${this.isFullSyncing ? html`
+              <div class="sync-progress">
+                <div class="sync-progress-text">
+                  Syncing bookmarks... ${this.fullSyncProgress} / ${this.fullSyncTotal}
+                </div>
+                <sl-progress-bar
+                  .value=${this.fullSyncTotal > 0 ? (this.fullSyncProgress / this.fullSyncTotal) * 100 : 0}
+                ></sl-progress-bar>
+              </div>
+            ` : ''}
           </div>
         </div>
         

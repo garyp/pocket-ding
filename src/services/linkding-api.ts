@@ -27,17 +27,21 @@ export class LinkdingAPI {
     return await response.json();
   }
 
-  async getBookmarks(limit = 100, offset = 0): Promise<LinkdingResponse> {
-    return await this.request<LinkdingResponse>(`/bookmarks/?limit=${limit}&offset=${offset}`);
+  async getBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+    let query = `limit=${limit}&offset=${offset}`;
+    if (modifiedSince) {
+      query += `&modified_since=${encodeURIComponent(modifiedSince)}`;
+    }
+    return await this.request<LinkdingResponse>(`/bookmarks/?${query}`);
   }
 
-  async getAllBookmarks(): Promise<LinkdingBookmark[]> {
+  async getAllBookmarks(modifiedSince?: string): Promise<LinkdingBookmark[]> {
     const allBookmarks: LinkdingBookmark[] = [];
     let offset = 0;
     const limit = 100;
 
     while (true) {
-      const response = await this.getBookmarks(limit, offset);
+      const response = await this.getBookmarks(limit, offset, modifiedSince);
       allBookmarks.push(...response.results);
       
       if (!response.next) break;

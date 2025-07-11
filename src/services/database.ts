@@ -1,10 +1,16 @@
 import Dexie, { type Table } from 'dexie';
 import type { LocalBookmark, ReadProgress, AppSettings } from '../types';
 
+interface SyncMetadata {
+  id?: number;
+  last_sync_timestamp: string;
+}
+
 export class LinkdingDatabase extends Dexie {
   bookmarks!: Table<LocalBookmark>;
   readProgress!: Table<ReadProgress>;
   settings!: Table<AppSettings>;
+  syncMetadata!: Table<SyncMetadata>;
 
   constructor() {
     super('LinkdingReaderDB');
@@ -12,6 +18,12 @@ export class LinkdingDatabase extends Dexie {
       bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at',
       readProgress: '++id, bookmark_id, last_read_at',
       settings: '++id, linkding_url, linkding_token'
+    });
+    this.version(2).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at',
+      readProgress: '++id, bookmark_id, last_read_at',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp'
     });
   }
 }
@@ -55,5 +67,15 @@ export class DatabaseService {
   static async clearAll(): Promise<void> {
     await db.bookmarks.clear();
     await db.readProgress.clear();
+  }
+
+  static async getLastSyncTimestamp(): Promise<string | null> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    return metadata?.last_sync_timestamp || null;
+  }
+
+  static async setLastSyncTimestamp(timestamp: string): Promise<void> {
+    await db.syncMetadata.clear();
+    await db.syncMetadata.add({ last_sync_timestamp: timestamp });
   }
 }

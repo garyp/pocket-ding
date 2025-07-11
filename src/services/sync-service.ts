@@ -28,7 +28,14 @@ export class SyncService {
     
     try {
       console.log('Starting sync...');
-      const remoteBookmarks = await api.getAllBookmarks();
+      
+      // Get last sync timestamp for incremental sync
+      const lastSyncTimestamp = await DatabaseService.getLastSyncTimestamp();
+      const syncStartTime = new Date().toISOString();
+      
+      console.log(lastSyncTimestamp ? `Incremental sync since: ${lastSyncTimestamp}` : 'Full sync');
+      
+      const remoteBookmarks = await api.getAllBookmarks(lastSyncTimestamp || undefined);
       const localBookmarks = await DatabaseService.getAllBookmarks();
       
       // Create a map of local bookmarks for efficient lookup
@@ -77,6 +84,9 @@ export class SyncService {
         onProgress?.(processed, total);
       }
 
+      // Update last sync timestamp on successful completion
+      await DatabaseService.setLastSyncTimestamp(syncStartTime);
+      
       console.log(`Sync completed: ${processed} bookmarks processed`);
     } catch (error) {
       console.error('Sync failed:', error);
@@ -92,5 +102,11 @@ export class SyncService {
     } catch (error) {
       console.error('Background sync failed:', error);
     }
+  }
+
+  static async fullSync(settings: AppSettings, onProgress?: (current: number, total: number) => void): Promise<void> {
+    // Clear last sync timestamp to force full sync
+    await DatabaseService.setLastSyncTimestamp('');
+    await this.syncBookmarks(settings, onProgress);
   }
 }

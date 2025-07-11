@@ -83,4 +83,43 @@ describe('LinkdingAPI', () => {
 
     expect(result).toBe(true);
   });
+
+  it('should fetch bookmarks with modified_since parameter', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockLinkdingResponse),
+    });
+    global.fetch = mockFetch;
+
+    const modifiedSince = '2024-01-01T00:00:00Z';
+    const result = await api.getBookmarks(100, 0, modifiedSince);
+    
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Authorization': 'Token test-token',
+          'Content-Type': 'application/json',
+        }),
+      })
+    );
+    expect(result).toEqual(mockLinkdingResponse);
+  });
+
+  it('should fetch all bookmarks with modified_since parameter', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockLinkdingResponse),
+    });
+    global.fetch = mockFetch;
+
+    const modifiedSince = '2024-01-01T00:00:00Z';
+    const result = await api.getAllBookmarks(modifiedSince);
+    
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z',
+      expect.anything()
+    );
+    expect(result).toEqual(mockBookmarks);
+  });
 });
