@@ -12,6 +12,12 @@ import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
 
 @customElement('bookmark-list')
 export class BookmarkList extends LitElement {
+  @state() private bookmarks: LocalBookmark[] = [];
+  @state() private isLoading = true;
+  @state() private selectedFilter: 'all' | 'unread' = 'all';
+  @state() private isSyncing = false;
+  @state() private syncProgress = 0;
+  @state() private syncTotal = 0;
 
   static styles = css`
     :host {
