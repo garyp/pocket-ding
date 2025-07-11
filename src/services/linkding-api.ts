@@ -1,4 +1,4 @@
-import { LinkdingBookmark, LinkdingResponse, AppSettings } from '../types';
+import type { LinkdingBookmark, LinkdingResponse, AppSettings } from '../types';
 
 export class LinkdingAPI {
   private baseUrl: string;

@@ -1,7 +1,7 @@
 import { LinkdingAPI } from './linkding-api';
 import { ContentFetcher } from './content-fetcher';
 import { DatabaseService } from './database';
-import { LocalBookmark, AppSettings } from '../types';
+import type { LocalBookmark, AppSettings } from '../types';
 
 export class SyncService {
   private static isSyncing = false;
@@ -56,7 +56,7 @@ export class SyncService {
             read_progress: localBookmark?.read_progress,
             reading_mode: localBookmark?.reading_mode,
             is_synced: true
-          };
+          } as LocalBookmark;
 
           // If bookmark doesn't have content cached, fetch it
           if (!bookmarkToSave.content) {

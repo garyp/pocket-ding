@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
-import { LocalBookmark, AppSettings } from '../types';
+import type { LocalBookmark, AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/card/card.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -19,7 +19,7 @@ export class BookmarkList extends LitElement {
   @state() private syncProgress = 0;
   @state() private syncTotal = 0;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
       padding: 1rem;
@@ -166,7 +166,7 @@ export class BookmarkList extends LitElement {
     }
   `;
 
-  async connectedCallback() {
+  override async connectedCallback() {
     super.connectedCallback();
     await this.loadBookmarks();
     this.setupSyncListener();
@@ -177,7 +177,7 @@ export class BookmarkList extends LitElement {
     this.addEventListener('sync-requested', this.handleSyncRequest);
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('sync-requested', this.handleSyncRequest);
   }
@@ -310,7 +310,7 @@ export class BookmarkList extends LitElement {
     `;
   }
 
-  render() {
+  override render() {
     if (this.isLoading) {
       return html`
         <div class="loading-container">

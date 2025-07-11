@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LocalBookmark, AppSettings, ReadProgress } from '../../types';
+import type { LocalBookmark, AppSettings, ReadProgress } from '../../types';
 
 // Mock the database module
 vi.mock('../../services/database', () => {

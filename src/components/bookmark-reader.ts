@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { DatabaseService } from '../services/database';
-import { LocalBookmark, ReadProgress } from '../types';
+import type { LocalBookmark, ReadProgress } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
@@ -20,7 +20,7 @@ export class BookmarkReader extends LitElement {
   private scrollObserver: IntersectionObserver | null = null;
   private progressSaveTimeout: number | null = null;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
       height: 100%;
@@ -230,20 +230,20 @@ export class BookmarkReader extends LitElement {
     }
   `;
 
-  async connectedCallback() {
+  override async connectedCallback() {
     super.connectedCallback();
     if (this.bookmarkId) {
       await this.loadBookmark();
     }
   }
 
-  updated(changedProperties: Map<string, any>) {
+  override updated(changedProperties: Map<string, any>) {
     if (changedProperties.has('bookmarkId') && this.bookmarkId) {
       this.loadBookmark();
     }
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     this.saveProgress();
     this.cleanupObserver();
@@ -424,7 +424,7 @@ export class BookmarkReader extends LitElement {
     `;
   }
 
-  render() {
+  override render() {
     if (this.isLoading) {
       return html`
         <div class="loading-container">

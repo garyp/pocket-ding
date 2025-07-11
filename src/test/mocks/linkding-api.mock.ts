@@ -1,4 +1,4 @@
-import { LinkdingBookmark, LinkdingResponse } from '../../types';
+import type { LinkdingBookmark, LinkdingResponse } from '../../types';
 
 export const mockBookmarks: LinkdingBookmark[] = [
   {

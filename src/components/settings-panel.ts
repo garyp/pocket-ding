@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
-import { AppSettings } from '../types';
+import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/card/card.js';
@@ -20,7 +20,7 @@ export class SettingsPanel extends LitElement {
   @state() private testStatus: 'idle' | 'testing' | 'success' | 'error' = 'idle';
   @state() private testMessage = '';
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
       padding: 1rem;
@@ -100,7 +100,7 @@ export class SettingsPanel extends LitElement {
     }
   `;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.initializeForm();
   }
@@ -195,7 +195,7 @@ export class SettingsPanel extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     return html`
       <sl-card class="settings-card">
         <div slot="header">

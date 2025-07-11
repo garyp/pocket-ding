@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { shoelaceIcons } from './vite-plugins/shoelace-icons'
 
 export default defineConfig({
   root: '.',
   plugins: [
+    shoelaceIcons(),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
@@ -48,6 +50,25 @@ export default defineConfig({
     })
   ],
   build: {
-    target: 'es2020'
-  }
+    target: 'es2024',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Automatically chunk node_modules into vendor bundle
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        }
+      }
+    }
+  },
+  esbuild: {
+    target: 'es2024'
+  },
+  server: {
+    fs: {
+      allow: ['..']
+    }
+  },
+  assetsInclude: ['**/*.svg']
 })

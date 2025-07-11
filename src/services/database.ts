@@ -1,5 +1,5 @@
-import Dexie, { Table } from 'dexie';
-import { LocalBookmark, ReadProgress, AppSettings } from '../types';
+import Dexie, { type Table } from 'dexie';
+import type { LocalBookmark, ReadProgress, AppSettings } from '../types';
 
 export class LinkdingDatabase extends Dexie {
   bookmarks!: Table<LocalBookmark>;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContentFetcher } from '../../services/content-fetcher';
-import { LocalBookmark } from '../../types';
+import type { LocalBookmark } from '../../types';
 
 // Mock @mozilla/readability
 vi.mock('@mozilla/readability', () => ({

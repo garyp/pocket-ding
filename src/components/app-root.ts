@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
-import { AppSettings } from '../types';
+import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
@@ -16,7 +16,7 @@ export class AppRoot extends LitElement {
   @state() private settings: AppSettings | null = null;
   @state() private isLoading = true;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
       min-height: 100vh;
@@ -104,7 +104,7 @@ export class AppRoot extends LitElement {
     }
   `;
 
-  async connectedCallback() {
+  override async connectedCallback() {
     super.connectedCallback();
     await this.loadSettings();
     this.isLoading = false;
@@ -252,7 +252,7 @@ export class AppRoot extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     return html`
       <div class="app-container">
         ${this.renderHeader()}

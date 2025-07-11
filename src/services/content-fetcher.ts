@@ -1,5 +1,5 @@
 import { Readability } from '@mozilla/readability';
-import { LocalBookmark } from '../types';
+import type { LocalBookmark } from '../types';
 
 export class ContentFetcher {
   private static async fetchWithTimeout(url: string, timeout = 10000): Promise<Response> {
