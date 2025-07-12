@@ -19,6 +19,7 @@ vi.mock('../../services/database', () => ({
     setLastSyncTimestamp: vi.fn(),
     getAssetsByBookmarkId: vi.fn(),
     saveAsset: vi.fn(),
+    clearAssetContent: vi.fn(),
     getBookmarksNeedingReadSync: vi.fn(),
     markBookmarkReadSynced: vi.fn(),
   },
@@ -103,6 +104,8 @@ describe('SyncService', () => {
     // Setup API mock
     mockApi = {
       getAllBookmarks: vi.fn(),
+      getBookmarks: vi.fn().mockResolvedValue({ results: [], next: null }),
+      getArchivedBookmarks: vi.fn().mockResolvedValue({ results: [], next: null }),
       getBookmarkAssets: vi.fn(),
       downloadAsset: vi.fn(),
       markBookmarkAsRead: vi.fn(),
@@ -449,6 +452,367 @@ describe('SyncService', () => {
       await expect(SyncService.syncBookmarks(mockSettings)).resolves.not.toThrow();
       
       expect(DatabaseService.markBookmarkReadSynced).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Archived Asset Syncing', () => {
+    beforeEach(() => {
+      // Mock archived bookmark asset response
+      mockApi.getBookmarkAssets.mockResolvedValue([
+        { id: 1, status: 'complete', display_name: 'Archive Asset', content_type: 'text/html' }
+      ]);
+    });
+
+    it('should sync metadata only for archived bookmarks', async () => {
+      const archivedBookmark = {
+        ...mockRemoteBookmarks[0],
+        is_archived: true
+      };
+
+      mockApi.getAllBookmarks.mockResolvedValue([archivedBookmark]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should save asset metadata without content
+      expect(DatabaseService.saveAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          bookmark_id: 1,
+          status: 'complete',
+          display_name: 'Archive Asset',
+          // content and cached_at should be omitted
+        })
+      );
+
+      // Should not download asset content
+      expect(mockApi.downloadAsset).not.toHaveBeenCalled();
+    });
+
+    it('should clean up cached content when bookmark becomes archived', async () => {
+      const previouslyUnarchived: LocalBookmark = { 
+        ...mockRemoteBookmarks[0], 
+        is_archived: false,
+        last_read_at: '2024-01-01T12:00:00Z',
+        read_progress: 50,
+        reading_mode: 'readability',
+        is_synced: true,
+        date_modified: '2024-01-01T10:00:00Z', // Older than remote
+      } as LocalBookmark;
+      const nowArchived = { 
+        ...mockRemoteBookmarks[0], 
+        is_archived: true,
+        date_modified: '2024-01-03T10:00:00Z' // Newer than local
+      };
+
+      mockApi.getAllBookmarks.mockResolvedValue([nowArchived]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([previouslyUnarchived]);
+      
+      // Ensure archived asset sync method has assets to work with
+      mockApi.getBookmarkAssets.mockResolvedValue([
+        { id: 1, status: 'complete', display_name: 'Archive Asset', content_type: 'text/html' }
+      ]);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should clear cached content for newly archived bookmark
+      expect(DatabaseService.clearAssetContent).toHaveBeenCalledWith(1);
+    });
+
+    it('should not clean up content for bookmarks that were already archived', async () => {
+      const alreadyArchived = { ...mockRemoteBookmarks[0], is_archived: true };
+
+      mockApi.getAllBookmarks.mockResolvedValue([alreadyArchived]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([alreadyArchived]);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should not clean up content if already archived
+      expect(DatabaseService.clearAssetContent).not.toHaveBeenCalled();
+    });
+
+    it('should sync assets normally for unarchived bookmarks', async () => {
+      const unarchivedBookmark = { ...mockRemoteBookmarks[0], is_archived: false };
+      
+      mockApi.getAllBookmarks.mockResolvedValue([unarchivedBookmark]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+      mockApi.downloadAsset.mockResolvedValue(new ArrayBuffer(8));
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should download and cache content for unarchived bookmarks
+      expect(mockApi.downloadAsset).toHaveBeenCalledWith(1, 1);
+      expect(DatabaseService.saveAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          bookmark_id: 1,
+          content: expect.any(ArrayBuffer),
+          cached_at: expect.any(String)
+        })
+      );
+    });
+
+    it('should handle errors during archived asset sync gracefully', async () => {
+      const archivedBookmark = { ...mockRemoteBookmarks[0], is_archived: true };
+      
+      mockApi.getAllBookmarks.mockResolvedValue([archivedBookmark]);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      mockApi.getBookmarkAssets.mockRejectedValue(new Error('API Error'));
+
+      // Should not throw error
+      await expect(SyncService.syncBookmarks(mockSettings)).resolves.not.toThrow();
+      
+      // Should still complete sync
+      expect(DatabaseService.setLastSyncTimestamp).toHaveBeenCalled();
+    });
+  });
+
+  describe('Background Sync Events', () => {
+    let syncService: any;
+    let eventListeners: { [key: string]: any[] };
+
+    beforeEach(() => {
+      syncService = SyncService.getInstance();
+      eventListeners = {};
+      
+      // Mock addEventListener to capture event listeners
+      syncService.addEventListener = vi.fn((event: string, listener: any) => {
+        if (!eventListeners[event]) {
+          eventListeners[event] = [];
+        }
+        eventListeners[event].push(listener);
+      });
+
+      // Mock dispatchEvent to call listeners
+      syncService.dispatchEvent = vi.fn((event: any) => {
+        const listeners = eventListeners[event.type] || [];
+        listeners.forEach(listener => listener(event));
+      });
+
+      // Setup default mocks
+      mockApi.getAllBookmarks.mockResolvedValue(mockRemoteBookmarks);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+      (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([]);
+    });
+
+    it('should emit sync-initiated event immediately', async () => {
+      const syncInitiatedSpy = vi.fn();
+      eventListeners['sync-initiated'] = [syncInitiatedSpy];
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(syncInitiatedSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sync-initiated',
+          detail: {}
+        })
+      );
+    });
+
+    it('should emit sync-started event with total count', async () => {
+      const syncStartedSpy = vi.fn();
+      eventListeners['sync-started'] = [syncStartedSpy];
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(syncStartedSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sync-started',
+          detail: { total: 2 }
+        })
+      );
+    });
+
+    it('should emit sync-initiated before sync-started', async () => {
+      const events: string[] = [];
+      eventListeners['sync-initiated'] = [() => events.push('initiated')];
+      eventListeners['sync-started'] = [() => events.push('started')];
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(events).toEqual(['initiated', 'started']);
+    });
+
+    it('should emit sync-progress events during sync', async () => {
+      const syncProgressSpy = vi.fn();
+      eventListeners['sync-progress'] = [syncProgressSpy];
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should emit progress for each bookmark
+      expect(syncProgressSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sync-progress',
+          detail: { current: 1, total: 2 }
+        })
+      );
+      expect(syncProgressSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sync-progress',
+          detail: { current: 2, total: 2 }
+        })
+      );
+    });
+
+    it('should emit bookmark-synced events for updated bookmarks', async () => {
+      const bookmarkSyncedSpy = vi.fn();
+      eventListeners['bookmark-synced'] = [bookmarkSyncedSpy];
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should emit for each synced bookmark
+      expect(bookmarkSyncedSpy).toHaveBeenCalledTimes(2);
+      expect(bookmarkSyncedSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'bookmark-synced',
+          detail: expect.objectContaining({
+            bookmark: expect.objectContaining({ id: 1 }),
+            current: 1,
+            total: 2
+          })
+        })
+      );
+    });
+
+    it('should emit sync-completed event after successful sync', async () => {
+      const syncCompletedSpy = vi.fn();
+      eventListeners['sync-completed'] = [syncCompletedSpy];
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      expect(syncCompletedSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sync-completed',
+          detail: { processed: 2 }
+        })
+      );
+    });
+
+    it('should emit sync-error event when sync fails', async () => {
+      const syncErrorSpy = vi.fn();
+      const testError = new Error('Sync failed');
+      eventListeners['sync-error'] = [syncErrorSpy];
+
+      mockApi.getAllBookmarks.mockRejectedValue(testError);
+
+      await expect(SyncService.syncBookmarks(mockSettings)).rejects.toThrow('Sync failed');
+
+      expect(syncErrorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sync-error',
+          detail: { error: testError }
+        })
+      );
+    });
+
+    it('should not emit bookmark-synced for bookmarks that do not need updating', async () => {
+      const bookmarkSyncedSpy = vi.fn();
+      eventListeners['bookmark-synced'] = [bookmarkSyncedSpy];
+
+      // Mock local bookmarks that are newer than remote
+      const newerLocalBookmarks = mockRemoteBookmarks.map(b => ({
+        ...b,
+        last_read_at: '2024-01-01T12:00:00Z',
+        read_progress: 50,
+        reading_mode: 'readability' as const,
+        is_synced: true,
+        date_modified: '2024-01-03T10:00:00Z' // Newer than remote
+      }));
+
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(newerLocalBookmarks);
+
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should not emit bookmark-synced for up-to-date bookmarks
+      expect(bookmarkSyncedSpy).not.toHaveBeenCalled();
+    });
+
+    it('should yield control periodically during sync', async () => {
+      // Create a large number of bookmarks to test yielding
+      const manyBookmarks = Array.from({ length: 10 }, (_, i) => ({
+        ...mockRemoteBookmarks[0],
+        id: i + 1,
+        title: `Bookmark ${i + 1}`
+      }));
+
+      mockApi.getAllBookmarks.mockResolvedValue(manyBookmarks);
+      
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      
+      await SyncService.syncBookmarks(mockSettings);
+
+      // Should call setTimeout for yielding control (every 5 bookmarks)
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 0);
+      
+      setTimeoutSpy.mockRestore();
+    });
+
+    it('should maintain singleton instance', () => {
+      const instance1 = SyncService.getInstance();
+      const instance2 = SyncService.getInstance();
+      
+      expect(instance1).toBe(instance2);
+    });
+  });
+
+  describe('Sync State Persistence', () => {
+    it('should track sync progress state across component lifecycle', async () => {
+      mockApi.getAllBookmarks.mockResolvedValue(mockRemoteBookmarks);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+
+      // Sync should not be in progress initially
+      expect(SyncService.isSyncInProgress()).toBe(false);
+      expect(SyncService.getCurrentSyncProgress()).toEqual({ current: 0, total: 0 });
+
+      // Start sync (don't await to check intermediate state)
+      const syncPromise = SyncService.syncBookmarks(mockSettings);
+
+      // Allow some async processing
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Should be in progress now
+      expect(SyncService.isSyncInProgress()).toBe(true);
+      const progress = SyncService.getCurrentSyncProgress();
+      expect(progress.total).toBe(2); // Two mock bookmarks
+      expect(progress.current).toBeGreaterThanOrEqual(0);
+      expect(progress.current).toBeLessThanOrEqual(2);
+
+      // Wait for completion
+      await syncPromise;
+
+      // Should be finished
+      expect(SyncService.isSyncInProgress()).toBe(false);
+      expect(SyncService.getCurrentSyncProgress()).toEqual({ current: 0, total: 0 });
+    });
+
+    it('should maintain progress state during sync', async () => {
+      const progressCallback = vi.fn();
+      
+      mockApi.getAllBookmarks.mockResolvedValue(mockRemoteBookmarks);
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+
+      await SyncService.syncBookmarks(mockSettings, progressCallback);
+
+      // Progress callback should have been called with state that matches getCurrentSyncProgress
+      expect(progressCallback).toHaveBeenCalledWith(0, 2); // Start
+      expect(progressCallback).toHaveBeenCalledWith(1, 2); // First bookmark
+      expect(progressCallback).toHaveBeenCalledWith(2, 2); // Second bookmark
+    });
+
+    it('should reset sync state on error', async () => {
+      mockApi.getAllBookmarks.mockRejectedValue(new Error('Sync failed'));
+
+      try {
+        await SyncService.syncBookmarks(mockSettings);
+      } catch (error) {
+        // Expected to throw
+      }
+
+      // State should be reset even on error
+      expect(SyncService.isSyncInProgress()).toBe(false);
+      expect(SyncService.getCurrentSyncProgress()).toEqual({ current: 0, total: 0 });
     });
   });
 });

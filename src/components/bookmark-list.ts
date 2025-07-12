@@ -14,11 +14,14 @@ import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
 export class BookmarkList extends LitElement {
   @state() private bookmarks: LocalBookmark[] = [];
   @state() private isLoading = true;
-  @state() private selectedFilter: 'all' | 'unread' = 'all';
+  @state() private selectedFilter: 'all' | 'unread' | 'archived' = 'all';
   @state() private isSyncing = false;
   @state() private syncProgress = 0;
   @state() private syncTotal = 0;
   @state() private bookmarksWithAssets = new Set<number>();
+  @state() private syncedBookmarkIds = new Set<number>();
+  
+  private syncService: SyncService | null = null;
 
   static override styles = css`
     :host {
@@ -36,17 +39,42 @@ export class BookmarkList extends LitElement {
     }
 
     .sync-progress {
+      position: sticky;
+      top: 0;
+      z-index: 10;
       margin-bottom: 1rem;
-      padding: 1rem;
+      padding: 0.75rem;
       background: var(--sl-color-primary-50);
       border-radius: 8px;
       border: 1px solid var(--sl-color-primary-200);
+      backdrop-filter: blur(8px);
     }
 
     .sync-progress-text {
       font-size: 0.875rem;
       color: var(--sl-color-primary-700);
       margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sync-badge {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .bookmark-card.synced {
+      animation: highlight 1s ease-out;
+    }
+
+    @keyframes highlight {
+      0% { background-color: var(--sl-color-success-100); }
+      100% { background-color: transparent; }
     }
 
     .bookmark-list {
@@ -185,6 +213,8 @@ export class BookmarkList extends LitElement {
     super.connectedCallback();
     await this.loadBookmarks();
     this.setupSyncListener();
+    this.setupSyncEventListeners();
+    this.checkOngoingSync();
   }
 
   private setupSyncListener() {
@@ -192,9 +222,41 @@ export class BookmarkList extends LitElement {
     this.addEventListener('sync-requested', this.handleSyncRequest);
   }
 
+  private setupSyncEventListeners() {
+    this.syncService = SyncService.getInstance();
+    
+    this.syncService.addEventListener('sync-initiated', this.handleSyncInitiated as EventListener);
+    this.syncService.addEventListener('sync-started', this.handleSyncStarted as EventListener);
+    this.syncService.addEventListener('sync-progress', this.handleSyncProgress as EventListener);
+    this.syncService.addEventListener('bookmark-synced', this.handleBookmarkSynced as any);
+    this.syncService.addEventListener('sync-completed', this.handleSyncCompleted as EventListener);
+    this.syncService.addEventListener('sync-error', this.handleSyncError as EventListener);
+  }
+
+  private checkOngoingSync() {
+    // Check if there's a sync in progress when component connects
+    if (SyncService.isSyncInProgress()) {
+      const progress = SyncService.getCurrentSyncProgress();
+      this.isSyncing = true;
+      this.syncProgress = progress.current;
+      this.syncTotal = progress.total;
+      this.syncedBookmarkIds.clear(); // Clear stale highlights
+      this.requestUpdate();
+    }
+  }
+
   override disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('sync-requested', this.handleSyncRequest);
+    
+    if (this.syncService) {
+      this.syncService.removeEventListener('sync-initiated', this.handleSyncInitiated as EventListener);
+      this.syncService.removeEventListener('sync-started', this.handleSyncStarted as EventListener);
+      this.syncService.removeEventListener('sync-progress', this.handleSyncProgress as EventListener);
+      this.syncService.removeEventListener('bookmark-synced', this.handleBookmarkSynced as any);
+      this.syncService.removeEventListener('sync-completed', this.handleSyncCompleted as EventListener);
+      this.syncService.removeEventListener('sync-error', this.handleSyncError as EventListener);
+    }
   }
 
   private handleSyncRequest = async () => {
@@ -204,11 +266,67 @@ export class BookmarkList extends LitElement {
     }
   }
 
+  private handleSyncInitiated = () => {
+    // Show immediate feedback - sync starting but don't know total yet
+    this.isSyncing = true;
+    this.syncProgress = 0;
+    this.syncTotal = 0; // Will be updated when sync-started fires
+    this.syncedBookmarkIds.clear();
+  }
+
+  private handleSyncStarted = (event: CustomEvent) => {
+    // Update with actual total once we know it
+    this.isSyncing = true;
+    this.syncProgress = 0;
+    this.syncTotal = event.detail.total;
+    this.syncedBookmarkIds.clear();
+  }
+
+  private handleSyncProgress = (event: CustomEvent) => {
+    this.syncProgress = event.detail.current;
+    this.syncTotal = event.detail.total;
+  }
+
+  private handleBookmarkSynced = async (event: CustomEvent) => {
+    const { bookmark } = event.detail;
+    this.syncedBookmarkIds.add(bookmark.id);
+    
+    // Update the bookmark in our local list
+    const existingIndex = this.bookmarks.findIndex(b => b.id === bookmark.id);
+    if (existingIndex >= 0) {
+      this.bookmarks[existingIndex] = bookmark;
+    } else {
+      this.bookmarks.unshift(bookmark);
+    }
+    
+    // Check if this bookmark has assets
+    const assets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmark.id);
+    if (assets.length > 0) {
+      this.bookmarksWithAssets.add(bookmark.id);
+    }
+    
+    this.requestUpdate();
+  }
+
+  private handleSyncCompleted = () => {
+    this.isSyncing = false;
+    this.syncedBookmarkIds.clear();
+  }
+
+  private handleSyncError = (event: CustomEvent) => {
+    this.isSyncing = false;
+    console.error('Sync error:', event.detail.error);
+  }
+
 
   private async loadBookmarks() {
     try {
       this.isLoading = true;
       this.bookmarks = await DatabaseService.getAllBookmarks();
+      
+      // Debug logging for archived bookmarks
+      const archivedCount = this.bookmarks.filter(b => b.is_archived).length;
+      console.log(`Local bookmarks loaded: ${this.bookmarks.length} total, ${archivedCount} archived`);
       
       // Check which bookmarks have assets
       const bookmarksWithAssets = new Set<number>();
@@ -230,20 +348,9 @@ export class BookmarkList extends LitElement {
     if (this.isSyncing) return;
     
     try {
-      this.isSyncing = true;
-      this.syncProgress = 0;
-      this.syncTotal = 0;
-      
-      await SyncService.syncBookmarks(settings, (current, total) => {
-        this.syncProgress = current;
-        this.syncTotal = total;
-      });
-      
-      await this.loadBookmarks();
+      await SyncService.syncBookmarks(settings);
     } catch (error) {
       console.error('Sync failed:', error);
-    } finally {
-      this.isSyncing = false;
     }
   }
 
@@ -253,15 +360,19 @@ export class BookmarkList extends LitElement {
     }));
   }
 
-  private handleFilterChange(filter: 'all' | 'unread') {
+  private handleFilterChange(filter: 'all' | 'unread' | 'archived') {
     this.selectedFilter = filter;
   }
 
   private get filteredBookmarks() {
     if (this.selectedFilter === 'unread') {
-      return this.bookmarks.filter(bookmark => bookmark.unread);
+      return this.bookmarks.filter(bookmark => bookmark.unread && !bookmark.is_archived);
     }
-    return this.bookmarks;
+    if (this.selectedFilter === 'archived') {
+      return this.bookmarks.filter(bookmark => bookmark.is_archived);
+    }
+    // Default 'all' filter shows only unarchived bookmarks
+    return this.bookmarks.filter(bookmark => !bookmark.is_archived);
   }
 
   private formatDate(dateString: string): string {
@@ -278,10 +389,11 @@ export class BookmarkList extends LitElement {
 
   private renderBookmark(bookmark: LocalBookmark) {
     const hasProgress = bookmark.read_progress && bookmark.read_progress > 0;
+    const isRecentlySynced = this.syncedBookmarkIds.has(bookmark.id);
     
     return html`
       <sl-card 
-        class="bookmark-card"
+        class="bookmark-card ${isRecentlySynced ? 'synced' : ''}"
         @click=${() => this.handleBookmarkClick(bookmark)}
       >
         <div class="bookmark-content">
@@ -348,36 +460,52 @@ export class BookmarkList extends LitElement {
       `;
     }
 
-    if (this.isSyncing) {
-      return html`
-        <div class="sync-progress">
-          <div class="sync-progress-text">
-            Syncing bookmarks... ${this.syncProgress}/${this.syncTotal}
-          </div>
-          <sl-progress-bar 
-            value=${this.syncTotal > 0 ? (this.syncProgress / this.syncTotal) * 100 : 0}
-          ></sl-progress-bar>
-        </div>
-      `;
-    }
 
     const bookmarks = this.filteredBookmarks;
 
     return html`
+      ${this.isSyncing ? html`
+        <div class="sync-progress">
+          <div class="sync-progress-text">
+            <span>
+              ${this.syncTotal > 0 
+                ? `Syncing bookmarks... ${this.syncProgress}/${this.syncTotal}`
+                : 'Starting sync...'
+              }
+            </span>
+            <sl-badge variant="primary" size="small" class="sync-badge">
+              <sl-icon name="arrow-repeat"></sl-icon>
+              Syncing
+            </sl-badge>
+          </div>
+          <sl-progress-bar 
+            value=${this.syncTotal > 0 ? (this.syncProgress / this.syncTotal) * 100 : 0}
+            ?indeterminate=${this.syncTotal === 0}
+          ></sl-progress-bar>
+        </div>
+      ` : ''}
+      
       <div class="filters">
         <sl-button
           variant=${this.selectedFilter === 'all' ? 'primary' : 'default'}
           size="small"
           @click=${() => this.handleFilterChange('all')}
         >
-          All (${this.bookmarks.length})
+          All (${this.bookmarks.filter(b => !b.is_archived).length})
         </sl-button>
         <sl-button
           variant=${this.selectedFilter === 'unread' ? 'primary' : 'default'}
           size="small"
           @click=${() => this.handleFilterChange('unread')}
         >
-          Unread (${this.bookmarks.filter(b => b.unread).length})
+          Unread (${this.bookmarks.filter(b => b.unread && !b.is_archived).length})
+        </sl-button>
+        <sl-button
+          variant=${this.selectedFilter === 'archived' ? 'primary' : 'default'}
+          size="small"
+          @click=${() => this.handleFilterChange('archived')}
+        >
+          Archived (${this.bookmarks.filter(b => b.is_archived).length})
         </sl-button>
       </div>
 
@@ -387,6 +515,8 @@ export class BookmarkList extends LitElement {
           <p>
             ${this.selectedFilter === 'unread' 
               ? 'You have no unread bookmarks.' 
+              : this.selectedFilter === 'archived'
+              ? 'You have no archived bookmarks.'
               : 'Sync your bookmarks to get started.'}
           </p>
         </div>

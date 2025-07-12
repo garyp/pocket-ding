@@ -1,4 +1,4 @@
-import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset } from '../types';
+import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset, LinkdingAssetResponse } from '../types';
 
 export class LinkdingAPI {
   private baseUrl: string;
@@ -37,16 +37,38 @@ export class LinkdingAPI {
     if (modifiedSince) {
       query += `&modified_since=${encodeURIComponent(modifiedSince)}`;
     }
+    query += `&q=`;
     return await this.request<LinkdingResponse>(`/bookmarks/?${query}`);
+  }
+
+  async getArchivedBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+    let query = `limit=${limit}&offset=${offset}`;
+    if (modifiedSince) {
+      query += `&modified_since=${encodeURIComponent(modifiedSince)}`;
+    }
+    query += `&q=`;
+    return await this.request<LinkdingResponse>(`/bookmarks/archived/?${query}`);
   }
 
   async getAllBookmarks(modifiedSince?: string): Promise<LinkdingBookmark[]> {
     const allBookmarks: LinkdingBookmark[] = [];
+    
+    // Fetch unarchived bookmarks
     let offset = 0;
     const limit = 100;
 
     while (true) {
       const response = await this.getBookmarks(limit, offset, modifiedSince);
+      allBookmarks.push(...response.results);
+      
+      if (!response.next) break;
+      offset += limit;
+    }
+    
+    // Fetch archived bookmarks
+    offset = 0;
+    while (true) {
+      const response = await this.getArchivedBookmarks(limit, offset, modifiedSince);
       allBookmarks.push(...response.results);
       
       if (!response.next) break;
@@ -73,8 +95,8 @@ export class LinkdingAPI {
     const limit = 100;
 
     while (true) {
-      const response = await this.request<LinkdingResponse>(`/bookmarks/${bookmarkId}/assets/?limit=${limit}&offset=${offset}`);
-      allAssets.push(...(response.results as LinkdingAsset[]));
+      const response = await this.request<LinkdingAssetResponse>(`/bookmarks/${bookmarkId}/assets/?limit=${limit}&offset=${offset}`);
+      allAssets.push(...response.results);
       
       if (!response.next) break;
       offset += limit;

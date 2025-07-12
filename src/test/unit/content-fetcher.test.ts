@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContentFetcher } from '../../services/content-fetcher';
 import { DatabaseService } from '../../services/database';
+import { LinkdingAPI } from '../../services/linkding-api';
 import type { LocalBookmark } from '../../types';
 
 // Mock @mozilla/readability
@@ -17,8 +18,18 @@ vi.mock('@mozilla/readability', () => ({
 vi.mock('../../services/database', () => ({
   DatabaseService: {
     getCompletedAssetsByBookmarkId: vi.fn().mockResolvedValue([]),
+    getAssetsByBookmarkId: vi.fn().mockResolvedValue([]),
     getAsset: vi.fn().mockResolvedValue(null),
+    getSettings: vi.fn().mockResolvedValue(null),
+    saveAsset: vi.fn().mockResolvedValue(undefined),
   },
+}));
+
+// Mock LinkdingAPI
+vi.mock('../../services/linkding-api', () => ({
+  LinkdingAPI: vi.fn().mockImplementation(() => ({
+    downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
+  })),
 }));
 
 describe('ContentFetcher', () => {
@@ -228,7 +239,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should return available content sources with assets', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -250,7 +261,7 @@ describe('ContentFetcher', () => {
     });
 
     it('should return empty sources when no assets available', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -271,7 +282,7 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:30:00Z',
       };
 
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -302,5 +313,240 @@ describe('ContentFetcher', () => {
       expect(result.content).toContain('1 MB');
     });
 
+  });
+
+  describe('Archived Content On-Demand Fetching', () => {
+    const archivedBookmark: LocalBookmark = {
+      ...mockBookmark,
+      is_archived: true
+    };
+
+    // Moved to beforeEach hook to prevent mutation between tests
+
+    const mockSettings = {
+      linkding_url: 'https://linkding.example.com',
+      linkding_token: 'test-token',
+      sync_interval: 60,
+      auto_sync: true,
+      reading_mode: 'readability' as const,
+    };
+
+    beforeEach(() => {
+      // Reset all mocks for clean state
+      vi.clearAllMocks();
+      
+      // Create a fresh copy of the mock asset for each test to prevent mutation
+      const freshMockAsset = {
+        id: 1,
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'Page Snapshot',
+        file_size: 12345,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+        bookmark_id: 1,
+        // No content or cached_at - needs on-demand fetching
+      };
+      
+      // Set up fresh mocks for each test
+      (DatabaseService.getAsset as any).mockResolvedValue(freshMockAsset);
+      (DatabaseService.getSettings as any).mockResolvedValue(mockSettings);
+      (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
+      
+      // Reset LinkdingAPI mock
+      (LinkdingAPI as any).mockImplementation(() => ({
+        downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
+      }));
+    });
+
+    it('should fetch archived content on-demand when online', async () => {
+      const mockContent = new TextEncoder().encode('<html><body><h1>On-demand content</h1></body></html>').buffer;
+      const mockApi = {
+        downloadAsset: vi.fn().mockResolvedValue(mockContent)
+      };
+      (LinkdingAPI as any).mockImplementation(() => mockApi);
+
+      const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
+
+      expect(mockApi.downloadAsset).toHaveBeenCalledWith(1, 1);
+      expect(result.content).toContain('On-demand content'); // Content should be processed
+      expect(result.source).toBe('asset');
+    });
+
+    it('should not cache content for archived bookmarks', async () => {
+      const mockContent = new TextEncoder().encode('<html><body><h1>Test content</h1></body></html>').buffer;
+      const mockApi = {
+        downloadAsset: vi.fn().mockResolvedValue(mockContent)
+      };
+      (LinkdingAPI as any).mockImplementation(() => mockApi);
+
+      await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
+
+      // Should not save cached content for archived bookmarks
+      expect(DatabaseService.saveAsset).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.any(ArrayBuffer),
+          cached_at: expect.any(String)
+        })
+      );
+    });
+
+    it('should cache content for unarchived bookmarks', async () => {
+      const mockContent = new TextEncoder().encode('<html><body><h1>Cached content</h1></body></html>').buffer;
+      const mockApi = {
+        downloadAsset: vi.fn().mockResolvedValue(mockContent)
+      };
+      (LinkdingAPI as any).mockImplementation(() => mockApi);
+
+      await ContentFetcher.fetchBookmarkContent(mockBookmark, 'asset', 1);
+
+      // Should save cached content for unarchived bookmarks
+      expect(DatabaseService.saveAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: mockContent,
+          cached_at: expect.any(String)
+        })
+      );
+    });
+
+    it('should show offline message for archived content when network fails', async () => {
+      const networkError = new Error('Failed to fetch');
+      const mockApi = {
+        downloadAsset: vi.fn().mockRejectedValue(networkError)
+      };
+      (LinkdingAPI as any).mockImplementation(() => mockApi);
+
+      const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
+
+      expect(result.content).toContain('Content Unavailable');
+      expect(result.content).toContain('archived bookmark requires an internet connection');
+      expect(result.content).toContain('sl-alert variant="warning"');
+      expect(result.source).toBe('asset');
+    });
+
+    it('should include technical details in offline message', async () => {
+      const networkError = new TypeError('Network error');
+      const mockApi = {
+        downloadAsset: vi.fn().mockRejectedValue(networkError)
+      };
+      (LinkdingAPI as any).mockImplementation(() => mockApi);
+
+      const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
+
+      expect(result.content).toContain('Technical Details');
+      expect(result.content).toContain('Page Snapshot');
+      expect(result.content).toContain('offline or network connection failed');
+    });
+
+    it('should include alternative access buttons in offline message', async () => {
+      const networkError = new Error('Network error');
+      const mockApi = {
+        downloadAsset: vi.fn().mockRejectedValue(networkError)
+      };
+      (LinkdingAPI as any).mockImplementation(() => mockApi);
+
+      const bookmarkWithArchive = {
+        ...archivedBookmark,
+        web_archive_snapshot_url: 'https://archive.org/example'
+      };
+
+      const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive, 'asset', 1);
+
+      expect(result.content).toContain('Open Original URL');
+      expect(result.content).toContain('Web Archive');
+      expect(result.content).toContain(bookmarkWithArchive.url);
+      expect(result.content).toContain(bookmarkWithArchive.web_archive_snapshot_url);
+    });
+
+    it('should handle missing settings gracefully', async () => {
+      // Override settings for this specific test
+      (DatabaseService.getSettings as any).mockResolvedValue(null);
+
+      const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
+
+      // Should gracefully handle missing settings by showing appropriate content
+      expect(result).not.toBeNull();
+      expect(result.source).toBe('asset');
+      // Could be fallback content or unsupported content depending on asset state
+      expect(result.content.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Content Source Options for Archived Bookmarks', () => {
+    const archivedBookmark: LocalBookmark = {
+      ...mockBookmark,
+      is_archived: true
+    };
+
+    const mockUncachedAssets = [
+      {
+        id: 1,
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'Page Snapshot',
+        file_size: 12345,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+        bookmark_id: 1,
+        // No content - not cached
+      },
+      {
+        id: 2,
+        asset_type: 'document',
+        content_type: 'application/pdf',
+        display_name: 'Document.pdf',
+        file_size: 54321,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:30:00Z',
+        bookmark_id: 1,
+        // No content - not cached
+      },
+    ];
+
+    it('should include on-demand label for archived bookmark assets', async () => {
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
+
+      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
+
+      expect(sources).toHaveLength(3); // 2 assets + Readability
+      expect(sources[0]).toEqual({
+        type: 'asset',
+        label: 'Page Snapshot (on-demand)',
+        assetId: 1,
+      });
+      expect(sources[1]).toEqual({
+        type: 'asset',
+        label: 'Document.pdf (on-demand)',
+        assetId: 2,
+      });
+      expect(sources[2]).toEqual({
+        type: 'readability',
+        label: 'Readability',
+      });
+    });
+
+    it('should not add on-demand label for cached archived assets', async () => {
+      const cachedAssets = mockUncachedAssets.map(asset => ({
+        ...asset,
+        content: new ArrayBuffer(8),
+        cached_at: '2024-01-01T10:00:00Z'
+      }));
+
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
+
+      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
+
+      expect(sources[0]?.label).toBe('Page Snapshot'); // No (on-demand) suffix
+      expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
+    });
+
+    it('should not add on-demand label for unarchived bookmarks', async () => {
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
+
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+
+      expect(sources[0]?.label).toBe('Page Snapshot'); // No (on-demand) suffix
+      expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
+    });
   });
 });

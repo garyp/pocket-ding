@@ -2,9 +2,39 @@ import { LinkdingAPI } from './linkding-api';
 import { DatabaseService } from './database';
 import type { LocalBookmark, AppSettings, LocalAsset } from '../types';
 
-export class SyncService {
+export interface SyncEvents {
+  'sync-initiated': {};
+  'sync-started': { total: number };
+  'sync-progress': { current: number; total: number };
+  'bookmark-synced': { bookmark: LocalBookmark; current: number; total: number };
+  'sync-completed': { processed: number };
+  'sync-error': { error: Error };
+}
+
+export class SyncService extends EventTarget {
+  private static instance: SyncService | null = null;
   private static isSyncing = false;
   private static syncPromise: Promise<void> | null = null;
+  private static currentSyncProgress = 0;
+  private static currentSyncTotal = 0;
+
+  static getInstance(): SyncService {
+    if (!this.instance) {
+      this.instance = new SyncService();
+    }
+    return this.instance;
+  }
+
+  static isSyncInProgress(): boolean {
+    return this.isSyncing;
+  }
+
+  static getCurrentSyncProgress(): { current: number; total: number } {
+    return {
+      current: this.currentSyncProgress,
+      total: this.currentSyncTotal
+    };
+  }
 
   static async syncBookmarks(settings: AppSettings, onProgress?: (current: number, total: number) => void): Promise<void> {
     if (this.isSyncing) {
@@ -12,18 +42,28 @@ export class SyncService {
     }
 
     this.isSyncing = true;
+    this.currentSyncProgress = 0;
+    this.currentSyncTotal = 0;
+    
+    // Emit immediate sync initiated event for instant UI feedback
+    const syncInstance = this.getInstance();
+    syncInstance.dispatchEvent(new CustomEvent('sync-initiated', { detail: {} }));
+    
     this.syncPromise = this.performSync(settings, onProgress);
     
     try {
       await this.syncPromise;
     } finally {
       this.isSyncing = false;
+      this.currentSyncProgress = 0;
+      this.currentSyncTotal = 0;
       this.syncPromise = null;
     }
   }
 
   private static async performSync(settings: AppSettings, onProgress?: (current: number, total: number) => void): Promise<void> {
     const api = new LinkdingAPI(settings.linkding_url, settings.linkding_token);
+    const syncInstance = this.getInstance();
     
     try {
       console.log('Starting sync...');
@@ -37,11 +77,24 @@ export class SyncService {
       const remoteBookmarks = await api.getAllBookmarks(lastSyncTimestamp || undefined);
       const localBookmarks = await DatabaseService.getAllBookmarks();
       
+      // Debug logging for archived bookmarks
+      const archivedCount = remoteBookmarks.filter(b => b.is_archived).length;
+      console.log(`Remote bookmarks: ${remoteBookmarks.length} total, ${archivedCount} archived`);
+      
       // Create a map of local bookmarks for efficient lookup
       const localBookmarksMap = new Map(localBookmarks.map(b => [b.id, b]));
       
       let processed = 0;
       const total = remoteBookmarks.length;
+      
+      // Update static sync state
+      this.currentSyncProgress = processed;
+      this.currentSyncTotal = total;
+      
+      // Emit sync started event
+      syncInstance.dispatchEvent(new CustomEvent('sync-started', {
+        detail: { total }
+      }));
       
       onProgress?.(processed, total);
 
@@ -63,12 +116,37 @@ export class SyncService {
 
           await DatabaseService.saveBookmark(bookmarkToSave);
           
-          // Sync assets for this bookmark
-          await this.syncBookmarkAssets(api, remoteBookmark.id);
+          // Handle asset management based on archive status
+          if (remoteBookmark.is_archived) {
+            // For archived bookmarks: sync metadata but clean up cached content
+            await this.syncArchivedBookmarkAssets(api, remoteBookmark.id, localBookmark);
+          } else {
+            // For unarchived bookmarks: full asset sync with content caching
+            await this.syncBookmarkAssets(api, remoteBookmark.id);
+          }
+
+          // Emit bookmark synced event
+          syncInstance.dispatchEvent(new CustomEvent('bookmark-synced', {
+            detail: { bookmark: bookmarkToSave, current: processed + 1, total }
+          }));
         }
 
         processed++;
+        
+        // Update static sync state
+        this.currentSyncProgress = processed;
+        
+        // Emit progress event
+        syncInstance.dispatchEvent(new CustomEvent('sync-progress', {
+          detail: { current: processed, total }
+        }));
+        
         onProgress?.(processed, total);
+        
+        // Yield control periodically to allow UI updates
+        if (processed % 5 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
 
       // Sync read status back to Linkding
@@ -77,9 +155,20 @@ export class SyncService {
       // Update last sync timestamp on successful completion
       await DatabaseService.setLastSyncTimestamp(syncStartTime);
       
+      // Emit sync completed event
+      syncInstance.dispatchEvent(new CustomEvent('sync-completed', {
+        detail: { processed }
+      }));
+      
       console.log(`Sync completed: ${processed} bookmarks processed`);
     } catch (error) {
       console.error('Sync failed:', error);
+      
+      // Emit sync error event
+      syncInstance.dispatchEvent(new CustomEvent('sync-error', {
+        detail: { error }
+      }));
+      
       throw error;
     }
   }
@@ -122,6 +211,44 @@ export class SyncService {
     } catch (error) {
       console.error('Failed to sync read status to Linkding:', error);
       // Don't throw here - we don't want read sync failures to break the main sync
+    }
+  }
+
+  private static async syncArchivedBookmarkAssets(api: LinkdingAPI, bookmarkId: number, localBookmark?: LocalBookmark): Promise<void> {
+    try {
+      // Get remote assets for this bookmark to keep metadata in sync
+      const remoteAssets = await api.getBookmarkAssets(bookmarkId);
+      
+      // Validate that remoteAssets is an array
+      if (!Array.isArray(remoteAssets)) {
+        console.warn(`getBookmarkAssets returned non-array for archived bookmark ${bookmarkId}:`, remoteAssets);
+        return;
+      }
+      
+      // Filter to only completed assets
+      const completedAssets = remoteAssets.filter(asset => asset.status === 'complete');
+      
+      // Save asset metadata without content (for on-demand fetching later)
+      for (const remoteAsset of completedAssets) {
+        const localAsset: LocalAsset = {
+          ...remoteAsset,
+          bookmark_id: bookmarkId
+          // content and cached_at are omitted for archived bookmarks
+        };
+        
+        await DatabaseService.saveAsset(localAsset);
+      }
+      
+      // Clean up any previously cached content if bookmark was just archived
+      if (localBookmark && !localBookmark.is_archived) {
+        console.log(`Cleaning up cached assets for newly archived bookmark ${bookmarkId}`);
+        await DatabaseService.clearAssetContent(bookmarkId);
+      }
+      
+      console.log(`Synced metadata for ${completedAssets.length} assets for archived bookmark ${bookmarkId}`);
+    } catch (error) {
+      console.error(`Failed to sync assets for archived bookmark ${bookmarkId}:`, error);
+      // Don't throw - continue with other bookmarks
     }
   }
 

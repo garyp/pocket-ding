@@ -46,6 +46,7 @@ vi.mock('../../services/database', () => {
       getCompletedAssetsByBookmarkId: vi.fn(),
       getAsset: vi.fn(),
       deleteAssetsByBookmarkId: vi.fn(),
+      clearAssetContent: vi.fn(),
       markBookmarkAsRead: vi.fn(),
       getBookmarksNeedingReadSync: vi.fn(),
       markBookmarkReadSynced: vi.fn(),
@@ -109,6 +110,7 @@ describe('DatabaseService', () => {
     (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
     (DatabaseService.getAsset as any).mockResolvedValue(null);
     (DatabaseService.deleteAssetsByBookmarkId as any).mockResolvedValue(undefined);
+    (DatabaseService.clearAssetContent as any).mockResolvedValue(undefined);
     (DatabaseService.markBookmarkAsRead as any).mockResolvedValue(undefined);
     (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([]);
     (DatabaseService.markBookmarkReadSynced as any).mockResolvedValue(undefined);
@@ -213,6 +215,11 @@ describe('DatabaseService', () => {
     it('should delete assets by bookmark id', async () => {
       await DatabaseService.deleteAssetsByBookmarkId(1);
       expect(DatabaseService.deleteAssetsByBookmarkId).toHaveBeenCalledWith(1);
+    });
+
+    it('should clear asset content for archived bookmarks', async () => {
+      await DatabaseService.clearAssetContent(1);
+      expect(DatabaseService.clearAssetContent).toHaveBeenCalledWith(1);
     });
 
     it('should mark bookmark as read', async () => {

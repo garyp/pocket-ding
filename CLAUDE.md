@@ -72,3 +72,30 @@ All tests should pass before considering features complete. The CI expects zero 
 - Service worker registration for PWA functionality
 - CSS custom properties for theming consistency
 - Web Components follow Lit's reactive property patterns
+
+## Testing Requirements
+
+**IMPORTANT**: Always add comprehensive tests for new features without being asked. This includes:
+
+### Required Test Coverage for New Features:
+1. **Unit Tests**: Core functionality and edge cases
+2. **Component Tests**: UI behavior and event handling  
+3. **Integration Tests**: Full user workflows
+4. **Error Handling**: Failure scenarios and recovery
+5. **Performance**: Non-blocking behavior and responsiveness
+
+### Test File Locations:
+- Unit tests: `src/test/unit/[feature-name].test.ts`
+- Component tests: `src/test/unit/[component-name].test.ts` 
+- Integration tests: `src/test/integration/[workflow-name].test.ts`
+
+### Test Categories to Cover:
+- Happy path functionality
+- Error conditions and recovery
+- Component lifecycle (connect/disconnect)
+- Event system behavior
+- State persistence across navigation
+- User interaction during background operations
+- Performance and responsiveness
+
+Remember: Tests should be written as part of feature development, not as an afterthought.

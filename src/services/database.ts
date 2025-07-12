@@ -137,4 +137,14 @@ export class DatabaseService {
   static async deleteAssetsByBookmarkId(bookmarkId: number): Promise<void> {
     await db.assets.where('bookmark_id').equals(bookmarkId).delete();
   }
+
+  static async clearAssetContent(bookmarkId: number): Promise<void> {
+    const assets = await this.getAssetsByBookmarkId(bookmarkId);
+    for (const asset of assets) {
+      // Clear content but keep metadata
+      delete asset.content;
+      delete asset.cached_at;
+      await this.saveAsset(asset);
+    }
+  }
 }

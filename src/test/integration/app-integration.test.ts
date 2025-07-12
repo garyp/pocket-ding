@@ -21,6 +21,7 @@ vi.mock('../../services/database', () => ({
     getReadProgress: vi.fn(),
     saveReadProgress: vi.fn(),
     clearAll: vi.fn(),
+    getCompletedAssetsByBookmarkId: vi.fn(),
   },
 }));
 
@@ -28,6 +29,7 @@ vi.mock('../../services/database', () => ({
 vi.mock('../../services/sync-service', () => ({
   SyncService: {
     syncBookmarks: vi.fn(),
+    getInstance: vi.fn(),
   },
 }));
 
@@ -596,6 +598,361 @@ describe('App Integration Tests', () => {
       // Should not crash the app
       await waitFor(() => {
         expect(bookmarkList).toBeTruthy();
+      });
+    });
+  });
+
+  describe('Background Sync Integration', () => {
+    let mockSyncService: any;
+    let eventListeners: { [key: string]: Function[] };
+
+    beforeEach(() => {
+      eventListeners = {};
+      
+      mockSyncService = {
+        addEventListener: vi.fn((event: string, listener: Function) => {
+          if (!eventListeners[event]) {
+            eventListeners[event] = [];
+          }
+          eventListeners[event].push(listener);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      };
+
+      (SyncService.getInstance as any).mockReturnValue(mockSyncService);
+      (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
+    });
+
+    const triggerSyncEvent = (eventType: string, detail: any) => {
+      const listeners = eventListeners[eventType] || [];
+      const event = new CustomEvent(eventType, { detail });
+      listeners.forEach(listener => listener(event));
+    };
+
+    it('should show non-blocking sync progress during background sync', async () => {
+      (DatabaseService.getSettings as any).mockResolvedValue({
+        linkding_url: 'https://demo.linkding.link',
+        linkding_token: 'test-token',
+        sync_interval: 60,
+        auto_sync: true,
+        reading_mode: 'readability',
+      });
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Start sync
+      triggerSyncEvent('sync-started', { total: 5 });
+      await bookmarkList.updateComplete;
+
+      // Should show progress bar while keeping bookmarks visible
+      await waitFor(() => {
+        const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        
+        expect(progressBar).toBeTruthy();
+        expect(bookmark1).toBeTruthy(); // Bookmarks should still be visible
+        expect(bookmark2).toBeTruthy();
+      });
+
+      // Update progress
+      triggerSyncEvent('sync-progress', { current: 2, total: 5 });
+      await bookmarkList.updateComplete;
+
+      await waitFor(() => {
+        const progressText = findTextInShadowDOM(bookmarkList, '2/5');
+        expect(progressText).toBeTruthy();
+      });
+    });
+
+    it('should add new bookmarks to the list in real-time during sync', async () => {
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([mockBookmarks[0]]); // Start with one bookmark
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Initially should only show first bookmark
+      await waitFor(() => {
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        expect(bookmark1).toBeTruthy();
+        expect(bookmark2).toBeFalsy();
+      });
+
+      // Sync new bookmark
+      const newBookmark = {
+        ...mockBookmarks[1],
+        title: 'Newly Synced Article',
+      };
+
+      triggerSyncEvent('bookmark-synced', { 
+        bookmark: newBookmark, 
+        current: 1, 
+        total: 1 
+      });
+      await bookmarkList.updateComplete;
+
+      // New bookmark should appear immediately
+      await waitFor(() => {
+        const newArticle = findTextInShadowDOM(bookmarkList, 'Newly Synced Article');
+        expect(newArticle).toBeTruthy();
+      });
+    });
+
+    it('should update existing bookmarks in real-time during sync', async () => {
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Initially should show original title
+      await waitFor(() => {
+        const originalTitle = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        expect(originalTitle).toBeTruthy();
+      });
+
+      // Update bookmark
+      const updatedBookmark = {
+        ...mockBookmarks[0],
+        title: 'Updated Article Title',
+        description: 'Updated description',
+      };
+
+      triggerSyncEvent('bookmark-synced', { 
+        bookmark: updatedBookmark, 
+        current: 1, 
+        total: 1 
+      });
+      await bookmarkList.updateComplete;
+
+      // Updated title should appear immediately
+      await waitFor(() => {
+        const updatedTitle = findTextInShadowDOM(bookmarkList, 'Updated Article Title');
+        const originalTitle = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        expect(updatedTitle).toBeTruthy();
+        expect(originalTitle).toBeFalsy();
+      });
+    });
+
+    it('should highlight newly synced bookmarks with animation', async () => {
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Sync a bookmark
+      triggerSyncEvent('bookmark-synced', { 
+        bookmark: mockBookmarks[0], 
+        current: 1, 
+        total: 1 
+      });
+      await bookmarkList.updateComplete;
+
+      // Should have synced class for animation
+      await waitFor(() => {
+        const syncedCard = bookmarkList.shadowRoot?.querySelector('.bookmark-card.synced');
+        expect(syncedCard).toBeTruthy();
+      });
+    });
+
+    it('should hide progress bar and clear highlights when sync completes', async () => {
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Start sync and add highlighted bookmark
+      triggerSyncEvent('sync-started', { total: 1 });
+      triggerSyncEvent('bookmark-synced', { 
+        bookmark: mockBookmarks[0], 
+        current: 1, 
+        total: 1 
+      });
+      await bookmarkList.updateComplete;
+
+      // Should show progress and highlight
+      await waitFor(() => {
+        const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
+        const syncedCard = bookmarkList.shadowRoot?.querySelector('.bookmark-card.synced');
+        expect(progressBar).toBeTruthy();
+        expect(syncedCard).toBeTruthy();
+      });
+
+      // Complete sync
+      triggerSyncEvent('sync-completed', { processed: 1 });
+      await bookmarkList.updateComplete;
+
+      // Progress bar should be hidden and highlights cleared
+      await waitFor(() => {
+        const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
+        const syncedCard = bookmarkList.shadowRoot?.querySelector('.bookmark-card.synced');
+        expect(progressBar).toBeFalsy();
+        expect(syncedCard).toBeFalsy();
+      });
+    });
+
+    it('should handle sync errors gracefully while maintaining UI state', async () => {
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Start sync
+      triggerSyncEvent('sync-started', { total: 2 });
+      await bookmarkList.updateComplete;
+
+      // Should show progress
+      await waitFor(() => {
+        const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
+        expect(progressBar).toBeTruthy();
+      });
+
+      // Sync error occurs
+      triggerSyncEvent('sync-error', { error: new Error('Network error') });
+      await bookmarkList.updateComplete;
+
+      // Should hide progress bar but keep bookmarks visible
+      await waitFor(() => {
+        const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        
+        expect(progressBar).toBeFalsy();
+        expect(bookmark1).toBeTruthy();
+        expect(bookmark2).toBeTruthy();
+      });
+    });
+
+    it('should allow user interaction during background sync', async () => {
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Start sync
+      triggerSyncEvent('sync-started', { total: 5 });
+      await bookmarkList.updateComplete;
+
+      // User should still be able to interact with filters during sync
+      await waitFor(() => {
+        const unreadButton = findButtonByText(bookmarkList, 'Unread (1)');
+        expect(unreadButton).toBeTruthy();
+      });
+
+      let selectedBookmarkId: number | null = null;
+      bookmarkList.addEventListener('bookmark-selected', (e: any) => {
+        selectedBookmarkId = e.detail.bookmarkId;
+      });
+
+      // User should be able to click bookmarks during sync
+      const bookmarkCard = findTextInShadowDOM(bookmarkList, 'Test Article 1')?.closest('sl-card') as HTMLElement;
+      await user.click(bookmarkCard);
+      await bookmarkList.updateComplete;
+
+      await waitFor(() => {
+        expect(selectedBookmarkId).toBe(1);
+      });
+
+      // Filter should work during sync
+      const unreadButton = findButtonByText(bookmarkList, 'Unread (1)') as HTMLElement;
+      await user.click(unreadButton);
+      await bookmarkList.updateComplete;
+
+      await waitFor(() => {
+        const article1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const article2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        expect(article1).toBeTruthy(); // Unread bookmark should be visible
+        expect(article2).toBeFalsy(); // Read bookmark should be hidden
+      });
+    });
+
+    it('should show immediate sync feedback before API calls complete', async () => {
+      (DatabaseService.getSettings as any).mockResolvedValue({
+        linkding_url: 'https://demo.linkding.link',
+        linkding_token: 'test-token',
+        sync_interval: 60,
+        auto_sync: true,
+        reading_mode: 'readability',
+      });
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+
+      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      container.appendChild(bookmarkList);
+
+      await bookmarkList.updateComplete;
+      await waitFor(() => {
+        expect((bookmarkList as any).isLoading).toBe(false);
+      });
+
+      // Trigger sync initiated event (simulating immediate feedback)
+      triggerSyncEvent('sync-initiated', {});
+      await bookmarkList.updateComplete;
+
+      // Should show immediate feedback with "Starting sync..." text
+      await waitFor(() => {
+        const startingText = findTextInShadowDOM(bookmarkList, 'Starting sync...');
+        const progressBar = bookmarkList.shadowRoot?.querySelector('sl-progress-bar');
+        
+        expect(startingText).toBeTruthy();
+        expect(progressBar?.hasAttribute('indeterminate')).toBe(true);
+      });
+
+      // Then when sync starts with total, should update to show progress
+      triggerSyncEvent('sync-started', { total: 10 });
+      await bookmarkList.updateComplete;
+
+      await waitFor(() => {
+        const progressText = findTextInShadowDOM(bookmarkList, '0/10');
+        const progressBar = bookmarkList.shadowRoot?.querySelector('sl-progress-bar');
+        
+        expect(progressText).toBeTruthy();
+        expect(progressBar?.hasAttribute('indeterminate')).toBe(false);
       });
     });
   });

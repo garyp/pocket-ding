@@ -24,6 +24,13 @@ export interface LinkdingResponse {
   results: LinkdingBookmark[];
 }
 
+export interface LinkdingAssetResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: LinkdingAsset[];
+}
+
 export interface LocalBookmark extends LinkdingBookmark {
   last_read_at?: string;
   read_progress?: number;

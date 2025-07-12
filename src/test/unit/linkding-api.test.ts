@@ -20,7 +20,7 @@ describe('LinkdingAPI', () => {
     const result = await api.getBookmarks();
     
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0',
+      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&q=',
       expect.objectContaining({
         headers: expect.objectContaining({
           'Authorization': 'Token test-token',
@@ -33,6 +33,7 @@ describe('LinkdingAPI', () => {
 
   it('should fetch all bookmarks with pagination', async () => {
     const mockFetch = vi.fn()
+      // First page of unarchived bookmarks
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
@@ -40,6 +41,15 @@ describe('LinkdingAPI', () => {
           next: 'https://linkding.example.com/api/bookmarks/?limit=100&offset=100',
         }),
       })
+      // Second page of unarchived bookmarks  
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          ...mockLinkdingResponse,
+          next: null,
+        }),
+      })
+      // First page of archived bookmarks
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
@@ -51,8 +61,8 @@ describe('LinkdingAPI', () => {
 
     const result = await api.getAllBookmarks();
     
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(result).toHaveLength(mockBookmarks.length * 2);
+    expect(mockFetch).toHaveBeenCalledTimes(3); // 2 for unarchived + 1 for archived
+    expect(result).toHaveLength(mockBookmarks.length * 3); // 3 pages total
   });
 
   it('should handle API errors', async () => {
@@ -95,7 +105,7 @@ describe('LinkdingAPI', () => {
     const result = await api.getBookmarks(100, 0, modifiedSince);
     
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z',
+      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
       expect.objectContaining({
         headers: expect.objectContaining({
           'Authorization': 'Token test-token',
@@ -107,20 +117,32 @@ describe('LinkdingAPI', () => {
   });
 
   it('should fetch all bookmarks with modified_since parameter', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockLinkdingResponse),
-    });
+    const mockFetch = vi.fn()
+      // Mock response for unarchived bookmarks
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockLinkdingResponse),
+      })
+      // Mock response for archived bookmarks
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockLinkdingResponse),
+      });
     global.fetch = mockFetch;
 
     const modifiedSince = '2024-01-01T00:00:00Z';
     const result = await api.getAllBookmarks(modifiedSince);
     
+    // Should call both unarchived and archived endpoints
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z',
+      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
       expect.anything()
     );
-    expect(result).toEqual(mockBookmarks);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://linkding.example.com/api/bookmarks/archived/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
+      expect.anything()
+    );
+    expect(result).toEqual([...mockBookmarks, ...mockBookmarks]); // Both unarchived and archived
   });
 
   describe('Asset Methods', () => {
