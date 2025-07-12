@@ -11,7 +11,7 @@ import './settings-panel';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
-  @state() private currentView: 'bookmarks' | 'reader' | 'settings' = 'bookmarks';
+  @state() private currentView: 'bookmarks' | 'reader' | 'settings' | 'not-found' = 'bookmarks';
   @state() private selectedBookmarkId: number | null = null;
   @state() private settings: AppSettings | null = null;
   @state() private isLoading = true;
@@ -51,6 +51,14 @@ export class AppRoot extends LitElement {
       gap: 0.5rem;
     }
 
+    .header-actions sl-button {
+      color: white;
+    }
+
+    .header-actions sl-button::part(base) {
+      color: white;
+    }
+
     .app-content {
       flex: 1;
       overflow: hidden;
@@ -85,6 +93,30 @@ export class AppRoot extends LitElement {
     }
 
     .setup-card p {
+      color: var(--sl-color-neutral-600);
+      margin-bottom: 1.5rem;
+    }
+
+    .not-found {
+      padding: 2rem;
+      text-align: center;
+      max-width: 400px;
+      margin: 2rem auto;
+    }
+
+    .not-found-content {
+      background: white;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .not-found-content h2 {
+      margin-top: 0;
+      color: var(--sl-color-neutral-700);
+    }
+
+    .not-found-content p {
       color: var(--sl-color-neutral-600);
       margin-bottom: 1.5rem;
     }
@@ -126,7 +158,7 @@ export class AppRoot extends LitElement {
 
   private setupRouting() {
     // Skip routing in test environments
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
     if (isTestEnvironment) {
       return;
     }
@@ -145,7 +177,10 @@ export class AppRoot extends LitElement {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     
-    if (path === '/settings') {
+    if (path === '/' || path === '/bookmarks') {
+      this.currentView = 'bookmarks';
+      this.selectedBookmarkId = null;
+    } else if (path === '/settings') {
       this.currentView = 'settings';
     } else if (path === '/reader') {
       this.currentView = 'reader';
@@ -154,14 +189,15 @@ export class AppRoot extends LitElement {
         this.selectedBookmarkId = parseInt(bookmarkId, 10);
       }
     } else {
-      this.currentView = 'bookmarks';
+      // Unknown path - show 404
+      this.currentView = 'not-found';
       this.selectedBookmarkId = null;
     }
   }
 
   private updateUrl(view: string, bookmarkId?: number) {
     // Skip URL updates in test environments
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
     if (isTestEnvironment) {
       return;
     }
@@ -208,7 +244,7 @@ export class AppRoot extends LitElement {
   private handleBookmarkSelect(e: CustomEvent) {
     this.selectedBookmarkId = e.detail.bookmarkId;
     this.currentView = 'reader';
-    this.updateUrl('reader', this.selectedBookmarkId);
+    this.updateUrl('reader', this.selectedBookmarkId || undefined);
   }
 
   private async handleSettingsSave(e: CustomEvent) {
@@ -232,7 +268,7 @@ export class AppRoot extends LitElement {
   }
 
   private renderHeader() {
-    const showBack = this.currentView !== 'bookmarks';
+    const showBack = this.currentView !== 'bookmarks' && this.currentView !== 'not-found';
     
     return html`
       <div class="app-header">
@@ -248,7 +284,8 @@ export class AppRoot extends LitElement {
           ` : ''}
           <h1 class="app-title">
             ${this.currentView === 'bookmarks' ? 'My Bookmarks' : 
-              this.currentView === 'reader' ? 'Reading' : 'Settings'}
+              this.currentView === 'reader' ? 'Reading' : 
+              this.currentView === 'settings' ? 'Settings' : 'Page Not Found'}
           </h1>
         </div>
         
@@ -322,8 +359,25 @@ export class AppRoot extends LitElement {
             @settings-saved=${this.handleSettingsSave}
           ></settings-panel>
         `;
+      case 'not-found':
       default:
-        return html`<div>Unknown view</div>`;
+        return html`
+          <div class="not-found">
+            <div class="not-found-content">
+              <h2>404 - Page Not Found</h2>
+              <p>The page you're looking for doesn't exist.</p>
+              <sl-button
+                variant="primary"
+                @click=${() => {
+                  this.currentView = 'bookmarks';
+                  this.updateUrl('bookmarks');
+                }}
+              >
+                Go to Bookmarks
+              </sl-button>
+            </div>
+          </div>
+        `;
     }
   }
 

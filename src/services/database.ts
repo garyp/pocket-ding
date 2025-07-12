@@ -85,7 +85,8 @@ export class DatabaseService {
 
   static async getLastSyncTimestamp(): Promise<string | null> {
     const metadata = await db.syncMetadata.toCollection().first();
-    return metadata?.last_sync_timestamp || null;
+    const timestamp = metadata?.last_sync_timestamp;
+    return timestamp && timestamp.trim() !== '' ? timestamp : null;
   }
 
   static async setLastSyncTimestamp(timestamp: string): Promise<void> {

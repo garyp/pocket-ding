@@ -3,7 +3,7 @@ import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.j
 import './components/app-root';
 
 // Set Shoelace base path for bundled assets
-setBasePath('/assets/');
+setBasePath('/shoelace/');
 
 // Register service worker with VitePWA
 import { registerSW } from 'virtual:pwa-register';

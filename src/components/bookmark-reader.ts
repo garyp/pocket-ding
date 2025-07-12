@@ -312,7 +312,7 @@ export class BookmarkReader extends LitElement {
         
         // Set default content source (prefer first asset if available, otherwise URL)
         const firstAsset = this.availableContentSources.find(source => source.type === 'asset');
-        this.selectedContentSource = firstAsset || this.availableContentSources.find(source => source.type === 'url') || this.availableContentSources[0] || null;
+        this.selectedContentSource = firstAsset || this.availableContentSources[0] || null;
         
         // Load content with preferred source
         await this.loadContent();
@@ -335,12 +335,7 @@ export class BookmarkReader extends LitElement {
     try {
       this.isLoadingContent = true;
       
-      // Use cached content if available and appropriate
-      if (this.selectedContentSource.type === 'url' && this.bookmark.content) {
-        this.currentContent = this.bookmark.content;
-        this.currentReadabilityContent = this.bookmark.readability_content || this.bookmark.content;
-        return;
-      }
+      // Content now comes only from assets through ContentFetcher
 
       // Fetch content using the selected source
       const result = await ContentFetcher.fetchBookmarkContent(

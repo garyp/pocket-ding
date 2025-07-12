@@ -18,6 +18,7 @@ export class BookmarkList extends LitElement {
   @state() private isSyncing = false;
   @state() private syncProgress = 0;
   @state() private syncTotal = 0;
+  @state() private bookmarksWithAssets = new Set<number>();
 
   static override styles = css`
     :host {
@@ -90,6 +91,20 @@ export class BookmarkList extends LitElement {
       flex-wrap: wrap;
       align-items: center;
       margin-top: 0.5rem;
+    }
+
+    .bookmark-meta sl-badge sl-icon {
+      margin-right: 0.25rem;
+    }
+
+    .bookmark-meta .unread-icon {
+      color: var(--sl-color-primary-600);
+      font-size: 1.1rem;
+    }
+
+    .bookmark-meta .read-icon {
+      color: var(--sl-color-neutral-500);
+      font-size: 1.1rem;
     }
 
     .bookmark-description {
@@ -194,6 +209,16 @@ export class BookmarkList extends LitElement {
     try {
       this.isLoading = true;
       this.bookmarks = await DatabaseService.getAllBookmarks();
+      
+      // Check which bookmarks have assets
+      const bookmarksWithAssets = new Set<number>();
+      for (const bookmark of this.bookmarks) {
+        const assets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmark.id);
+        if (assets.length > 0) {
+          bookmarksWithAssets.add(bookmark.id);
+        }
+      }
+      this.bookmarksWithAssets = bookmarksWithAssets;
     } catch (error) {
       console.error('Failed to load bookmarks:', error);
     } finally {
@@ -264,14 +289,17 @@ export class BookmarkList extends LitElement {
             <h3 class="bookmark-title">${bookmark.title}</h3>
             <div class="bookmark-meta">
               ${bookmark.unread ? html`
-                <sl-badge variant="primary" size="small">Unread</sl-badge>
-              ` : ''}
+                <sl-icon name="envelope" class="unread-icon" title="Unread"></sl-icon>
+              ` : html`
+                <sl-icon name="envelope-open" class="read-icon" title="Read"></sl-icon>
+              `}
               ${bookmark.is_archived ? html`
                 <sl-badge variant="neutral" size="small">Archived</sl-badge>
               ` : ''}
-              ${bookmark.content ? html`
+              ${this.bookmarksWithAssets.has(bookmark.id) ? html`
                 <sl-badge variant="success" size="small">
                   <sl-icon name="download"></sl-icon>
+                  Cached
                 </sl-badge>
               ` : ''}
             </div>

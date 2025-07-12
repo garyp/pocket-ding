@@ -87,9 +87,6 @@ describe('SyncService', () => {
   const mockLocalBookmarks: LocalBookmark[] = [
     {
       ...mockRemoteBookmarks[0],
-      content: '<html>cached content</html>',
-      readability_content: 'cleaned content',
-      cached_at: '2024-01-01T11:00:00Z',
       last_read_at: '2024-01-01T12:00:00Z',
       read_progress: 50,
       reading_mode: 'readability',
@@ -122,7 +119,7 @@ describe('SyncService', () => {
     (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([]);
     (DatabaseService.markBookmarkReadSynced as any).mockResolvedValue(undefined);
 
-    // Setup content fetcher mock
+    // Content fetcher is no longer used in sync
     (ContentFetcher.fetchBookmarkContent as any).mockResolvedValue({
       content: '<html>fetched content</html>',
       readability_content: 'processed content',
@@ -163,7 +160,6 @@ describe('SyncService', () => {
         expect.objectContaining({
           id: 1,
           date_modified: '2024-01-02T10:00:00Z',
-          content: '<html>cached content</html>', // Preserves existing content
           last_read_at: '2024-01-01T12:00:00Z', // Preserves reading progress
           read_progress: 50,
           is_synced: true,
@@ -185,7 +181,7 @@ describe('SyncService', () => {
       expect(DatabaseService.saveBookmark).not.toHaveBeenCalled();
     });
 
-    it('should fetch content for new bookmarks without cached content', async () => {
+    it('should save new bookmarks without content fetching', async () => {
       const newBookmark = {
         ...mockRemoteBookmarks[1],
         id: 3, // New bookmark not in local storage
@@ -196,39 +192,31 @@ describe('SyncService', () => {
 
       await SyncService.syncBookmarks(mockSettings);
 
-      expect(ContentFetcher.fetchBookmarkContent).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 3 })
-      );
+      expect(ContentFetcher.fetchBookmarkContent).not.toHaveBeenCalled();
       expect(DatabaseService.saveBookmark).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 3,
-          content: '<html>fetched content</html>',
-          readability_content: 'processed content',
-          cached_at: expect.any(String),
+          is_synced: true,
         })
       );
     });
 
-    it('should handle content fetching errors gracefully', async () => {
+    it('should save bookmarks without content fetching', async () => {
       const newBookmark = mockRemoteBookmarks[1];
       mockApi.getAllBookmarks.mockResolvedValue([newBookmark]);
       (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
-      
-      (ContentFetcher.fetchBookmarkContent as any).mockRejectedValue(
-        new Error('Network error')
-      );
 
       // Should not throw
       await expect(SyncService.syncBookmarks(mockSettings)).resolves.not.toThrow();
       
-      // Should still save bookmark without content
+      // Should save bookmark without content fetching
       expect(DatabaseService.saveBookmark).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 2,
-          content: undefined,
-          readability_content: undefined,
+          is_synced: true,
         })
       );
+      expect(ContentFetcher.fetchBookmarkContent).not.toHaveBeenCalled();
     });
 
     it('should set sync timestamp only on successful completion', async () => {

@@ -11,7 +11,7 @@ export class LinkdingAPI {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     // Use proxy in development, direct URL in production and tests
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
     const isDevelopment = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
       && !isTestEnvironment;
     const url = isDevelopment ? `/api${endpoint}` : `${this.baseUrl}/api${endpoint}`;
@@ -68,12 +68,24 @@ export class LinkdingAPI {
   }
 
   async getBookmarkAssets(bookmarkId: number): Promise<LinkdingAsset[]> {
-    return await this.request<LinkdingAsset[]>(`/bookmarks/${bookmarkId}/assets/`);
+    const allAssets: LinkdingAsset[] = [];
+    let offset = 0;
+    const limit = 100;
+
+    while (true) {
+      const response = await this.request<LinkdingResponse>(`/bookmarks/${bookmarkId}/assets/?limit=${limit}&offset=${offset}`);
+      allAssets.push(...(response.results as LinkdingAsset[]));
+      
+      if (!response.next) break;
+      offset += limit;
+    }
+
+    return allAssets;
   }
 
   async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
     // Use proxy in development, direct URL in production and tests
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
     const isDevelopment = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
       && !isTestEnvironment;
     const url = isDevelopment 

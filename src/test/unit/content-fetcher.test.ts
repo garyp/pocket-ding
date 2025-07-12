@@ -56,61 +56,38 @@ describe('ContentFetcher', () => {
     }
   });
 
-  it('should fetch and process bookmark content', async () => {
-    const mockHtml = '<html><body><h1>Test Article</h1><p>Content</p></body></html>';
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve(mockHtml),
-    });
-    global.fetch = mockFetch;
-
+  it('should return fallback content when no assets available', async () => {
     const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      mockBookmark.url,
-      expect.objectContaining({
-        signal: expect.any(AbortSignal),
-        mode: 'cors',
-        headers: expect.objectContaining({
-          'User-Agent': 'Mozilla/5.0 (compatible; LinkdingReader/1.0)',
-        }),
-      })
-    );
-    expect(result.content).toBe(mockHtml);
-    expect(result.readability_content).toBe('<p>Processed content</p>');
-    expect(result.source).toBe('url');
+    expect(result.content).toContain('Test Article');
+    expect(result.content).toContain('Open in New Tab');
+    expect(result.readability_content).toContain('Test Article');
+    expect(result.source).toBe('asset');
   });
 
-  it('should handle fetch errors gracefully', async () => {
-    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
-    global.fetch = mockFetch;
-
+  it('should handle bookmarks without description gracefully', async () => {
     // Use a bookmark with empty description to ensure fallback message appears
     const bookmarkWithoutDescription = { ...mockBookmark, description: '' };
     const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithoutDescription);
 
-    expect(result.content).toContain('Content could not be loaded');
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch content from https://example.com/article:', expect.any(Error));
+    expect(result.content).toContain('No cached content available');
     expect(result.content).toContain(bookmarkWithoutDescription.title);
-    expect(result.readability_content).toContain('Content could not be loaded');
-    expect(result.source).toBe('url');
+    expect(result.content).toContain('Open in New Tab');
+    expect(result.readability_content).toContain('No cached content available');
+    expect(result.source).toBe('asset');
   });
 
-  it('should handle HTTP errors', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-    });
-    global.fetch = mockFetch;
+  it('should show web archive link when available', async () => {
+    const bookmarkWithArchive = {
+      ...mockBookmark,
+      web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
+    };
 
-    // Use a bookmark with empty description to ensure fallback message appears
-    const bookmarkWithoutDescription = { ...mockBookmark, description: '' };
-    const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithoutDescription);
+    const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive);
 
-    expect(result.content).toContain('Content could not be loaded');
-    expect(result.readability_content).toContain('Content could not be loaded');
-    expect(result.source).toBe('url');
-    // HTTP errors (like 404) don't trigger console.error, they just return null
+    expect(result.content).toContain('Open Web Archive Version');
+    expect(result.content).toContain('web.archive.org');
+    expect(result.source).toBe('asset');
   });
 
   describe('Asset Content Handling', () => {
@@ -188,51 +165,37 @@ describe('ContentFetcher', () => {
 
     it('should handle specific asset not found', async () => {
       (DatabaseService.getAsset as any).mockResolvedValue(null);
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        text: () => Promise.resolve('<html><body>URL content</body></html>'),
-      });
-      global.fetch = mockFetch;
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'asset', 999);
 
-      expect(result.content).toContain('URL content');
-      expect(result.source).toBe('url');
+      expect(result.content).toContain('No cached content available');
+      expect(result.content).toContain('Open in New Tab');
+      expect(result.source).toBe('asset');
     });
 
-    it('should fallback to URL when no assets available', async () => {
+    it('should fallback when no assets available', async () => {
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        text: () => Promise.resolve('<html><body>URL content</body></html>'),
-      });
-      global.fetch = mockFetch;
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-      expect(result.content).toContain('URL content');
-      expect(result.source).toBe('url');
+      expect(result.content).toContain('No cached content available');
+      expect(result.content).toContain('Open in New Tab');
+      expect(result.source).toBe('asset');
     });
 
-    it('should use web archive when URL fails and web archive is available', async () => {
+    it('should show web archive link when no assets available', async () => {
       const bookmarkWithArchive = {
         ...mockBookmark,
         web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
       };
 
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
-      const mockFetch = vi.fn()
-        .mockResolvedValueOnce({ ok: false, status: 404 }) // URL fails
-        .mockResolvedValueOnce({ // Web archive succeeds
-          ok: true,
-          text: () => Promise.resolve('<html><body>Archive content</body></html>'),
-        });
-      global.fetch = mockFetch;
 
       const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive);
 
-      expect(result.content).toContain('Archive content');
-      expect(result.source).toBe('web_archive');
+      expect(result.content).toContain('Open Web Archive Version');
+      expect(result.content).toContain('web.archive.org');
+      expect(result.source).toBe('asset');
     });
   });
 
@@ -269,7 +232,7 @@ describe('ContentFetcher', () => {
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
-      expect(sources).toHaveLength(4); // 2 assets + URL + Readability
+      expect(sources).toHaveLength(3); // 2 assets + Readability
       expect(sources[0]).toEqual({
         type: 'asset',
         label: 'Page Snapshot',
@@ -281,42 +244,39 @@ describe('ContentFetcher', () => {
         assetId: 2,
       });
       expect(sources[2]).toEqual({
-        type: 'url',
-        label: 'Original URL',
-      });
-      expect(sources[3]).toEqual({
         type: 'readability',
         label: 'Readability',
       });
     });
 
-    it('should return content sources with web archive when available', async () => {
-      const bookmarkWithArchive = {
-        ...mockBookmark,
-        web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
-      };
-
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
-
-      const sources = await ContentFetcher.getAvailableContentSources(bookmarkWithArchive);
-
-      expect(sources).toHaveLength(3); // URL + Web Archive + Readability
-      expect(sources).toContainEqual({
-        type: 'web_archive',
-        label: 'Web Archive',
-      });
-    });
-
-    it('should return minimal sources when no assets or web archive', async () => {
+    it('should return empty sources when no assets available', async () => {
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
-      expect(sources).toHaveLength(2); // URL + Readability
-      expect(sources).toEqual([
-        { type: 'url', label: 'Original URL' },
-        { type: 'readability', label: 'Readability' },
-      ]);
+      expect(sources).toHaveLength(0); // No assets, no readability
+    });
+
+    it('should handle assets with missing display name', async () => {
+      const assetWithoutName = {
+        id: 3,
+        bookmark_id: 1,
+        asset_type: 'unknown',
+        content_type: 'application/octet-stream',
+        display_name: '',
+        file_size: 1000,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+        content: new ArrayBuffer(8),
+        cached_at: '2024-01-01T10:30:00Z',
+      };
+
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
+
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+
+      expect(sources).toHaveLength(2); // Asset + Readability
+      expect(sources[0]?.label).toBe('Asset 3');
     });
   });
 
@@ -342,25 +302,5 @@ describe('ContentFetcher', () => {
       expect(result.content).toContain('1 MB');
     });
 
-    it('should handle assets with missing display name', async () => {
-      const assetWithoutName = {
-        id: 3,
-        bookmark_id: 1,
-        asset_type: 'unknown',
-        content_type: 'application/octet-stream',
-        display_name: '',
-        file_size: 1000,
-        status: 'complete' as const,
-        date_created: '2024-01-01T10:00:00Z',
-        content: new ArrayBuffer(8),
-        cached_at: '2024-01-01T10:30:00Z',
-      };
-
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
-
-      const sourcesWithAsset = await ContentFetcher.getAvailableContentSources(mockBookmark);
-
-      expect(sourcesWithAsset[0]?.label).toBe('Asset 3');
-    });
   });
 });

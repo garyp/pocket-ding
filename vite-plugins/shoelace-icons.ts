@@ -6,6 +6,26 @@ import { globSync } from 'glob'
 export function shoelaceIcons(): Plugin {
   return {
     name: 'shoelace-icons',
+    configureServer(server) {
+      // Serve Shoelace icons during development
+      server.middlewares.use('/shoelace/assets/icons', (req, res, next) => {
+        // Extract icon name from URL like "/gear.svg" -> "gear"
+        const iconName = req.url?.replace('/', '').replace('.svg', '')
+        
+        if (iconName) {
+          const shoelaceIconsDir = resolve(process.cwd(), 'node_modules/@shoelace-style/shoelace/dist/assets/icons')
+          const iconPath = join(shoelaceIconsDir, `${iconName}.svg`)
+          
+          if (existsSync(iconPath)) {
+            res.setHeader('Content-Type', 'image/svg+xml')
+            const iconContent = readFileSync(iconPath)
+            res.end(iconContent)
+            return
+          }
+        }
+        next()
+      })
+    },
     generateBundle() {
       // Scan all source files for sl-icon name attributes
       const sourceFiles = globSync('src/**/*.{ts,js,html}', { absolute: true })
@@ -25,9 +45,9 @@ export function shoelaceIcons(): Plugin {
       
       console.log(`Found ${usedIcons.size} unique Shoelace icons:`, Array.from(usedIcons).sort())
       
-      // Create assets directory in dist
-      const distAssetsDir = resolve(process.cwd(), 'dist/assets')
-      const iconsDir = join(distAssetsDir, 'icons')
+      // Create shoelace directory in dist to match base path
+      const distShoelaceDir = resolve(process.cwd(), 'dist/shoelace/assets')
+      const iconsDir = join(distShoelaceDir, 'icons')
       
       if (!existsSync(iconsDir)) {
         mkdirSync(iconsDir, { recursive: true })
@@ -48,7 +68,7 @@ export function shoelaceIcons(): Plugin {
         }
       }
       
-      console.log(`Copied ${usedIcons.size} icons to dist/assets/icons/`)
+      console.log(`Copied ${usedIcons.size} icons to dist/shoelace/assets/icons/`)
     }
   }
 }

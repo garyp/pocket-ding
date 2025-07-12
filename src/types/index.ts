@@ -25,9 +25,6 @@ export interface LinkdingResponse {
 }
 
 export interface LocalBookmark extends LinkdingBookmark {
-  content?: string;
-  readability_content?: string;
-  cached_at?: string;
   last_read_at?: string;
   read_progress?: number;
   reading_mode?: 'original' | 'readability';
@@ -67,7 +64,7 @@ export interface AppSettings {
   reading_mode: 'original' | 'readability';
 }
 
-export type ContentSource = 'asset' | 'url' | 'web_archive' | 'readability';
+export type ContentSource = 'asset' | 'readability';
 
 export interface ContentSourceOption {
   type: ContentSource;

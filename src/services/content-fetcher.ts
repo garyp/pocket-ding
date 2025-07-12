@@ -3,25 +3,6 @@ import { DatabaseService } from './database';
 import type { LocalBookmark, ContentSource, ContentSourceOption, LocalAsset } from '../types';
 
 export class ContentFetcher {
-  private static async fetchWithTimeout(url: string, timeout = 10000): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
-    try {
-      const response = await fetch(url, { 
-        signal: controller.signal,
-        mode: 'cors',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; LinkdingReader/1.0)'
-        }
-      });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
-    }
-  }
 
   static async fetchBookmarkContent(bookmark: LocalBookmark, preferredSource?: ContentSource, assetId?: number): Promise<{ 
     content: string; 
@@ -36,31 +17,13 @@ export class ContentFetcher {
       }
     }
 
-    // Try to get content from assets first (unless specifically requested otherwise)
-    if (preferredSource !== 'url' && preferredSource !== 'web_archive') {
-      const assetContent = await this.tryGetAssetContent(bookmark);
-      if (assetContent) {
-        return assetContent;
-      }
+    // Try to get content from assets (the only reliable source in browser)
+    const assetContent = await this.tryGetAssetContent(bookmark);
+    if (assetContent) {
+      return assetContent;
     }
 
-    // Try original URL next (unless web archive is preferred)
-    if (preferredSource !== 'web_archive') {
-      const urlContent = await this.tryGetUrlContent(bookmark.url);
-      if (urlContent) {
-        return { ...urlContent, source: 'url' };
-      }
-    }
-
-    // Try web archive snapshot as fallback
-    if (bookmark.web_archive_snapshot_url) {
-      const archiveContent = await this.tryGetUrlContent(bookmark.web_archive_snapshot_url);
-      if (archiveContent) {
-        return { ...archiveContent, source: 'web_archive' };
-      }
-    }
-
-    // Final fallback
+    // No assets available - create fallback that suggests opening URL
     return this.createFallbackContent(bookmark);
   }
 
@@ -164,26 +127,6 @@ export class ContentFetcher {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
-  private static async tryGetUrlContent(url: string): Promise<{ content: string; readability_content: string } | null> {
-    try {
-      const response = await this.fetchWithTimeout(url);
-      
-      if (!response.ok) {
-        return null;
-      }
-
-      const html = await response.text();
-      const readabilityContent = this.processWithReadability(html);
-      
-      return {
-        content: html,
-        readability_content: readabilityContent
-      };
-    } catch (error) {
-      console.error(`Failed to fetch content from ${url}:`, error);
-      return null;
-    }
-  }
 
   private static processWithReadability(html: string): string {
     try {
@@ -212,17 +155,39 @@ export class ContentFetcher {
 
   private static createFallbackContent(bookmark: LocalBookmark): { content: string; readability_content: string; source: ContentSource } {
     const fallbackContent = `
-      <div class="fallback-content">
-        <h1>${bookmark.title}</h1>
-        <p>${bookmark.description || 'Content could not be loaded for offline reading.'}</p>
-        <p><a href="${bookmark.url}" target="_blank">Read online</a></p>
+      <div class="fallback-content" style="padding: 2rem; text-align: center; font-family: system-ui, sans-serif;">
+        <h1 style="color: #333; margin-bottom: 1rem;">${bookmark.title}</h1>
+        <p style="color: #666; margin-bottom: 2rem; font-size: 1.1em;">
+          ${bookmark.description || 'No cached content available for offline reading.'}
+        </p>
+        <div style="background: #f5f5f5; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+          <p style="margin-bottom: 1rem; color: #555;">
+            This bookmark doesn't have cached content. To read the full article:
+          </p>
+          <a href="${bookmark.url}" target="_blank" rel="noopener noreferrer" 
+             style="display: inline-block; background: #0066cc; color: white; padding: 0.75rem 1.5rem; 
+                    text-decoration: none; border-radius: 6px; font-weight: 500;">
+            Open in New Tab
+          </a>
+          ${bookmark.web_archive_snapshot_url ? `
+            <br><br>
+            <a href="${bookmark.web_archive_snapshot_url}" target="_blank" rel="noopener noreferrer"
+               style="display: inline-block; background: #666; color: white; padding: 0.75rem 1.5rem; 
+                      text-decoration: none; border-radius: 6px; font-weight: 500;">
+              Open Web Archive Version
+            </a>
+          ` : ''}
+        </div>
+        <p style="color: #888; font-size: 0.9em;">
+          Tip: Ask your Linkding administrator to enable content archiving for better offline reading.
+        </p>
       </div>
     `;
     
     return {
       content: fallbackContent,
       readability_content: fallbackContent,
-      source: 'url'
+      source: 'asset'
     };
   }
 
@@ -239,25 +204,13 @@ export class ContentFetcher {
       });
     }
     
-    // URL is always available
-    sources.push({
-      type: 'url',
-      label: 'Original URL'
-    });
-    
-    // Check for web archive
-    if (bookmark.web_archive_snapshot_url) {
+    // Readability is available when there are assets to process
+    if (assets.length > 0) {
       sources.push({
-        type: 'web_archive',
-        label: 'Web Archive'
+        type: 'readability',
+        label: 'Readability'
       });
     }
-    
-    // Readability is always available
-    sources.push({
-      type: 'readability',
-      label: 'Readability'
-    });
     
     return sources;
   }

@@ -1,5 +1,4 @@
 import { LinkdingAPI } from './linkding-api';
-import { ContentFetcher } from './content-fetcher';
 import { DatabaseService } from './database';
 import type { LocalBookmark, AppSettings, LocalAsset } from '../types';
 
@@ -56,26 +55,11 @@ export class SyncService {
         if (needsUpdate) {
           const bookmarkToSave: LocalBookmark = {
             ...remoteBookmark,
-            content: localBookmark?.content,
-            readability_content: localBookmark?.readability_content,
-            cached_at: localBookmark?.cached_at,
             last_read_at: localBookmark?.last_read_at,
             read_progress: localBookmark?.read_progress,
             reading_mode: localBookmark?.reading_mode,
             is_synced: true
           } as LocalBookmark;
-
-          // If bookmark doesn't have content cached, fetch it
-          if (!bookmarkToSave.content) {
-            try {
-              const { content, readability_content } = await ContentFetcher.fetchBookmarkContent(bookmarkToSave);
-              bookmarkToSave.content = content;
-              bookmarkToSave.readability_content = readability_content;
-              bookmarkToSave.cached_at = new Date().toISOString();
-            } catch (error) {
-              console.error(`Failed to fetch content for bookmark ${remoteBookmark.id}:`, error);
-            }
-          }
 
           await DatabaseService.saveBookmark(bookmarkToSave);
           
@@ -146,6 +130,12 @@ export class SyncService {
       // Get remote assets for this bookmark
       const remoteAssets = await api.getBookmarkAssets(bookmarkId);
       
+      // Validate that remoteAssets is an array
+      if (!Array.isArray(remoteAssets)) {
+        console.warn(`getBookmarkAssets returned non-array for bookmark ${bookmarkId}:`, remoteAssets);
+        return;
+      }
+      
       // Filter to only completed assets
       const completedAssets = remoteAssets.filter(asset => asset.status === 'complete');
       
@@ -189,6 +179,9 @@ export class SyncService {
       }
     } catch (error) {
       console.error(`Failed to sync assets for bookmark ${bookmarkId}:`, error);
+      if (error instanceof TypeError && error.message.includes('filter is not a function')) {
+        console.error('This error suggests the API returned a non-array. Check the Linkding server response.');
+      }
       // Don't throw - continue with other bookmarks
     }
   }

@@ -148,14 +148,18 @@ describe('LinkdingAPI', () => {
 
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockAssets),
+        json: () => Promise.resolve({
+          results: mockAssets,
+          next: null,
+          count: 2
+        }),
       });
       global.fetch = mockFetch;
 
       const result = await api.getBookmarkAssets(123);
       
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://linkding.example.com/api/bookmarks/123/assets/',
+        'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=0',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Token test-token',
@@ -164,6 +168,74 @@ describe('LinkdingAPI', () => {
         })
       );
       expect(result).toEqual(mockAssets);
+    });
+
+    it('should handle paginated asset responses', async () => {
+      const firstPageAssets = [
+        {
+          id: 1,
+          asset_type: 'snapshot',
+          content_type: 'text/html',
+          display_name: 'Page Snapshot',
+          file_size: 12345,
+          status: 'complete' as const,
+          date_created: '2024-01-01T10:00:00Z',
+        },
+      ];
+
+      const secondPageAssets = [
+        {
+          id: 2,
+          asset_type: 'document',
+          content_type: 'application/pdf',
+          display_name: 'Document.pdf',
+          file_size: 54321,
+          status: 'complete' as const,
+          date_created: '2024-01-01T10:30:00Z',
+        },
+      ];
+
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            results: firstPageAssets,
+            next: 'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=100',
+            count: 2
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            results: secondPageAssets,
+            next: null,
+            count: 2
+          }),
+        });
+      global.fetch = mockFetch;
+
+      const result = await api.getBookmarkAssets(123);
+      
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenNthCalledWith(1,
+        'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=0',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Token test-token',
+            'Content-Type': 'application/json',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2,
+        'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=100',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Token test-token',
+            'Content-Type': 'application/json',
+          }),
+        })
+      );
+      expect(result).toEqual([...firstPageAssets, ...secondPageAssets]);
     });
 
     it('should download asset as ArrayBuffer', async () => {
