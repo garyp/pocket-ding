@@ -127,7 +127,9 @@ describe('BookmarkList Background Sync', () => {
   });
 
   afterEach(() => {
-    document.body.removeChild(element);
+    if (element && document.body.contains(element)) {
+      document.body.removeChild(element);
+    }
   });
 
   const triggerSyncEvent = (eventType: string, detail: any) => {
@@ -334,7 +336,7 @@ describe('BookmarkList Background Sync', () => {
     });
 
     it('should update assets status for synced bookmark', async () => {
-      // Mock bookmark having assets after sync
+      // Mock bookmark having assets after sync - set this up before the event
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([
         { id: 1, status: 'complete' }
       ]);
@@ -344,6 +346,9 @@ describe('BookmarkList Background Sync', () => {
         current: 1, 
         total: 1 
       });
+      
+      // Wait for the async asset check in handleBookmarkSynced to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
       await element.updateComplete;
 
       // Check for cached badge by looking for download icon
@@ -476,6 +481,10 @@ describe('BookmarkList Background Sync', () => {
       const newElement = new BookmarkList();
       document.body.appendChild(newElement);
       await newElement.updateComplete;
+      
+      // Wait for checkOngoingSync to complete and trigger another render
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await newElement.updateComplete;
 
       // Should show sync progress immediately
       const progressContainer = newElement.shadowRoot?.querySelector('.sync-progress');
@@ -485,7 +494,9 @@ describe('BookmarkList Background Sync', () => {
       expect(progressText?.textContent).toContain('3/7');
 
       // Cleanup
-      document.body.removeChild(newElement);
+      if (document.body.contains(newElement)) {
+        document.body.removeChild(newElement);
+      }
     });
 
     it('should not show sync progress when no sync is ongoing', async () => {

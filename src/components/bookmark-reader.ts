@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { DatabaseService } from '../services/database';
 import { ContentFetcher } from '../services/content-fetcher';
+import { ThemeService } from '../services/theme-service';
 import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -10,6 +11,9 @@ import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
 import '@shoelace-style/shoelace/dist/components/select/select.js';
 import '@shoelace-style/shoelace/dist/components/option/option.js';
+import '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
+import '@shoelace-style/shoelace/dist/components/menu/menu.js';
+import '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
@@ -24,6 +28,8 @@ export class BookmarkReader extends LitElement {
   @state() private currentContent = '';
   @state() private currentReadabilityContent = '';
   @state() private isLoadingContent = false;
+  @state() private darkModeOverride: 'light' | 'dark' | null = null;
+  @state() private systemTheme: 'light' | 'dark' = 'light';
 
   private scrollObserver: IntersectionObserver | null = null;
   private progressSaveTimeout: number | null = null;
@@ -91,6 +97,65 @@ export class BookmarkReader extends LitElement {
       max-width: 800px;
       margin: 0 auto;
       line-height: 1.6;
+    }
+
+    /* Dark mode overrides for reader content */
+    :host(.reader-dark-mode) .reader-content {
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+
+    :host(.reader-dark-mode) .content-container {
+      color: #e0e0e0;
+    }
+
+    :host(.reader-dark-mode) .content-container h1,
+    :host(.reader-dark-mode) .content-container h2,
+    :host(.reader-dark-mode) .content-container h3,
+    :host(.reader-dark-mode) .content-container h4,
+    :host(.reader-dark-mode) .content-container h5,
+    :host(.reader-dark-mode) .content-container h6 {
+      color: #ffffff;
+    }
+
+    :host(.reader-dark-mode) .content-container p {
+      color: #d0d0d0;
+    }
+
+    :host(.reader-dark-mode) .content-container a {
+      color: #4d9eff;
+    }
+
+    :host(.reader-dark-mode) .content-container blockquote {
+      background: #2a2a2a;
+      border-left-color: #4d9eff;
+      color: #d0d0d0;
+    }
+
+    :host(.reader-dark-mode) .content-container pre {
+      background: #2a2a2a;
+      color: #e0e0e0;
+    }
+
+    :host(.reader-dark-mode) .content-container code {
+      background: #2a2a2a;
+      color: #e0e0e0;
+    }
+
+    :host(.reader-dark-mode) .bookmark-header {
+      border-bottom-color: #404040;
+    }
+
+    :host(.reader-dark-mode) .bookmark-title {
+      color: #ffffff;
+    }
+
+    :host(.reader-dark-mode) .bookmark-meta {
+      color: #a0a0a0;
+    }
+
+    :host(.reader-dark-mode) .bookmark-url {
+      color: #4d9eff;
     }
 
     .content-container h1,
@@ -271,6 +336,13 @@ export class BookmarkReader extends LitElement {
 
   override async connectedCallback() {
     super.connectedCallback();
+    
+    // Listen for system theme changes
+    ThemeService.addThemeChangeListener((theme) => {
+      this.systemTheme = theme;
+      this.updateReaderTheme();
+    });
+    
     if (this.bookmarkId) {
       await this.loadBookmark();
     }
@@ -286,6 +358,12 @@ export class BookmarkReader extends LitElement {
     super.disconnectedCallback();
     this.saveProgress();
     this.cleanupObserver();
+    
+    // Remove theme change listener
+    ThemeService.removeThemeChangeListener((theme) => {
+      this.systemTheme = theme;
+      this.updateReaderTheme();
+    });
   }
 
   private async loadBookmark() {
@@ -303,8 +381,10 @@ export class BookmarkReader extends LitElement {
           this.readProgress = progress.progress;
           this.scrollPosition = progress.scroll_position;
           this.readingMode = progress.reading_mode;
+          this.darkModeOverride = progress.dark_mode_override || null;
         } else {
           this.readingMode = this.bookmark.reading_mode || 'readability';
+          this.darkModeOverride = null;
         }
 
         // Load available content sources
@@ -327,6 +407,7 @@ export class BookmarkReader extends LitElement {
     await this.updateComplete;
     this.setupScrollTracking();
     this.setupReadMarking();
+    this.updateReaderTheme();
   }
 
   private async loadContent() {
@@ -428,6 +509,32 @@ export class BookmarkReader extends LitElement {
     }, 1000);
   }
 
+  private updateReaderTheme() {
+    const effectiveTheme = this.darkModeOverride || this.systemTheme;
+    
+    if (effectiveTheme === 'dark') {
+      this.classList.add('reader-dark-mode');
+    } else {
+      this.classList.remove('reader-dark-mode');
+    }
+  }
+
+  private handleDarkModeToggle() {
+    if (this.darkModeOverride === null) {
+      // No override set, set to opposite of system
+      this.darkModeOverride = this.systemTheme === 'dark' ? 'light' : 'dark';
+    } else if (this.darkModeOverride === this.systemTheme) {
+      // Override matches system, set to opposite
+      this.darkModeOverride = this.systemTheme === 'dark' ? 'light' : 'dark';
+    } else {
+      // Override is opposite of system, remove override
+      this.darkModeOverride = null;
+    }
+    
+    this.updateReaderTheme();
+    this.saveProgress();
+  }
+
   private async saveProgress() {
     if (!this.bookmark) return;
 
@@ -436,7 +543,8 @@ export class BookmarkReader extends LitElement {
       progress: this.readProgress,
       last_read_at: new Date().toISOString(),
       reading_mode: this.readingMode,
-      scroll_position: this.scrollPosition
+      scroll_position: this.scrollPosition,
+      dark_mode_override: this.darkModeOverride
     };
 
     try {
@@ -623,6 +731,21 @@ export class BookmarkReader extends LitElement {
                 Original
               </sl-button>
             </div>
+            
+            <sl-dropdown>
+              <sl-button slot="trigger" variant="text" size="small" caret>
+                <sl-icon name=${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'moon-fill' : 'sun-fill'}></sl-icon>
+              </sl-button>
+              <sl-menu>
+                <sl-menu-item 
+                  @click=${this.handleDarkModeToggle}
+                  ?checked=${this.darkModeOverride !== null}
+                >
+                  <sl-icon slot="prefix" name=${this.darkModeOverride === 'dark' ? 'moon-fill' : this.darkModeOverride === 'light' ? 'sun-fill' : 'circle-half'}></sl-icon>
+                  ${this.darkModeOverride === null ? 'Follow System' : this.darkModeOverride === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                </sl-menu-item>
+              </sl-menu>
+            </sl-dropdown>
           </div>
           
           <div class="progress-section">

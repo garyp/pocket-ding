@@ -73,6 +73,25 @@ All tests should pass before considering features complete. The CI expects zero 
 - CSS custom properties for theming consistency
 - Web Components follow Lit's reactive property patterns
 
+### Shoelace Icons
+
+**IMPORTANT**: Icons must be explicitly registered to be included in builds.
+
+When adding new Shoelace icons:
+1. Add the icon name to the `REQUIRED_ICONS` array in `src/icons/index.ts`
+2. Use the icon in your component: `<sl-icon name="icon-name"></sl-icon>`
+3. The build system will automatically copy the icon to the output
+
+The build system does NOT automatically scan for icons. All icons must be explicitly registered in the `REQUIRED_ICONS` array. Find available icons at: https://shoelace.style/components/icon
+
+### Dark Mode Support
+
+The application includes comprehensive dark mode support:
+- **System Detection**: Automatically follows system dark mode preference
+- **Per-Bookmark Override**: Users can override dark mode per bookmark in the reader
+- **Theme Service**: Manages global theme state and Shoelace CSS switching
+- **Persistent Preferences**: Dark mode overrides are saved per bookmark
+
 ## Testing Requirements
 
 **IMPORTANT**: Always add comprehensive tests for new features without being asked. This includes:

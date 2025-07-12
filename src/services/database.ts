@@ -39,6 +39,13 @@ export class LinkdingDatabase extends Dexie {
       syncMetadata: '++id, last_sync_timestamp',
       assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
     });
+    this.version(5).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync',
+      readProgress: '++id, bookmark_id, last_read_at, dark_mode_override',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp',
+      assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
+    });
   }
 }
 

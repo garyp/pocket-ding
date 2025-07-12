@@ -291,12 +291,18 @@ export class BookmarkList extends LitElement {
     const { bookmark } = event.detail;
     this.syncedBookmarkIds.add(bookmark.id);
     
-    // Update the bookmark in our local list
+    // Update the bookmark in our local list (create new array for reactivity)
     const existingIndex = this.bookmarks.findIndex(b => b.id === bookmark.id);
     if (existingIndex >= 0) {
-      this.bookmarks[existingIndex] = bookmark;
+      // Update existing bookmark
+      this.bookmarks = [
+        ...this.bookmarks.slice(0, existingIndex),
+        bookmark,
+        ...this.bookmarks.slice(existingIndex + 1)
+      ];
     } else {
-      this.bookmarks.unshift(bookmark);
+      // Add new bookmark to the beginning
+      this.bookmarks = [bookmark, ...this.bookmarks];
     }
     
     // Check if this bookmark has assets

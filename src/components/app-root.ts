@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
+import { ThemeService } from '../services/theme-service';
 import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -159,6 +160,14 @@ export class AppRoot extends LitElement {
   private async loadSettings() {
     try {
       this.settings = await DatabaseService.getSettings() || null;
+      
+      // Initialize theme service
+      ThemeService.init();
+      
+      // Apply theme from settings if available
+      if (this.settings?.theme_mode) {
+        ThemeService.setThemeFromSettings(this.settings.theme_mode);
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -257,6 +266,12 @@ export class AppRoot extends LitElement {
 
   private async handleSettingsSave(e: CustomEvent) {
     this.settings = e.detail.settings;
+    
+    // Apply theme from updated settings
+    if (this.settings?.theme_mode) {
+      ThemeService.setThemeFromSettings(this.settings.theme_mode);
+    }
+    
     this.currentView = 'bookmarks';
     this.updateUrl('bookmarks');
     

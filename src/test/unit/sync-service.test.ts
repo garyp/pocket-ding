@@ -5,7 +5,7 @@ import type { AppSettings, LinkdingBookmark, LocalBookmark } from '../../types';
 vi.mock('../../services/linkding-api', () => ({
   LinkdingAPI: vi.fn().mockImplementation(() => ({
     getAllBookmarks: vi.fn(),
-    getBookmarkAssets: vi.fn(),
+    getBookmarkAssets: vi.fn().mockResolvedValue([]), // Default to empty array
     downloadAsset: vi.fn(),
     markBookmarkAsRead: vi.fn(),
   })),
@@ -106,7 +106,7 @@ describe('SyncService', () => {
       getAllBookmarks: vi.fn(),
       getBookmarks: vi.fn().mockResolvedValue({ results: [], next: null }),
       getArchivedBookmarks: vi.fn().mockResolvedValue({ results: [], next: null }),
-      getBookmarkAssets: vi.fn(),
+      getBookmarkAssets: vi.fn().mockResolvedValue([]), // Default to empty array
       downloadAsset: vi.fn(),
       markBookmarkAsRead: vi.fn(),
     };
@@ -759,8 +759,16 @@ describe('SyncService', () => {
 
   describe('Sync State Persistence', () => {
     it('should track sync progress state across component lifecycle', async () => {
-      mockApi.getAllBookmarks.mockResolvedValue(mockRemoteBookmarks);
+      // Make async operations slower to test intermediate state
+      mockApi.getAllBookmarks.mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return mockRemoteBookmarks;
+      });
       (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.saveBookmark as any).mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return undefined;
+      });
 
       // Sync should not be in progress initially
       expect(SyncService.isSyncInProgress()).toBe(false);
@@ -769,10 +777,13 @@ describe('SyncService', () => {
       // Start sync (don't await to check intermediate state)
       const syncPromise = SyncService.syncBookmarks(mockSettings);
 
-      // Allow some async processing
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Should be in progress immediately
+      expect(SyncService.isSyncInProgress()).toBe(true);
 
-      // Should be in progress now
+      // Wait for getAllBookmarks to complete and set total
+      await new Promise(resolve => setTimeout(resolve, 60));
+
+      // Should still be in progress with total set
       expect(SyncService.isSyncInProgress()).toBe(true);
       const progress = SyncService.getCurrentSyncProgress();
       expect(progress.total).toBe(2); // Two mock bookmarks
@@ -790,15 +801,19 @@ describe('SyncService', () => {
     it('should maintain progress state during sync', async () => {
       const progressCallback = vi.fn();
       
+      // Reset mocks to normal behavior for this test
       mockApi.getAllBookmarks.mockResolvedValue(mockRemoteBookmarks);
       (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
+      (DatabaseService.saveBookmark as any).mockResolvedValue(undefined);
 
       await SyncService.syncBookmarks(mockSettings, progressCallback);
 
       // Progress callback should have been called with state that matches getCurrentSyncProgress
+      // Called at start with (0, 2), then after each bookmark (1, 2) and (2, 2)
       expect(progressCallback).toHaveBeenCalledWith(0, 2); // Start
       expect(progressCallback).toHaveBeenCalledWith(1, 2); // First bookmark
       expect(progressCallback).toHaveBeenCalledWith(2, 2); // Second bookmark
+      expect(progressCallback).toHaveBeenCalledTimes(3);
     });
 
     it('should reset sync state on error', async () => {

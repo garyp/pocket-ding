@@ -45,6 +45,7 @@ export interface ReadProgress {
   last_read_at: string;
   reading_mode: 'original' | 'readability';
   scroll_position: number;
+  dark_mode_override?: 'light' | 'dark' | null;
 }
 
 export interface LinkdingAsset {
@@ -69,6 +70,7 @@ export interface AppSettings {
   sync_interval: number;
   auto_sync: boolean;
   reading_mode: 'original' | 'readability';
+  theme_mode?: ThemeMode;
 }
 
 export type ContentSource = 'asset' | 'readability';
@@ -78,3 +80,5 @@ export interface ContentSourceOption {
   label: string;
   assetId?: number;
 }
+
+export type ThemeMode = 'light' | 'dark' | 'system';

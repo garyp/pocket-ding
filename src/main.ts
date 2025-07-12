@@ -1,9 +1,17 @@
 import { css } from 'lit';
 import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
+import { ThemeService } from './services/theme-service';
+import { registerIcons } from './icons';
 import './components/app-root';
 
 // Set Shoelace base path for bundled assets
 setBasePath('/shoelace/');
+
+// Register icons for tree shaking
+registerIcons();
+
+// Initialize theme service for dark mode support
+ThemeService.init();
 
 // Register service worker with VitePWA
 import { registerSW } from 'virtual:pwa-register';
@@ -38,10 +46,19 @@ const globalStyles = css`
     -moz-osx-font-smoothing: grayscale;
     background: var(--sl-color-neutral-50);
     color: var(--sl-color-neutral-900);
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
   
   html {
     height: 100%;
+  }
+  
+  :root.dark {
+    color-scheme: dark;
+  }
+  
+  :root.light {
+    color-scheme: light;
   }
   
   #app {

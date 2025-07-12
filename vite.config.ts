@@ -1,11 +1,11 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { shoelaceIcons } from './vite-plugins/shoelace-icons'
+import { shoelaceAssets } from './vite-plugins/shoelace-assets'
 
 export default defineConfig({
   root: '.',
   plugins: [
-    shoelaceIcons(),
+    shoelaceAssets(),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {

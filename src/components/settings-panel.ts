@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { LinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
+import { ThemeService } from '../services/theme-service';
 import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -136,7 +137,8 @@ export class SettingsPanel extends LitElement {
       linkding_token: this.settings?.linkding_token || '',
       sync_interval: this.settings?.sync_interval || 60,
       auto_sync: this.settings?.auto_sync ?? true,
-      reading_mode: this.settings?.reading_mode || 'readability'
+      reading_mode: this.settings?.reading_mode || 'readability',
+      theme_mode: this.settings?.theme_mode || 'system'
     };
   }
 
@@ -189,10 +191,16 @@ export class SettingsPanel extends LitElement {
         linkding_token: this.formData.linkding_token!,
         sync_interval: this.formData.sync_interval || 60,
         auto_sync: this.formData.auto_sync ?? true,
-        reading_mode: this.formData.reading_mode || 'readability'
+        reading_mode: this.formData.reading_mode || 'readability',
+        theme_mode: this.formData.theme_mode || 'system'
       };
 
       await DatabaseService.saveSettings(settings);
+      
+      // Apply theme setting immediately
+      if (settings.theme_mode) {
+        ThemeService.setThemeFromSettings(settings.theme_mode);
+      }
       
       this.dispatchEvent(new CustomEvent('settings-saved', {
         detail: { settings }
@@ -374,6 +382,19 @@ export class SettingsPanel extends LitElement {
             >
               <sl-option value="readability">Reader Mode</sl-option>
               <sl-option value="original">Original</sl-option>
+            </sl-select>
+          </div>
+          
+          <div class="form-group">
+            <label for="theme-mode">Theme</label>
+            <sl-select
+              id="theme-mode"
+              .value=${this.formData.theme_mode || 'system'}
+              @sl-change=${(e: any) => this.handleInputChange('theme_mode', e.target.value)}
+            >
+              <sl-option value="system">Follow System</sl-option>
+              <sl-option value="light">Light</sl-option>
+              <sl-option value="dark">Dark</sl-option>
             </sl-select>
           </div>
         </div>
