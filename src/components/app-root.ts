@@ -59,6 +59,14 @@ export class AppRoot extends LitElement {
       color: white;
     }
 
+    .app-header sl-button {
+      color: white;
+    }
+
+    .app-header sl-button::part(base) {
+      color: white;
+    }
+
     .app-content {
       flex: 1;
       overflow: hidden;
