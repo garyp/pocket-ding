@@ -82,3 +82,49 @@ export interface ContentSourceOption {
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+
+// BookmarkList Container/Presentation Component Types
+
+export interface BookmarkListContainerState {
+  bookmarks: LocalBookmark[];
+  isLoading: boolean;
+  isSyncing: boolean;
+  syncProgress: number;
+  syncTotal: number;
+  syncedBookmarkIds: Set<number>;
+  faviconCache: Map<number, string>;
+  bookmarksWithAssets: Set<number>;
+}
+
+export interface BookmarkListProps {
+  // Data props (reactive)
+  bookmarks: LocalBookmark[];
+  isLoading: boolean;
+  
+  // Sync state
+  syncState: {
+    isSyncing: boolean;
+    syncProgress: number;
+    syncTotal: number;
+    syncedBookmarkIds: Set<number>;
+  };
+  
+  // Favicon state  
+  faviconState: {
+    faviconCache: Map<number, string>;
+    bookmarksWithAssets: Set<number>;
+  };
+  
+  // Callback props (actions)
+  onBookmarkSelect: (bookmarkId: number) => void;
+  onSyncRequested: () => void;
+  onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void;
+  onVisibilityChanged: (visibleBookmarkIds: number[]) => void;
+}
+
+export interface BookmarkListCallbacks {
+  onBookmarkSelect: (bookmarkId: number) => void;
+  onSyncRequested: () => void;
+  onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void;
+  onVisibilityChanged: (visibleBookmarkIds: number[]) => void;
+}

@@ -7,7 +7,7 @@ import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import './bookmark-list';
+import './bookmark-list-container';
 import './bookmark-reader';
 import './settings-panel';
 
@@ -288,14 +288,14 @@ export class AppRoot extends LitElement {
     
     // Wait for the bookmark list to render, then trigger sync
     await this.updateComplete;
-    const bookmarkList = this.shadowRoot?.querySelector('bookmark-list');
+    const bookmarkList = this.shadowRoot?.querySelector('bookmark-list-container');
     if (bookmarkList) {
       bookmarkList.dispatchEvent(new CustomEvent('sync-requested'));
     }
   }
 
   private handleSyncClick() {
-    const bookmarkList = this.shadowRoot?.querySelector('bookmark-list');
+    const bookmarkList = this.shadowRoot?.querySelector('bookmark-list-container');
     if (bookmarkList) {
       bookmarkList.dispatchEvent(new CustomEvent('sync-requested'));
     }
@@ -376,9 +376,9 @@ export class AppRoot extends LitElement {
           `;
         }
         return html`
-          <bookmark-list
+          <bookmark-list-container
             @bookmark-selected=${this.handleBookmarkSelect}
-          ></bookmark-list>
+          ></bookmark-list-container>
         `;
       case 'reader':
         return html`

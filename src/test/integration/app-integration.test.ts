@@ -6,6 +6,7 @@ import '../setup';
 // Import components directly
 import { AppRoot } from '../../components/app-root';
 import { SettingsPanel } from '../../components/settings-panel';
+import { BookmarkListContainer } from '../../components/bookmark-list-container';
 import { BookmarkList } from '../../components/bookmark-list';
 import { BookmarkReader } from '../../components/bookmark-reader';
 
@@ -132,17 +133,33 @@ function findTextInShadowDOM(element: Element, text: string): Element | null {
 }
 
 
-// Helper function to find a specific button by text in shadow DOM
+// Helper function to find a specific button by text in shadow DOM recursively
 function findButtonByText(element: Element, text: string): HTMLElement | null {
-  if (!element.shadowRoot) return null;
-  
-  const buttons = element.shadowRoot.querySelectorAll('sl-button');
-  for (const button of buttons) {
-    if (button.textContent?.includes(text)) {
-      return button as HTMLElement;
+  function searchInElement(root: Element | ShadowRoot): HTMLElement | null {
+    // Search for sl-button elements in current level
+    const buttons = root.querySelectorAll('sl-button');
+    for (const button of buttons) {
+      if (button.textContent?.includes(text)) {
+        return button as HTMLElement;
+      }
     }
+    
+    // Search in nested shadow roots
+    const elements = root.querySelectorAll('*');
+    for (const el of elements) {
+      if (el.shadowRoot) {
+        const found = searchInElement(el.shadowRoot);
+        if (found) return found;
+      }
+    }
+    
+    return null;
   }
-  return null;
+  
+  if (element.shadowRoot) {
+    return searchInElement(element.shadowRoot);
+  }
+  return searchInElement(element);
 }
 
 describe('App Integration Tests', () => {
@@ -165,6 +182,9 @@ describe('App Integration Tests', () => {
     if (!customElements.get('bookmark-list')) {
       customElements.define('bookmark-list', BookmarkList);
     }
+    if (!customElements.get('bookmark-list-container')) {
+      customElements.define('bookmark-list-container', BookmarkListContainer);
+    }
     if (!customElements.get('bookmark-reader')) {
       customElements.define('bookmark-reader', BookmarkReader);
     }
@@ -178,8 +198,13 @@ describe('App Integration Tests', () => {
     (DatabaseService.saveBookmark as any).mockResolvedValue(undefined);
     (DatabaseService.getReadProgress as any).mockResolvedValue(null);
     (DatabaseService.saveReadProgress as any).mockResolvedValue(undefined);
+    (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
     (LinkdingAPI.testConnection as any).mockResolvedValue(true);
     (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
+    (SyncService.getInstance as any).mockReturnValue({
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
   });
 
   afterEach(() => {
@@ -357,14 +382,19 @@ describe('App Integration Tests', () => {
     it('should display bookmarks after loading', async () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
       
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       await waitFor(() => {
@@ -378,14 +408,19 @@ describe('App Integration Tests', () => {
     it('should filter bookmarks by unread status', async () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
       
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       await waitFor(() => {
@@ -411,14 +446,19 @@ describe('App Integration Tests', () => {
     it('should emit bookmark-selected event when bookmark is clicked', async () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
       
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       let selectedBookmarkId: number | null = null;
@@ -539,14 +579,19 @@ describe('App Integration Tests', () => {
       });
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
+      await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
       await bookmarkList.updateComplete;
 
       // Wait for component to be fully loaded and filter buttons to be rendered
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
       
       await waitFor(() => {
@@ -588,7 +633,7 @@ describe('App Integration Tests', () => {
       });
       (SyncService.syncBookmarks as any).mockRejectedValue(new Error('Sync failed'));
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       // Trigger sync event
@@ -641,12 +686,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Start sync
@@ -678,12 +729,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue([mockBookmarks[0]]); // Start with one bookmark
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Initially should only show first bookmark
@@ -718,12 +775,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Initially should show original title
@@ -759,12 +822,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Sync a bookmark
@@ -786,12 +855,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Start sync and add highlighted bookmark
@@ -828,12 +903,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Start sync
@@ -866,12 +947,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Start sync
@@ -922,12 +1009,18 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
+      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
       await bookmarkList.updateComplete;
+      
+      // Wait for the loadBookmarks promise to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await bookmarkList.updateComplete;
+      
       await waitFor(() => {
-        expect((bookmarkList as any).isLoading).toBe(false);
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        expect(presentationComponent).toBeTruthy();
       });
 
       // Trigger sync initiated event (simulating immediate feedback)
