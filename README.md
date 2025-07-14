@@ -84,6 +84,16 @@ npm run dev
 - `npm run test:integration` - Run integration tests only
 - `npm run test:watch` - Run tests in watch mode
 
+### Development Configuration
+
+To configure the development proxy for your Linkding instance, set the `LINKDING_URL` environment variable:
+
+```bash
+LINKDING_URL=https://your-linkding-instance.com npm run dev
+```
+
+This will proxy API requests to your Linkding server during development to avoid CORS issues.
+
 ### Technology Stack
 
 - **Frontend**: Lit (Web Components), TypeScript

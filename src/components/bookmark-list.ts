@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
+import { FaviconService } from '../services/favicon-service';
 import type { LocalBookmark, AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/card/card.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -20,8 +21,11 @@ export class BookmarkList extends LitElement {
   @state() private syncTotal = 0;
   @state() private bookmarksWithAssets = new Set<number>();
   @state() private syncedBookmarkIds = new Set<number>();
+  @state() private faviconCache = new Map<number, string>();
   
   private syncService: SyncService | null = null;
+  private faviconService: FaviconService | null = null;
+  private faviconObserver: IntersectionObserver | null = null;
 
   static override styles = css`
     :host {
@@ -151,6 +155,16 @@ export class BookmarkList extends LitElement {
       font-size: 0.8rem;
       text-decoration: none;
       word-break: break-all;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .favicon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      border-radius: 2px;
     }
 
     .bookmark-tags {
@@ -214,6 +228,7 @@ export class BookmarkList extends LitElement {
     await this.loadBookmarks();
     this.setupSyncListener();
     this.setupSyncEventListeners();
+    this.setupFaviconObserver();
     this.checkOngoingSync();
   }
 
@@ -224,6 +239,7 @@ export class BookmarkList extends LitElement {
 
   private setupSyncEventListeners() {
     this.syncService = SyncService.getInstance();
+    this.faviconService = FaviconService.getInstance();
     
     this.syncService.addEventListener('sync-initiated', this.handleSyncInitiated as EventListener);
     this.syncService.addEventListener('sync-started', this.handleSyncStarted as EventListener);
@@ -231,6 +247,9 @@ export class BookmarkList extends LitElement {
     this.syncService.addEventListener('bookmark-synced', this.handleBookmarkSynced as any);
     this.syncService.addEventListener('sync-completed', this.handleSyncCompleted as EventListener);
     this.syncService.addEventListener('sync-error', this.handleSyncError as EventListener);
+    
+    // Listen to favicon loading events
+    this.faviconService.addEventListener('favicon-loaded', this.handleFaviconLoaded as EventListener);
   }
 
   private checkOngoingSync() {
@@ -256,6 +275,15 @@ export class BookmarkList extends LitElement {
       this.syncService.removeEventListener('bookmark-synced', this.handleBookmarkSynced as any);
       this.syncService.removeEventListener('sync-completed', this.handleSyncCompleted as EventListener);
       this.syncService.removeEventListener('sync-error', this.handleSyncError as EventListener);
+    }
+    
+    if (this.faviconService) {
+      this.faviconService.removeEventListener('favicon-loaded', this.handleFaviconLoaded as EventListener);
+    }
+    
+    if (this.faviconObserver) {
+      this.faviconObserver.disconnect();
+      this.faviconObserver = null;
     }
   }
 
@@ -311,6 +339,8 @@ export class BookmarkList extends LitElement {
       this.bookmarksWithAssets.add(bookmark.id);
     }
     
+    // Favicon loading will be handled by the intersection observer for lazy loading
+    
     this.requestUpdate();
   }
 
@@ -322,6 +352,12 @@ export class BookmarkList extends LitElement {
   private handleSyncError = (event: CustomEvent) => {
     this.isSyncing = false;
     console.error('Sync error:', event.detail.error);
+  }
+
+  private handleFaviconLoaded = (event: CustomEvent) => {
+    const { bookmarkId, faviconUrl } = event.detail;
+    this.faviconCache.set(bookmarkId, faviconUrl);
+    this.requestUpdate();
   }
 
 
@@ -343,6 +379,12 @@ export class BookmarkList extends LitElement {
         }
       }
       this.bookmarksWithAssets = bookmarksWithAssets;
+      
+      // Initialize favicon cache from service
+      if (this.faviconService) {
+        this.faviconCache = this.faviconService.getAllCachedFaviconUrls();
+        // Initial favicon loading for visible bookmarks will be handled by intersection observer
+      }
     } catch (error) {
       console.error('Failed to load bookmarks:', error);
     } finally {
@@ -400,6 +442,7 @@ export class BookmarkList extends LitElement {
     return html`
       <sl-card 
         class="bookmark-card ${isRecentlySynced ? 'synced' : ''}"
+        data-bookmark-id="${bookmark.id}"
         @click=${() => this.handleBookmarkClick(bookmark)}
       >
         <div class="bookmark-content">
@@ -428,6 +471,12 @@ export class BookmarkList extends LitElement {
           ` : ''}
           
           <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
+            <img 
+              class="favicon" 
+              src=${this.faviconService?.getCachedFaviconUrl(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
+              alt="Favicon"
+              loading="lazy"
+            />
             ${bookmark.url}
           </a>
           
@@ -532,5 +581,52 @@ export class BookmarkList extends LitElement {
         </div>
       `}
     `;
+  }
+
+  private setupFaviconObserver() {
+    this.faviconObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const card = entry.target as HTMLElement;
+            const bookmarkId = parseInt(card.dataset['bookmarkId'] || '0');
+            if (bookmarkId && this.faviconService) {
+              const bookmark = this.bookmarks.find(b => b.id === bookmarkId);
+              if (bookmark?.favicon_url) {
+                this.faviconService.loadFaviconForBookmark(bookmarkId, bookmark.favicon_url);
+              }
+              // Stop observing this card once we've triggered loading
+              this.faviconObserver?.unobserve(card);
+            }
+          }
+        });
+      },
+      {
+        rootMargin: '50px',
+        threshold: 0.1
+      }
+    );
+  }
+
+  override updated(changedProperties: Map<string | number | symbol, unknown>) {
+    super.updated(changedProperties);
+    
+    // Set up intersection observer for lazy favicon loading after bookmarks are rendered
+    if (changedProperties.has('bookmarks') || changedProperties.has('selectedFilter')) {
+      this.observeBookmarkCards();
+    }
+  }
+
+  private observeBookmarkCards() {
+    if (!this.faviconObserver) return;
+    
+    // Observe all bookmark cards for lazy favicon loading
+    const bookmarkCards = this.shadowRoot?.querySelectorAll('.bookmark-card[data-bookmark-id]');
+    bookmarkCards?.forEach(card => {
+      const bookmarkId = parseInt((card as HTMLElement).dataset['bookmarkId'] || '0');
+      if (bookmarkId && !this.faviconCache.has(bookmarkId)) {
+        this.faviconObserver?.observe(card);
+      }
+    });
   }
 }

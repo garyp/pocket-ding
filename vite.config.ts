@@ -66,12 +66,18 @@ export default defineConfig({
     target: 'es2024'
   },
   server: {
+    port: 5175,
     fs: {
       allow: ['..']
     },
     proxy: {
       '/api': {
-        target: 'https://linkding.realify.com',
+        target: process.env.LINKDING_URL || 'http://localhost:9090',
+        changeOrigin: true,
+        secure: true
+      },
+      '/static': {
+        target: process.env.LINKDING_URL || 'http://localhost:9090',
         changeOrigin: true,
         secure: true
       }

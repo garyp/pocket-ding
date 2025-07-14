@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { ThemeService } from '../services/theme-service';
+import { configureFetchHelper } from '../utils/fetch-helper';
 import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -161,6 +162,11 @@ export class AppRoot extends LitElement {
     try {
       this.settings = await DatabaseService.getSettings() || null;
       
+      // Configure fetch helper with Linkding URL if available
+      if (this.settings?.linkding_url) {
+        configureFetchHelper(this.settings.linkding_url);
+      }
+      
       // Initialize theme service
       ThemeService.init();
       
@@ -266,6 +272,11 @@ export class AppRoot extends LitElement {
 
   private async handleSettingsSave(e: CustomEvent) {
     this.settings = e.detail.settings;
+    
+    // Configure fetch helper with updated Linkding URL
+    if (this.settings?.linkding_url) {
+      configureFetchHelper(this.settings.linkding_url);
+    }
     
     // Apply theme from updated settings
     if (this.settings?.theme_mode) {

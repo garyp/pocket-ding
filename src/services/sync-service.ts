@@ -1,5 +1,6 @@
 import { LinkdingAPI } from './linkding-api';
 import { DatabaseService } from './database';
+import { FaviconService } from './favicon-service';
 import type { LocalBookmark, AppSettings, LocalAsset } from '../types';
 
 export interface SyncEvents {
@@ -17,6 +18,7 @@ export class SyncService extends EventTarget {
   private static syncPromise: Promise<void> | null = null;
   private static currentSyncProgress = 0;
   private static currentSyncTotal = 0;
+  
 
   static getInstance(): SyncService {
     if (!this.instance) {
@@ -24,6 +26,7 @@ export class SyncService extends EventTarget {
     }
     return this.instance;
   }
+
 
   static isSyncInProgress(): boolean {
     return this.isSyncing;
@@ -123,6 +126,12 @@ export class SyncService extends EventTarget {
           } else {
             // For unarchived bookmarks: full asset sync with content caching
             await this.syncBookmarkAssets(api, remoteBookmark.id);
+          }
+
+          // For unarchived bookmarks, preload favicon in background
+          // Archived bookmarks will load favicons on-demand only
+          if (remoteBookmark.favicon_url && !remoteBookmark.is_archived) {
+            FaviconService.preloadFavicon(remoteBookmark.id, remoteBookmark.favicon_url);
           }
 
           // Emit bookmark synced event

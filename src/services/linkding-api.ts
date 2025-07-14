@@ -1,3 +1,4 @@
+import { appFetch } from '../utils/fetch-helper';
 import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset, LinkdingAssetResponse } from '../types';
 
 export class LinkdingAPI {
@@ -10,13 +11,9 @@ export class LinkdingAPI {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    // Use proxy in development, direct URL in production and tests
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
-    const isDevelopment = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
-      && !isTestEnvironment;
-    const url = isDevelopment ? `/api${endpoint}` : `${this.baseUrl}/api${endpoint}`;
+    const url = `${this.baseUrl}/api${endpoint}`;
     
-    const response = await fetch(url, {
+    const response = await appFetch(url, {
       ...options,
       headers: {
         'Authorization': `Token ${this.token}`,
@@ -106,15 +103,9 @@ export class LinkdingAPI {
   }
 
   async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
-    // Use proxy in development, direct URL in production and tests
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
-    const isDevelopment = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
-      && !isTestEnvironment;
-    const url = isDevelopment 
-      ? `/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`
-      : `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
+    const url = `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
     
-    const response = await fetch(url, {
+    const response = await appFetch(url, {
       headers: {
         'Authorization': `Token ${this.token}`,
       },
