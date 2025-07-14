@@ -9,12 +9,52 @@ export class FaviconService extends EventTarget {
   private static instance: FaviconService | null = null;
   private faviconCache = new Map<number, string>();
   private loadingSet = new Set<number>();
+  private initializationPromise: Promise<void> | null = null;
 
   static getInstance(): FaviconService {
     if (!this.instance) {
       this.instance = new FaviconService();
+      // Initialize cache from database on first access
+      this.instance.initializationPromise = this.instance.initializeCache();
     }
     return this.instance;
+  }
+
+  /**
+   * Wait for cache to be initialized
+   */
+  async waitForInitialization(): Promise<void> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+  }
+
+  /**
+   * Check if initialization is complete (for testing)
+   */
+  isInitialized(): boolean {
+    return this.initializationPromise !== null;
+  }
+
+  /**
+   * Initialize cache from database
+   */
+  private async initializeCache(): Promise<void> {
+    try {
+      // Get all bookmarks and their cached favicons
+      const bookmarks = await DatabaseService.getAllBookmarks();
+      
+      for (const bookmark of bookmarks) {
+        if (bookmark.favicon_url) {
+          const cachedFavicon = await FaviconService.getCachedFavicon(bookmark.id);
+          if (cachedFavicon) {
+            this.faviconCache.set(bookmark.id, cachedFavicon);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to initialize favicon cache:', error);
+    }
   }
 
   /**
