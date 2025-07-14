@@ -493,7 +493,9 @@ export class BookmarkReader extends LitElement {
     const scrollHeight = contentElement.scrollHeight;
     const clientHeight = contentElement.clientHeight;
     
-    const progress = Math.min(100, Math.max(0, (scrollTop / (scrollHeight - clientHeight)) * 100));
+    // Handle case where content is shorter than container
+    const scrollableHeight = scrollHeight - clientHeight;
+    const progress = scrollableHeight <= 0 ? 100 : Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100));
     this.readProgress = progress;
     
     this.scheduleProgressSave();

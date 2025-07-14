@@ -84,7 +84,13 @@ describe('FaviconService', () => {
       const result = await FaviconService.getFaviconForBookmark(bookmarkId, faviconUrl);
       
       expect(result).toMatch(/^data:image\/x-icon;base64,/);
-      expect(appFetch).toHaveBeenCalledWith(faviconUrl);
+      expect(appFetch).toHaveBeenCalledWith(faviconUrl, expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        headers: expect.objectContaining({
+          'User-Agent': 'Pocket-Ding/1.0 (+favicon-fetcher)',
+          'Accept': 'image/*,*/*;q=0.8'
+        })
+      }));
       expect(DatabaseService.saveAsset).toHaveBeenCalledWith(
         expect.objectContaining({
           bookmark_id: bookmarkId,
@@ -219,7 +225,13 @@ describe('FaviconService', () => {
       // Give it a moment to start the async operation
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      expect(appFetch).toHaveBeenCalledWith(faviconUrl);
+      expect(appFetch).toHaveBeenCalledWith(faviconUrl, expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        headers: expect.objectContaining({
+          'User-Agent': 'Pocket-Ding/1.0 (+favicon-fetcher)',
+          'Accept': 'image/*,*/*;q=0.8'
+        })
+      }));
     });
   });
 

@@ -76,7 +76,7 @@ export class FaviconService extends EventTarget {
    */
   async loadFaviconsForBookmarks(bookmarks: { id: number; favicon_url?: string }[], maxVisible = 20): Promise<void> {
     const visibleBookmarks = bookmarks.slice(0, maxVisible);
-    await this.loadWithConcurrencyLimit(visibleBookmarks, 3);
+    await this.loadWithConcurrencyLimit(visibleBookmarks, 2); // Reduced from 3 to 2 to prevent resource exhaustion
   }
 
   /**
@@ -119,8 +119,8 @@ export class FaviconService extends EventTarget {
       const bookmark = bookmarks[index++];
       if (bookmark) {
         await this.loadFaviconForBookmark(bookmark.id, bookmark.favicon_url);
-        // Small delay to be nice to the server
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Longer delay to prevent resource exhaustion
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
       
       return loadNext();
@@ -179,7 +179,33 @@ export class FaviconService extends EventTarget {
 
   private static async fetchAndCacheFavicon(bookmarkId: number, faviconUrl: string): Promise<string> {
     try {
-      const response = await appFetch(faviconUrl);
+      // Validate URL before attempting fetch
+      let validUrl: URL;
+      try {
+        validUrl = new URL(faviconUrl);
+        // Only allow http/https protocols
+        if (!['http:', 'https:'].includes(validUrl.protocol)) {
+          throw new Error(`Invalid protocol: ${validUrl.protocol}`);
+        }
+      } catch (urlError) {
+        throw new Error(`Invalid favicon URL: ${faviconUrl} - ${urlError}`);
+      }
+      
+      // Add request timeout and abort controller to prevent resource exhaustion
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await appFetch(faviconUrl, {
+        signal: controller.signal,
+        // Add headers to be more respectful to servers
+        headers: {
+          'User-Agent': 'Pocket-Ding/1.0 (+favicon-fetcher)',
+          'Accept': 'image/*,*/*;q=0.8'
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -205,8 +231,17 @@ export class FaviconService extends EventTarget {
       
       return this.arrayBufferToDataUrl(arrayBuffer, contentType);
     } catch (error) {
+      // Log the actual error and URL for debugging
+      console.error(`Favicon fetch failed for bookmark ${bookmarkId}:`, {
+        url: faviconUrl,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
       // Save failed attempt to avoid repeated requests, but with shorter retry time for CORS errors
       const isNetworkError = error instanceof TypeError && error.message.includes('Failed to fetch');
+      const isAbortError = error instanceof Error && error.name === 'AbortError';
+      const isInsufficientResources = error instanceof Error && error.message.includes('ERR_INSUFFICIENT_RESOURCES');
       
       const failedAsset: LocalAsset = {
         id: 0,
@@ -223,7 +258,11 @@ export class FaviconService extends EventTarget {
       await DatabaseService.saveAsset(failedAsset);
       
       // Provide more specific error information for debugging
-      if (isNetworkError) {
+      if (isAbortError) {
+        throw new Error(`Favicon request timeout for: ${faviconUrl}`);
+      } else if (isInsufficientResources) {
+        throw new Error(`Resource exhaustion fetching favicon: ${faviconUrl}`);
+      } else if (isNetworkError) {
         throw new Error(`Network/CORS error fetching favicon: ${faviconUrl}`);
       } else {
         throw error;
