@@ -280,10 +280,8 @@ export class BookmarkListContainer extends LitElement {
       const settings = await DatabaseService.getSettings();
       if (settings) {
         await SyncService.syncBookmarks(settings);
-        this.dispatchEvent(new CustomEvent('sync-requested', {
-          detail: {},
-          bubbles: true,
-        }));
+        // Don't dispatch sync-requested event to avoid infinite loop
+        // The sync service itself will dispatch the necessary events
       }
     } catch (error) {
       console.error('Failed to sync bookmarks:', error);
