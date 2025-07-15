@@ -254,15 +254,15 @@ describe('BookmarkList Controller Integration', () => {
     it('should handle storage errors and continue functioning', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      element = createTestElement();
-      document.body.appendChild(element);
-      await element.updateComplete;
-
-      // Mock localStorage to fail
+      // Mock localStorage to fail BEFORE creating component
       const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
       setItemSpy.mockImplementation(() => {
         throw new Error('Storage quota exceeded');
       });
+
+      element = createTestElement();
+      document.body.appendChild(element);
+      await element.updateComplete;
 
       // Component should still function despite storage errors
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
@@ -276,7 +276,7 @@ describe('BookmarkList Controller Integration', () => {
       expect(bookmarkCards?.length).toBe(1);
       expect(bookmarkCards?.[0]?.querySelector('.bookmark-title')?.textContent).toBe('Unread Bookmark');
 
-      // Should have logged the error
+      // Should have logged the error (either during init or during the filter change)
       expect(consoleWarnSpy).toHaveBeenCalled();
 
       setItemSpy.mockRestore();
