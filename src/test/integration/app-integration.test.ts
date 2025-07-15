@@ -767,6 +767,9 @@ describe('App Integration Tests', () => {
         title: 'Newly Synced Article',
       };
 
+      // Update the database mock to include the new bookmark
+      (DatabaseService.getAllBookmarks as any).mockResolvedValue([mockBookmarks[0], newBookmark]);
+
       triggerSyncEvent('bookmark-synced', { 
         bookmark: newBookmark, 
         current: 1, 
