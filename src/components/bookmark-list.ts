@@ -291,6 +291,8 @@ export class BookmarkList extends LitElement {
     if (this.scrollContainer) {
       this.scrollPosition = Math.max(0, this.scrollContainer.scrollTop);
       // State is automatically saved by StateController observing scrollPosition property
+      // Manual trigger to ensure state is saved in test environments
+      this.stateController.setProp('scrollPosition', this.scrollPosition);
     }
   }
 

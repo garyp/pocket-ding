@@ -177,9 +177,13 @@ describe('StateController', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       // Mock setItem to throw an error
-      const originalSetItem = localStorage.setItem;
-      localStorage.setItem = vi.fn(() => {
+      const setItemMock = vi.fn(() => {
         throw new Error('Storage quota exceeded');
+      });
+      
+      Object.defineProperty(global.localStorage, 'setItem', {
+        value: setItemMock,
+        writable: true
       });
 
       controller.setState({ count: 5 });
@@ -189,7 +193,11 @@ describe('StateController', () => {
         expect.any(Error)
       );
 
-      localStorage.setItem = originalSetItem;
+      // Restore localStorage
+      Object.defineProperty(global.localStorage, 'setItem', {
+        value: Storage.prototype.setItem,
+        writable: true
+      });
       consoleWarnSpy.mockRestore();
     });
   });
@@ -254,9 +262,13 @@ describe('StateController', () => {
     it('should handle storage errors gracefully', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
-      const originalRemoveItem = localStorage.removeItem;
-      localStorage.removeItem = vi.fn(() => {
+      const removeItemMock = vi.fn(() => {
         throw new Error('Storage error');
+      });
+      
+      Object.defineProperty(global.localStorage, 'removeItem', {
+        value: removeItemMock,
+        writable: true
       });
 
       controller.clearState();
@@ -266,7 +278,11 @@ describe('StateController', () => {
         expect.any(Error)
       );
 
-      localStorage.removeItem = originalRemoveItem;
+      // Restore localStorage
+      Object.defineProperty(global.localStorage, 'removeItem', {
+        value: Storage.prototype.removeItem,
+        writable: true
+      });
       consoleWarnSpy.mockRestore();
     });
   });

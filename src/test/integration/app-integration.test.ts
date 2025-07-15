@@ -691,13 +691,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Start sync
@@ -734,13 +734,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Initially should only show first bookmark
@@ -780,13 +780,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Initially should show original title
@@ -827,13 +827,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Sync a bookmark
@@ -860,13 +860,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Start sync and add highlighted bookmark
@@ -908,13 +908,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Start sync
@@ -952,13 +952,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Start sync
@@ -1014,13 +1014,13 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await bookmarkList.updateComplete;
-      
+      // Wait for the loadBookmarks promise to complete and component to finish loading
       await waitFor(() => {
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
+        // Wait for component to finish loading and have bookmarks
+        expect((presentationComponent as any).isLoading).toBe(false);
+        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
 
       // Trigger sync initiated event (simulating immediate feedback)

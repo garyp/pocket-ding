@@ -156,9 +156,13 @@ describe('BookmarkList Controller Integration', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       // Mock setItem to throw error
-      const originalSetItem = localStorage.setItem;
-      localStorage.setItem = vi.fn(() => {
+      const setItemMock = vi.fn(() => {
         throw new Error('Storage quota exceeded');
+      });
+      
+      Object.defineProperty(global.localStorage, 'setItem', {
+        value: setItemMock,
+        writable: true
       });
 
       element = createTestElement();
@@ -174,7 +178,11 @@ describe('BookmarkList Controller Integration', () => {
       // Should have logged warning but not crashed
       expect(consoleWarnSpy).toHaveBeenCalled();
 
-      localStorage.setItem = originalSetItem;
+      // Restore localStorage
+      Object.defineProperty(global.localStorage, 'setItem', {
+        value: Storage.prototype.setItem,
+        writable: true
+      });
       consoleWarnSpy.mockRestore();
     });
   });
