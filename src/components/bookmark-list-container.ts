@@ -263,9 +263,10 @@ export class BookmarkListContainer extends LitElement {
         updatedBookmarksWithAssets.add(bookmarkId);
       }
       
+      const newBookmarks = [...this.containerState.bookmarks, updatedBookmark];
       this.containerState = {
         ...this.containerState,
-        bookmarks: [...this.containerState.bookmarks, updatedBookmark],
+        bookmarks: newBookmarks,
         syncedBookmarkIds: new Set([...this.containerState.syncedBookmarkIds, bookmarkId]),
         bookmarksWithAssets: updatedBookmarksWithAssets,
       };
