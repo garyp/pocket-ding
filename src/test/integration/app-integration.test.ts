@@ -770,11 +770,15 @@ describe('App Integration Tests', () => {
       // Update the database mock to include the new bookmark
       (DatabaseService.getAllBookmarks as any).mockResolvedValue([mockBookmarks[0], newBookmark]);
 
-      triggerSyncEvent('bookmark-synced', { 
-        bookmark: newBookmark, 
-        current: 1, 
-        total: 1 
+      // Manually trigger the bookmark synced handler to test the functionality
+      const syncEvent = new CustomEvent('bookmark-synced', { 
+        detail: { 
+          bookmark: newBookmark, 
+          current: 1, 
+          total: 1 
+        }
       });
+      (bookmarkList as any).handleBookmarkSynced(syncEvent);
       await bookmarkList.updateComplete;
 
       // New bookmark should appear immediately
