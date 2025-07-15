@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { LocalBookmark, BookmarkFilter } from '../types';
-import { BookmarkListStateService } from '../services/bookmark-list-state';
+import type { LocalBookmark, BookmarkFilter, BookmarkListState } from '../types';
+import { StateController } from '../controllers/state-controller';
 import '@shoelace-style/shoelace/dist/components/card/card.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -40,6 +40,21 @@ export class BookmarkList extends LitElement {
   
   private intersectionObserver: IntersectionObserver | null = null;
   private scrollContainer: Element | null = null;
+  
+  // State controller for persistence
+  private stateController = new StateController<BookmarkListState>(this, {
+    storageKey: 'bookmark-list-state',
+    defaultState: { selectedFilter: 'all', scrollPosition: 0 },
+    validator: (state: any): state is BookmarkListState => {
+      return (
+        state &&
+        typeof state === 'object' &&
+        ['all', 'unread', 'archived'].includes(state.selectedFilter) &&
+        typeof state.scrollPosition === 'number' &&
+        state.scrollPosition >= 0
+      );
+    }
+  });
 
   static override styles = css`
     :host {
@@ -245,7 +260,7 @@ export class BookmarkList extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.initializeStateService();
+    this.initializeState();
     this.setupIntersectionObserver();
     this.setupScrollTracking();
   }
@@ -265,25 +280,22 @@ export class BookmarkList extends LitElement {
     }
   }
 
-  private initializeStateService() {
-    // Initialize the state service
-    BookmarkListStateService.init();
-    
-    // Restore saved state
-    const savedState = BookmarkListStateService.getState();
+  private initializeState() {
+    // Restore saved state from controller
+    const savedState = this.stateController.getState();
     this.selectedFilter = savedState.selectedFilter;
   }
 
   private saveCurrentScrollPosition() {
     if (this.scrollContainer) {
       const scrollPosition = this.scrollContainer.scrollTop;
-      BookmarkListStateService.updateScrollPosition(scrollPosition);
+      this.stateController.setProp('scrollPosition', Math.max(0, scrollPosition));
     }
   }
 
   private restoreScrollPosition() {
     if (this.scrollContainer) {
-      const savedState = BookmarkListStateService.getState();
+      const savedState = this.stateController.getState();
       this.scrollContainer.scrollTop = savedState.scrollPosition;
     }
   }
@@ -365,7 +377,7 @@ export class BookmarkList extends LitElement {
 
   private handleFilterChange(filter: BookmarkFilter) {
     this.selectedFilter = filter;
-    BookmarkListStateService.updateFilter(filter);
+    this.stateController.setProp('selectedFilter', filter);
   }
 
   private handleBookmarkClick(bookmark: LocalBookmark) {
