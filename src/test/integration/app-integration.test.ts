@@ -162,6 +162,31 @@ function findButtonByText(element: Element, text: string): HTMLElement | null {
   return searchInElement(element);
 }
 
+// Helper function to find elements by selector in nested shadow DOMs
+function findElementInShadowDOM(element: Element, selector: string): Element | null {
+  function searchInElement(root: Element | ShadowRoot): Element | null {
+    // Search for elements with the selector in current level
+    const found = root.querySelector(selector);
+    if (found) return found;
+    
+    // Search in nested shadow roots
+    const elements = root.querySelectorAll('*');
+    for (const el of elements) {
+      if (el.shadowRoot) {
+        const found = searchInElement(el.shadowRoot);
+        if (found) return found;
+      }
+    }
+    
+    return null;
+  }
+  
+  if (element.shadowRoot) {
+    return searchInElement(element.shadowRoot);
+  }
+  return searchInElement(element);
+}
+
 describe('App Integration Tests', () => {
   let container: HTMLElement;
   let user: ReturnType<typeof userEvent.setup>;
@@ -846,7 +871,7 @@ describe('App Integration Tests', () => {
 
       // Should have synced class for animation
       await waitFor(() => {
-        const syncedCard = bookmarkList.shadowRoot?.querySelector('.bookmark-card.synced');
+        const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
         expect(syncedCard).toBeTruthy();
       });
     });
@@ -881,7 +906,7 @@ describe('App Integration Tests', () => {
       // Should show progress and highlight
       await waitFor(() => {
         const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
-        const syncedCard = bookmarkList.shadowRoot?.querySelector('.bookmark-card.synced');
+        const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
         expect(progressBar).toBeTruthy();
         expect(syncedCard).toBeTruthy();
       });
@@ -893,7 +918,7 @@ describe('App Integration Tests', () => {
       // Progress bar should be hidden and highlights cleared
       await waitFor(() => {
         const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
-        const syncedCard = bookmarkList.shadowRoot?.querySelector('.bookmark-card.synced');
+        const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
         expect(progressBar).toBeFalsy();
         expect(syncedCard).toBeFalsy();
       });
@@ -1030,7 +1055,7 @@ describe('App Integration Tests', () => {
       // Should show immediate feedback with "Starting sync..." text
       await waitFor(() => {
         const startingText = findTextInShadowDOM(bookmarkList, 'Starting sync...');
-        const progressBar = bookmarkList.shadowRoot?.querySelector('sl-progress-bar');
+        const progressBar = findElementInShadowDOM(bookmarkList, 'sl-progress-bar');
         
         expect(startingText).toBeTruthy();
         expect(progressBar?.hasAttribute('indeterminate')).toBe(true);
@@ -1042,7 +1067,7 @@ describe('App Integration Tests', () => {
 
       await waitFor(() => {
         const progressText = findTextInShadowDOM(bookmarkList, '0/10');
-        const progressBar = bookmarkList.shadowRoot?.querySelector('sl-progress-bar');
+        const progressBar = findElementInShadowDOM(bookmarkList, 'sl-progress-bar');
         
         expect(progressText).toBeTruthy();
         expect(progressBar?.hasAttribute('indeterminate')).toBe(false);

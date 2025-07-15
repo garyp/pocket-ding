@@ -51,6 +51,7 @@ export class BookmarkListContainer extends LitElement {
   private cleanupServices() {
     // Clean up event listeners
     if (this.syncService) {
+      this.syncService.removeEventListener('sync-initiated', this.handleSyncInitiated);
       this.syncService.removeEventListener('sync-started', this.handleSyncStarted);
       this.syncService.removeEventListener('sync-progress', this.handleSyncProgress);
       this.syncService.removeEventListener('sync-completed', this.handleSyncCompleted);
@@ -68,6 +69,7 @@ export class BookmarkListContainer extends LitElement {
   private setupSyncEventListeners() {
     if (!this.syncService) return;
 
+    this.syncService.addEventListener('sync-initiated', this.handleSyncInitiated);
     this.syncService.addEventListener('sync-started', this.handleSyncStarted);
     this.syncService.addEventListener('sync-progress', this.handleSyncProgress);
     this.syncService.addEventListener('sync-completed', this.handleSyncCompleted);
@@ -162,6 +164,17 @@ export class BookmarkListContainer extends LitElement {
   }
 
   // Event handlers
+  private handleSyncInitiated = () => {
+    // Show immediate feedback with indeterminate progress
+    this.containerState = {
+      ...this.containerState,
+      isSyncing: true,
+      syncProgress: 0,
+      syncTotal: 0,
+      syncedBookmarkIds: new Set<number>(),
+    };
+  };
+
   private handleSyncStarted = (event: Event) => {
     const customEvent = event as CustomEvent;
     this.containerState = {
