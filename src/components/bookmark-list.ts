@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { LocalBookmark } from '../types';
+import type { LocalBookmark, BookmarkFilter, BookmarkListState } from '../types';
+import { StateController } from '../controllers/state-controller';
 import '@shoelace-style/shoelace/dist/components/card/card.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -35,9 +36,27 @@ export class BookmarkList extends LitElement {
   @property({ type: Function }) onVisibilityChanged: (visibleBookmarkIds: number[]) => void = () => {};
   
   // UI state (internal only)
-  @state() private selectedFilter: 'all' | 'unread' | 'archived' = 'all';
+  @state() private selectedFilter: BookmarkFilter = 'all';
+  @state() private scrollPosition: number = 0;
   
   private intersectionObserver: IntersectionObserver | null = null;
+  private scrollContainer: Element | null = null;
+  
+  // State controller for persistence with automatic observation
+  private stateController = new StateController<BookmarkListState>(this, {
+    storageKey: 'bookmark-list-state',
+    defaultState: { selectedFilter: 'all', scrollPosition: 0 },
+    observedProperties: ['selectedFilter', 'scrollPosition'],
+    validator: (state: any): state is BookmarkListState => {
+      return (
+        state &&
+        typeof state === 'object' &&
+        ['all', 'unread', 'archived'].includes(state.selectedFilter) &&
+        typeof state.scrollPosition === 'number' &&
+        state.scrollPosition >= 0
+      );
+    }
+  });
 
   static override styles = css`
     :host {
@@ -243,14 +262,60 @@ export class BookmarkList extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
+    this.initializeState();
     this.setupIntersectionObserver();
+    this.setupScrollTracking();
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    this.saveCurrentScrollPosition();
+    
+    // Clean up scroll event listener
+    if (this.scrollContainer && (this as any)._scrollHandler) {
+      this.scrollContainer.removeEventListener('scroll', (this as any)._scrollHandler);
+    }
+    
     if (this.intersectionObserver) {
       this.intersectionObserver.disconnect();
       this.intersectionObserver = null;
+    }
+  }
+
+  private initializeState() {
+    // State is automatically restored by StateController to observed properties
+    // No manual restoration needed
+  }
+
+  private saveCurrentScrollPosition() {
+    if (this.scrollContainer) {
+      this.scrollPosition = Math.max(0, this.scrollContainer.scrollTop);
+      // State is automatically saved by StateController observing scrollPosition property
+      // Manual trigger to ensure state is saved in test environments
+      this.stateController.setProp('scrollPosition', this.scrollPosition);
+    }
+  }
+
+  private restoreScrollPosition() {
+    if (this.scrollContainer) {
+      this.scrollContainer.scrollTop = this.scrollPosition;
+    }
+  }
+
+  private setupScrollTracking() {
+    // Find the scroll container (the host element itself or parent container)
+    this.scrollContainer = this.closest('.app-content') || document.documentElement;
+    
+    if (this.scrollContainer) {
+      // Set up scroll event listener to save position
+      const scrollHandler = () => {
+        this.saveCurrentScrollPosition();
+      };
+      
+      this.scrollContainer.addEventListener('scroll', scrollHandler, { passive: true });
+      
+      // Save the handler so we can remove it later
+      (this as any)._scrollHandler = scrollHandler;
     }
   }
 
@@ -282,12 +347,21 @@ export class BookmarkList extends LitElement {
 
   override updated(changedProperties: Map<string, any>) {
     super.updated(changedProperties);
+    
     // Re-observe bookmark cards after updates
     if (this.intersectionObserver) {
       this.intersectionObserver.disconnect();
       const bookmarkCards = this.renderRoot.querySelectorAll('.bookmark-card');
       bookmarkCards.forEach(card => {
         this.intersectionObserver!.observe(card);
+      });
+    }
+    
+    // Restore scroll position after the first render
+    if (changedProperties.has('bookmarks') && this.bookmarks.length > 0) {
+      // Use requestAnimationFrame to ensure the DOM is fully rendered
+      requestAnimationFrame(() => {
+        this.restoreScrollPosition();
       });
     }
   }
@@ -303,8 +377,9 @@ export class BookmarkList extends LitElement {
     return this.bookmarks.filter(bookmark => !bookmark.is_archived);
   }
 
-  private handleFilterChange(filter: 'all' | 'unread' | 'archived') {
+  private handleFilterChange(filter: BookmarkFilter) {
     this.selectedFilter = filter;
+    // State is automatically saved by StateController observing selectedFilter property
   }
 
   private handleBookmarkClick(bookmark: LocalBookmark) {

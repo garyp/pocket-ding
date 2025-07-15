@@ -128,3 +128,11 @@ export interface BookmarkListCallbacks {
   onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void;
   onVisibilityChanged: (visibleBookmarkIds: number[]) => void;
 }
+
+// Bookmark List State Types
+export type BookmarkFilter = 'all' | 'unread' | 'archived';
+
+export interface BookmarkListState {
+  selectedFilter: BookmarkFilter;
+  scrollPosition: number;
+}
