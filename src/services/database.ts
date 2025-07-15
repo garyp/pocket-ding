@@ -73,7 +73,14 @@ export class DatabaseService {
   }
 
   static async getReadProgress(bookmarkId: number): Promise<ReadProgress | undefined> {
-    return await db.readProgress.where('bookmark_id').equals(bookmarkId).first();
+    const results = await db.readProgress
+      .where('bookmark_id').equals(bookmarkId)
+      .toArray();
+    
+    if (results.length === 0) return undefined;
+    
+    // Sort by last_read_at descending to get the most recent
+    return results.sort((a, b) => new Date(b.last_read_at).getTime() - new Date(a.last_read_at).getTime())[0];
   }
 
   static async saveSettings(settings: AppSettings): Promise<void> {

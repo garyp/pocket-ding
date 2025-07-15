@@ -35,17 +35,20 @@ export class BookmarkReader extends LitElement {
   private progressSaveTimeout: number | null = null;
   private readMarkTimeout: number | null = null;
   private hasBeenMarkedAsRead = false;
+  private isRestoringPosition = false;
 
   static override styles = css`
     :host {
       display: block;
-      height: 100%;
+      height: 100vh;
+      max-height: 100vh;
     }
 
     .reader-container {
       display: flex;
       flex-direction: column;
-      height: 100%;
+      height: 100vh;
+      max-height: 100vh;
     }
 
     .reader-toolbar {
@@ -91,6 +94,7 @@ export class BookmarkReader extends LitElement {
       flex: 1;
       overflow-y: auto;
       padding: 1rem;
+      min-height: 0;
     }
 
     .content-container {
@@ -372,17 +376,26 @@ export class BookmarkReader extends LitElement {
     try {
       this.isLoading = true;
       this.hasBeenMarkedAsRead = false; // Reset for new bookmark
+      this.isRestoringPosition = false; // Reset restoration flag
+      
+      // Reset progress state to prevent carryover from previous bookmarks
+      this.readProgress = 0;
+      this.scrollPosition = 0;
       this.bookmark = await DatabaseService.getBookmark(this.bookmarkId) || null;
       
       if (this.bookmark) {
         // Load saved reading progress
         const progress = await DatabaseService.getReadProgress(this.bookmarkId);
         if (progress) {
+          // Always restore saved position (remove reset logic for now)
           this.readProgress = progress.progress;
           this.scrollPosition = progress.scroll_position;
           this.readingMode = progress.reading_mode;
           this.darkModeOverride = progress.dark_mode_override || null;
         } else {
+          // Reset to defaults for new bookmarks with no saved progress
+          this.readProgress = 0;
+          this.scrollPosition = 0;
           this.readingMode = this.bookmark.reading_mode || 'readability';
           this.darkModeOverride = null;
         }
@@ -408,6 +421,8 @@ export class BookmarkReader extends LitElement {
     this.setupScrollTracking();
     this.setupReadMarking();
     this.updateReaderTheme();
+    
+    // Note: Auto-reset was temporarily added for debugging and is now removed
   }
 
   private async loadContent() {
@@ -451,11 +466,22 @@ export class BookmarkReader extends LitElement {
     this.cleanupObserver();
     
     const contentElement = this.shadowRoot?.querySelector('.reader-content');
-    if (!contentElement) return;
+    if (!contentElement) {
+      return;
+    }
 
-    // Restore scroll position
+
+    // Restore scroll position after content is rendered
     if (this.scrollPosition > 0) {
-      contentElement.scrollTop = this.scrollPosition;
+      this.isRestoringPosition = true;
+      requestAnimationFrame(() => {
+        contentElement.scrollTop = this.scrollPosition;
+        // Allow progress updates after restoration is complete
+        setTimeout(() => {
+          this.isRestoringPosition = false;
+        }, 100);
+      });
+    } else {
     }
 
     // Set up intersection observer for progress tracking
@@ -478,14 +504,19 @@ export class BookmarkReader extends LitElement {
     const paragraphs = contentElement.querySelectorAll('p');
     paragraphs.forEach(p => this.scrollObserver?.observe(p));
 
-    // Track scroll position
+    // Track scroll position and update progress
     contentElement.addEventListener('scroll', () => {
       this.scrollPosition = contentElement.scrollTop;
-      this.scheduleProgressSave();
+      this.updateReadProgress();
     });
   }
 
   private updateReadProgress() {
+    // Don't update progress while restoring position
+    if (this.isRestoringPosition) {
+      return;
+    }
+
     const contentElement = this.shadowRoot?.querySelector('.reader-content');
     if (!contentElement) return;
 
@@ -493,9 +524,19 @@ export class BookmarkReader extends LitElement {
     const scrollHeight = contentElement.scrollHeight;
     const clientHeight = contentElement.clientHeight;
     
-    // Handle case where content is shorter than container
+    // Calculate progress based on scroll position
     const scrollableHeight = scrollHeight - clientHeight;
-    const progress = scrollableHeight <= 0 ? 100 : Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100));
+    
+    let progress: number;
+    if (scrollableHeight <= 0) {
+      // Content fits entirely in viewport - show 100% only if there's actually content
+      progress = scrollHeight > 0 ? 100 : 0;
+    } else {
+      // Content is scrollable - calculate based on scroll position
+      progress = Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100));
+    }
+    
+    
     this.readProgress = progress;
     
     this.scheduleProgressSave();
@@ -549,6 +590,7 @@ export class BookmarkReader extends LitElement {
       dark_mode_override: this.darkModeOverride
     };
 
+
     try {
       await DatabaseService.saveReadProgress(progress);
       
@@ -593,6 +635,8 @@ export class BookmarkReader extends LitElement {
       this.readMarkTimeout = null;
     }
   }
+
+  // Debug method removed to protect user data
 
   private handleReadingModeChange(mode: 'original' | 'readability') {
     this.readingMode = mode;
