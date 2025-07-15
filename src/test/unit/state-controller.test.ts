@@ -371,4 +371,157 @@ describe('StateController', () => {
       expect(state.metadata.version).toBe(2); // Updated
     });
   });
+
+  describe('automatic property observation', () => {
+    let mockComponent: any;
+
+    beforeEach(() => {
+      mockComponent = {
+        addController: vi.fn(),
+        requestUpdate: vi.fn(),
+        removeController: vi.fn(),
+        updateComplete: Promise.resolve(true),
+        // Mock component properties that will be observed
+        name: 'initial',
+        count: 0,
+        active: false
+      };
+    });
+
+    it('should observe specified properties and save state when they change', () => {
+      controller = new StateController(mockComponent, {
+        storageKey: 'test-state',
+        defaultState,
+        observedProperties: ['name', 'count']
+      });
+
+      // Simulate property changes on the component
+      mockComponent.name = 'changed';
+      mockComponent.count = 5;
+
+      // Trigger the hostUpdated lifecycle method
+      controller.hostUpdated();
+
+      // State should be automatically updated
+      const state = controller.getState();
+      expect(state.name).toBe('changed');
+      expect(state.count).toBe(5);
+      expect(state.active).toBe(false); // Not observed, should remain default
+
+      // State should be persisted to localStorage
+      const savedData = localStorage.getItem('test-state');
+      expect(JSON.parse(savedData!)).toEqual({
+        name: 'changed', 
+        count: 5, 
+        active: false
+      });
+    });
+
+    it('should only save state when observed properties actually change', () => {
+      const mockStorage = {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn()
+      } as unknown as Storage;
+
+      controller = new StateController(mockComponent, {
+        storageKey: 'test-state',
+        defaultState,
+        observedProperties: ['name'],
+        storage: mockStorage
+      });
+
+      // First update - should save
+      mockComponent.name = 'changed';
+      controller.hostUpdated();
+      expect(mockStorage.setItem).toHaveBeenCalledTimes(1);
+
+      // Second update with same value - should not save
+      mockStorage.setItem.mockClear();
+      controller.hostUpdated();
+      expect(mockStorage.setItem).not.toHaveBeenCalled();
+
+      // Third update with different value - should save
+      mockComponent.name = 'changed-again';
+      controller.hostUpdated();
+      expect(mockStorage.setItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('should restore saved state to observed properties on hostConnected', () => {
+      const savedState: TestState = { name: 'restored', count: 10, active: true };
+      localStorage.setItem('test-state', JSON.stringify(savedState));
+
+      controller = new StateController(mockComponent, {
+        storageKey: 'test-state',
+        defaultState,
+        observedProperties: ['name', 'count', 'active']
+      });
+
+      // Trigger hostConnected
+      controller.hostConnected();
+
+      // Component properties should be restored from saved state
+      expect(mockComponent.name).toBe('restored');
+      expect(mockComponent.count).toBe(10);
+      expect(mockComponent.active).toBe(true);
+    });
+
+    it('should work without observed properties (backwards compatibility)', () => {
+      controller = new StateController(mockComponent, {
+        storageKey: 'test-state',
+        defaultState
+        // No observedProperties specified
+      });
+
+      // hostUpdated should work without errors
+      expect(() => controller.hostUpdated()).not.toThrow();
+
+      // Manual methods should still work
+      controller.setState({ name: 'manual', count: 1, active: true });
+      expect(controller.getState()).toEqual({ name: 'manual', count: 1, active: true });
+    });
+
+    it('should validate observed property updates', () => {
+      const validator = (state: any): state is TestState => {
+        return state && typeof state.name === 'string' && state.name.length > 0;
+      };
+
+      controller = new StateController(mockComponent, {
+        storageKey: 'test-state',
+        defaultState,
+        observedProperties: ['name'],
+        validator
+      });
+
+      // Valid update should work
+      mockComponent.name = 'valid-name';
+      controller.hostUpdated();
+      expect(controller.getState().name).toBe('valid-name');
+
+      // Invalid update should be rejected
+      mockComponent.name = '';
+      controller.hostUpdated();
+      expect(controller.getState().name).toBe('valid-name'); // Should remain unchanged
+    });
+
+    it('should handle mixed automatic and manual updates', () => {
+      controller = new StateController(mockComponent, {
+        storageKey: 'test-state',
+        defaultState,
+        observedProperties: ['name']
+      });
+
+      // Automatic update through observed property
+      mockComponent.name = 'auto-updated';
+      controller.hostUpdated();
+
+      // Manual update of non-observed property
+      controller.setProp('count', 42);
+
+      const state = controller.getState();
+      expect(state.name).toBe('auto-updated');
+      expect(state.count).toBe(42);
+      expect(state.active).toBe(false);
+    });
+  });
 });

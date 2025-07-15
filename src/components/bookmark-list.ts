@@ -37,14 +37,16 @@ export class BookmarkList extends LitElement {
   
   // UI state (internal only)
   @state() private selectedFilter: BookmarkFilter = 'all';
+  @state() private scrollPosition: number = 0;
   
   private intersectionObserver: IntersectionObserver | null = null;
   private scrollContainer: Element | null = null;
   
-  // State controller for persistence
+  // State controller for persistence with automatic observation
   private stateController = new StateController<BookmarkListState>(this, {
     storageKey: 'bookmark-list-state',
     defaultState: { selectedFilter: 'all', scrollPosition: 0 },
+    observedProperties: ['selectedFilter', 'scrollPosition'],
     validator: (state: any): state is BookmarkListState => {
       return (
         state &&
@@ -281,22 +283,20 @@ export class BookmarkList extends LitElement {
   }
 
   private initializeState() {
-    // Restore saved state from controller
-    const savedState = this.stateController.getState();
-    this.selectedFilter = savedState.selectedFilter;
+    // State is automatically restored by StateController to observed properties
+    // No manual restoration needed
   }
 
   private saveCurrentScrollPosition() {
     if (this.scrollContainer) {
-      const scrollPosition = this.scrollContainer.scrollTop;
-      this.stateController.setProp('scrollPosition', Math.max(0, scrollPosition));
+      this.scrollPosition = Math.max(0, this.scrollContainer.scrollTop);
+      // State is automatically saved by StateController observing scrollPosition property
     }
   }
 
   private restoreScrollPosition() {
     if (this.scrollContainer) {
-      const savedState = this.stateController.getState();
-      this.scrollContainer.scrollTop = savedState.scrollPosition;
+      this.scrollContainer.scrollTop = this.scrollPosition;
     }
   }
 
@@ -377,7 +377,7 @@ export class BookmarkList extends LitElement {
 
   private handleFilterChange(filter: BookmarkFilter) {
     this.selectedFilter = filter;
-    this.stateController.setProp('selectedFilter', filter);
+    // State is automatically saved by StateController observing selectedFilter property
   }
 
   private handleBookmarkClick(bookmark: LocalBookmark) {

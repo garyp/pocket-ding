@@ -5,6 +5,7 @@ export interface StateControllerOptions<T> {
   defaultState: T;
   validator?: (value: any) => value is T;
   storage?: Storage;
+  observedProperties?: (keyof T)[];
 }
 
 export class StateController<T extends Record<string, any>> implements ReactiveController {
@@ -14,6 +15,7 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
   private readonly defaultState: T;
   private readonly validator?: (value: any) => value is T;
   private readonly storage: Storage;
+  private readonly observedProperties: (keyof T)[];
 
   constructor(host: ReactiveControllerHost, options: StateControllerOptions<T>) {
     this.host = host;
@@ -21,6 +23,7 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
     this.defaultState = { ...options.defaultState };
     this.validator = options.validator;
     this.storage = options.storage || localStorage;
+    this.observedProperties = options.observedProperties || [];
     this.currentState = { ...this.defaultState };
 
     host.addController(this);
@@ -35,6 +38,13 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
     // The state is already persisted on each update
   }
 
+  hostUpdated(): void {
+    // Automatically sync observed properties from host component to state
+    if (this.observedProperties.length > 0) {
+      this.syncObservedProperties();
+    }
+  }
+
   private loadState(): void {
     try {
       const savedState = this.storage.getItem(this.storageKey);
@@ -43,6 +53,7 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
         
         if (this.isValidState(parsedState)) {
           this.currentState = { ...parsedState };
+          this.syncStateToObservedProperties();
           this.host.requestUpdate();
         }
       }
@@ -75,6 +86,47 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
     
     return defaultKeys.every(key => key in state) && 
            stateKeys.every(key => key in this.defaultState);
+  }
+
+  private syncObservedProperties(): void {
+    const updates: Partial<T> = {};
+    let hasChanges = false;
+
+    for (const propName of this.observedProperties) {
+      const hostValue = (this.host as any)[propName];
+      const currentValue = this.currentState[propName];
+
+      // Only update if the value has actually changed
+      if (hostValue !== currentValue) {
+        updates[propName] = hostValue;
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges) {
+      // Update state without triggering host.requestUpdate() to avoid infinite loops
+      const updatedState = { ...this.currentState, ...updates };
+      
+      if (this.isValidState(updatedState)) {
+        this.currentState = updatedState;
+        this.saveState();
+      } else {
+        console.warn(`Invalid state from observed properties for key "${this.storageKey}":`, updatedState);
+      }
+    }
+  }
+
+  private syncStateToObservedProperties(): void {
+    // Sync loaded state values back to observed host component properties
+    for (const propName of this.observedProperties) {
+      const stateValue = this.currentState[propName];
+      const hostValue = (this.host as any)[propName];
+
+      // Only update if the values are different
+      if (stateValue !== hostValue) {
+        (this.host as any)[propName] = stateValue;
+      }
+    }
   }
 
   getState(): T {
