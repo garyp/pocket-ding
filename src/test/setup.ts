@@ -52,56 +52,7 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-// Mock localStorage with actual storage behavior
-const createLocalStorageMock = () => {
-  let store: { [key: string]: string } = {};
-
-  const getItem = vi.fn((key: string) => store[key] || null);
-  const setItem = vi.fn((key: string, value: string) => {
-    store[key] = value.toString();
-  });
-  const removeItem = vi.fn((key: string) => {
-    delete store[key];
-  });
-  const clear = vi.fn(() => {
-    store = {};
-  });
-  const key = vi.fn((index: number) => {
-    const keys = Object.keys(store);
-    return keys[index] || null;
-  });
-
-  return {
-    getItem,
-    setItem,
-    removeItem,
-    clear,
-    key,
-    get length() {
-      return Object.keys(store).length;
-    },
-  };
-};
-
-const localStorageMock = createLocalStorageMock();
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-});
-
-// Make it globally accessible for debugging
-(globalThis as any).localStorageMock = localStorageMock;
-
 beforeEach(() => {
   vi.clearAllMocks();
   consoleErrorSpy.mockClear();
-  
-  // Reset localStorage mock state  
-  localStorageMock.clear();
-  
-  // Clear mock call history - access the window localStorage instead to ensure we're using the same object
-  (window.localStorage as any).getItem.mockClear();
-  (window.localStorage as any).setItem.mockClear();
-  (window.localStorage as any).removeItem.mockClear();
-  (window.localStorage as any).clear.mockClear();
-  (window.localStorage as any).key.mockClear();
 });
