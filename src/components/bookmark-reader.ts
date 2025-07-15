@@ -485,24 +485,29 @@ export class BookmarkReader extends LitElement {
     }
 
     // Set up intersection observer for progress tracking
-    this.scrollObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            this.updateReadProgress();
-          }
-        });
-      },
-      {
-        root: contentElement,
-        rootMargin: '0px',
-        threshold: 0.1
-      }
-    );
+    try {
+      this.scrollObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              this.updateReadProgress();
+            }
+          });
+        },
+        {
+          root: contentElement,
+          rootMargin: '0px',
+          threshold: 0.1
+        }
+      );
 
-    // Observe content paragraphs
-    const paragraphs = contentElement.querySelectorAll('p');
-    paragraphs.forEach(p => this.scrollObserver?.observe(p));
+      // Observe content paragraphs
+      const paragraphs = contentElement.querySelectorAll('p');
+      paragraphs.forEach(p => this.scrollObserver?.observe(p));
+    } catch (error) {
+      console.warn('IntersectionObserver not supported, falling back to scroll-based progress tracking:', error);
+      this.scrollObserver = null;
+    }
 
     // Track scroll position and update progress
     contentElement.addEventListener('scroll', () => {
