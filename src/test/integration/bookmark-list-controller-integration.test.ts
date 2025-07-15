@@ -12,6 +12,13 @@ describe('BookmarkList Controller Integration', () => {
   beforeEach(async () => {
     localStorage.clear();
     
+    // Ensure IntersectionObserver is properly mocked (re-establish after vi.clearAllMocks())
+    global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    }));
+    
     mockSettings = {
       linkding_url: 'https://example.com',
       linkding_token: 'test-token',
@@ -122,7 +129,11 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // User scrolls down
-      const mockScrollContainer = { scrollTop: 250 };
+      const mockScrollContainer = { 
+        scrollTop: 250,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
       (element as any).scrollContainer = mockScrollContainer;
       (element as any).saveCurrentScrollPosition();
 

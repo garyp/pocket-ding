@@ -699,6 +699,14 @@ describe('App Integration Tests', () => {
         expect((presentationComponent as any).isLoading).toBe(false);
         expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
+      
+      // Wait for shadow DOM to be fully populated with bookmark content
+      await waitFor(() => {
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        expect(bookmark1).toBeTruthy();
+        expect(bookmark2).toBeTruthy();
+      });
 
       // Start sync
       triggerSyncEvent('sync-started', { total: 5 });
@@ -835,6 +843,14 @@ describe('App Integration Tests', () => {
         expect((presentationComponent as any).isLoading).toBe(false);
         expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
+      
+      // Wait for shadow DOM to be fully populated with bookmark content
+      await waitFor(() => {
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        expect(bookmark1).toBeTruthy();
+        expect(bookmark2).toBeTruthy();
+      });
 
       // Sync a bookmark
       triggerSyncEvent('bookmark-synced', { 
@@ -867,6 +883,14 @@ describe('App Integration Tests', () => {
         // Wait for component to finish loading and have bookmarks
         expect((presentationComponent as any).isLoading).toBe(false);
         expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
+      });
+      
+      // Wait for shadow DOM to be fully populated with bookmark content
+      await waitFor(() => {
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        expect(bookmark1).toBeTruthy();
+        expect(bookmark2).toBeTruthy();
       });
 
       // Start sync and add highlighted bookmark
@@ -916,6 +940,14 @@ describe('App Integration Tests', () => {
         expect((presentationComponent as any).isLoading).toBe(false);
         expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
       });
+      
+      // Wait for shadow DOM to be fully populated with bookmark content
+      await waitFor(() => {
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        expect(bookmark1).toBeTruthy();
+        expect(bookmark2).toBeTruthy();
+      });
 
       // Start sync
       triggerSyncEvent('sync-started', { total: 2 });
@@ -959,6 +991,14 @@ describe('App Integration Tests', () => {
         // Wait for component to finish loading and have bookmarks
         expect((presentationComponent as any).isLoading).toBe(false);
         expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
+      });
+      
+      // Wait for shadow DOM to be fully populated with bookmark content
+      await waitFor(() => {
+        const bookmark1 = findTextInShadowDOM(bookmarkList, 'Test Article 1');
+        const bookmark2 = findTextInShadowDOM(bookmarkList, 'Test Article 2');
+        expect(bookmark1).toBeTruthy();
+        expect(bookmark2).toBeTruthy();
       });
 
       // Start sync
