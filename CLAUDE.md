@@ -118,3 +118,12 @@ The application includes comprehensive dark mode support:
 - Performance and responsiveness
 
 Remember: Tests should be written as part of feature development, not as an afterthought.
+
+### Testing Instead of Manual Validation
+
+**IMPORTANT**: Always use tests to verify changes instead of running the development server.
+
+- When implementing fixes or new features, write tests to validate the behavior
+- Do NOT use `npm run dev` or manual testing to verify changes work correctly  
+- Tests provide reliable, repeatable validation and prevent regressions
+- Manual testing with the dev server should only be used for exploratory work, not validation

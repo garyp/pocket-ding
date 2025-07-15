@@ -71,6 +71,10 @@ export class AppRoot extends LitElement {
 
     .app-content {
       flex: 1;
+      overflow-y: auto;
+    }
+    
+    .app-content.no-scroll {
       overflow: hidden;
     }
 
@@ -448,10 +452,12 @@ export class AppRoot extends LitElement {
   }
 
   override render() {
+    const contentClasses = this.currentView === 'reader' ? 'app-content no-scroll' : 'app-content';
+    
     return html`
       <div class="app-container">
         ${this.renderHeader()}
-        <div class="app-content">
+        <div class="${contentClasses}">
           ${this.renderContent()}
         </div>
       </div>
