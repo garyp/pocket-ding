@@ -703,7 +703,8 @@ describe('App Integration Tests', () => {
       // Wait for shadow DOM to be fully populated with bookmark content
       // Use longer timeout and check for any bookmark content, not specific titles
       await waitFor(() => {
-        const bookmarkCards = bookmarkList.shadowRoot?.querySelectorAll('bookmark-list .bookmark-card');
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
+        const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
         expect(bookmarkCards?.length).toBeGreaterThan(0);
       }, { timeout: 3000 });
 
@@ -714,7 +715,8 @@ describe('App Integration Tests', () => {
       // Should show progress bar while keeping bookmarks visible
       await waitFor(() => {
         const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
-        const bookmarkCards = bookmarkList.shadowRoot?.querySelectorAll('bookmark-list .bookmark-card');
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
+        const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
         
         expect(progressBar).toBeTruthy();
         expect(bookmarkCards?.length).toBeGreaterThan(0); // Bookmarks should still be visible
@@ -843,7 +845,8 @@ describe('App Integration Tests', () => {
       
       // Wait for shadow DOM to be fully populated with bookmark content
       await waitFor(() => {
-        const bookmarkCards = bookmarkList.shadowRoot?.querySelectorAll('bookmark-list .bookmark-card');
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
+        const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
         expect(bookmarkCards?.length).toBeGreaterThan(0);
       }, { timeout: 3000 });
 
@@ -882,7 +885,8 @@ describe('App Integration Tests', () => {
       
       // Wait for shadow DOM to be fully populated with bookmark content
       await waitFor(() => {
-        const bookmarkCards = bookmarkList.shadowRoot?.querySelectorAll('bookmark-list .bookmark-card');
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
+        const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
         expect(bookmarkCards?.length).toBeGreaterThan(0);
       }, { timeout: 3000 });
 
@@ -936,7 +940,8 @@ describe('App Integration Tests', () => {
       
       // Wait for shadow DOM to be fully populated with bookmark content
       await waitFor(() => {
-        const bookmarkCards = bookmarkList.shadowRoot?.querySelectorAll('bookmark-list .bookmark-card');
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
+        const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
         expect(bookmarkCards?.length).toBeGreaterThan(0);
       }, { timeout: 3000 });
 
@@ -986,7 +991,8 @@ describe('App Integration Tests', () => {
       
       // Wait for shadow DOM to be fully populated with bookmark content
       await waitFor(() => {
-        const bookmarkCards = bookmarkList.shadowRoot?.querySelectorAll('bookmark-list .bookmark-card');
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
+        const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
         expect(bookmarkCards?.length).toBeGreaterThan(0);
       }, { timeout: 3000 });
 

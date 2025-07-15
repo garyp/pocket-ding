@@ -255,9 +255,11 @@ describe('BookmarkList Controller Integration', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       // Mock localStorage to fail BEFORE creating component
-      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-      setItemSpy.mockImplementation(() => {
-        throw new Error('Storage quota exceeded');
+      Object.defineProperty(global.localStorage, 'setItem', {
+        value: vi.fn(() => {
+          throw new Error('Storage quota exceeded');
+        }),
+        writable: true
       });
 
       element = createTestElement();
@@ -279,7 +281,6 @@ describe('BookmarkList Controller Integration', () => {
       // Should have logged the error (either during init or during the filter change)
       expect(consoleWarnSpy).toHaveBeenCalled();
 
-      setItemSpy.mockRestore();
       consoleWarnSpy.mockRestore();
     });
 
