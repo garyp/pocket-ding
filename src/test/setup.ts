@@ -56,24 +56,30 @@ Object.defineProperty(window, 'matchMedia', {
 const createLocalStorageMock = () => {
   let store: { [key: string]: string } = {};
 
+  const getItem = vi.fn((key: string) => store[key] || null);
+  const setItem = vi.fn((key: string, value: string) => {
+    store[key] = value.toString();
+  });
+  const removeItem = vi.fn((key: string) => {
+    delete store[key];
+  });
+  const clear = vi.fn(() => {
+    store = {};
+  });
+  const key = vi.fn((index: number) => {
+    const keys = Object.keys(store);
+    return keys[index] || null;
+  });
+
   return {
-    getItem: vi.fn((key: string) => store[key] || null),
-    setItem: vi.fn((key: string, value: string) => {
-      store[key] = value.toString();
-    }),
-    removeItem: vi.fn((key: string) => {
-      delete store[key];
-    }),
-    clear: vi.fn(() => {
-      store = {};
-    }),
+    getItem,
+    setItem,
+    removeItem,
+    clear,
+    key,
     get length() {
       return Object.keys(store).length;
     },
-    key: vi.fn((index: number) => {
-      const keys = Object.keys(store);
-      return keys[index] || null;
-    }),
   };
 };
 
