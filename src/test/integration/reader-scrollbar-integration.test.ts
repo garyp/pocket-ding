@@ -93,7 +93,7 @@ describe('Reader View Scrollbar Integration', () => {
     // Mock service responses
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
-    vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(null);
+    vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
@@ -324,7 +324,7 @@ describe('Reader View Scrollbar Integration', () => {
 
   describe('edge cases and error conditions', () => {
     it('should maintain layout constraints when bookmark fails to load', async () => {
-      vi.mocked(DatabaseService.getBookmark).mockResolvedValue(null);
+      vi.mocked(DatabaseService.getBookmark).mockResolvedValue(undefined);
 
       const appRoot = document.createElement('app-root') as AppRoot;
       container.appendChild(appRoot);
