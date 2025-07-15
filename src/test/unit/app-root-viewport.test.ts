@@ -6,7 +6,17 @@ import type { AppSettings } from '../../types';
 
 // Mock services
 vi.mock('../../services/database');
-vi.mock('../../services/theme-service');
+vi.mock('../../services/theme-service', () => ({
+  ThemeService: {
+    init: vi.fn(),
+    setThemeFromSettings: vi.fn(),
+    getCurrentTheme: vi.fn(() => 'light'),
+    getResolvedTheme: vi.fn(() => 'light'),
+    addThemeChangeListener: vi.fn(),
+    removeThemeChangeListener: vi.fn(),
+    reset: vi.fn(),
+  }
+}));
 
 // Mock browser APIs
 Object.defineProperty(window, 'location', {

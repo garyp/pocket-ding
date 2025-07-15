@@ -10,7 +10,17 @@ import type { AppSettings } from '../../types';
 
 // Mock services
 vi.mock('../../services/database');
-vi.mock('../../services/theme-service');
+vi.mock('../../services/theme-service', () => ({
+  ThemeService: {
+    init: vi.fn(),
+    setThemeFromSettings: vi.fn(),
+    getCurrentTheme: vi.fn(() => 'light'),
+    getResolvedTheme: vi.fn(() => 'light'),
+    addThemeChangeListener: vi.fn(),
+    removeThemeChangeListener: vi.fn(),
+    reset: vi.fn(),
+  }
+}));
 
 // Mock browser APIs
 Object.defineProperty(window, 'location', {
@@ -187,21 +197,14 @@ describe('Reader View Scrollbar Integration', () => {
         expect((bookmarkReader as any).isLoading).toBe(false);
       });
 
-      // The content area within the reader should be scrollable
-      const contentArea = bookmarkReader.shadowRoot?.querySelector('.content-area') as HTMLElement;
-      const readerContent = bookmarkReader.shadowRoot?.querySelector('.reader-content') as HTMLElement;
-      
-      if (contentArea) {
-        const contentStyles = getComputedStyle(contentArea);
-        // Content area should be scrollable
-        expect(contentStyles.overflow).toBe('auto');
-      }
-      
-      if (readerContent) {
-        const readerStyles = getComputedStyle(readerContent);
-        // Reader content should be scrollable
-        expect(readerStyles.overflow).toBe('auto');
-      }
+      // Check the component's styles object instead of computed styles
+      const styles = (bookmarkReader.constructor as typeof BookmarkReader).styles;
+      const cssText = Array.isArray(styles) ? styles.map(s => s.cssText).join('') : styles?.cssText || '';
+
+      // Reader content should have overflow-y: auto for scrolling
+      expect(cssText).toContain('.reader-content');
+      expect(cssText).toContain('overflow-y: auto');
+      expect(cssText).toContain('flex: 1');
     });
 
     it('should handle long content without breaking layout', async () => {
@@ -216,14 +219,18 @@ describe('Reader View Scrollbar Integration', () => {
         expect((bookmarkReader as any).isLoading).toBe(false);
       });
 
-      // Reader should handle long content properly
-      const readerElement = bookmarkReader.shadowRoot?.querySelector('.reader-content') as HTMLElement;
-      if (readerElement) {
-        const readerStyles = getComputedStyle(readerElement);
-        // Should allow scrolling within the reader
-        expect(readerStyles.overflow).toBe('auto');
-        expect(readerStyles.height).toBe('100%');
-      }
+      // Check the component's styles object instead of computed styles
+      const styles = (bookmarkReader.constructor as typeof BookmarkReader).styles;
+      const cssText = Array.isArray(styles) ? styles.map(s => s.cssText).join('') : styles?.cssText || '';
+
+      // Reader should be constrained to viewport height with internal scrolling
+      expect(cssText).toContain(':host');
+      expect(cssText).toContain('height: 100vh');
+      expect(cssText).toContain('.reader-container');
+      expect(cssText).toContain('height: 100vh');
+      expect(cssText).toContain('.reader-content');
+      expect(cssText).toContain('overflow-y: auto');
+      expect(cssText).toContain('flex: 1');
     });
   });
 
