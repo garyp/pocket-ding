@@ -13,7 +13,7 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
   private currentState: T;
   private readonly storageKey: string;
   private readonly defaultState: T;
-  private readonly validator?: (value: any) => value is T;
+  private readonly validator: ((value: any) => value is T) | undefined;
   private readonly storage: Storage;
   private readonly observedProperties: (keyof T)[];
 
@@ -170,6 +170,6 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
 
   // Helper method for updating a specific property in state
   setProp<K extends keyof T>(key: K, value: T[K]): void {
-    this.setState({ [key]: value } as Partial<T>);
+    this.setState({ [key]: value } as unknown as Partial<T>);
   }
 }

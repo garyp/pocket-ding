@@ -453,7 +453,7 @@ describe('StateController', () => {
       expect(mockStorage.setItem).toHaveBeenCalledTimes(1);
 
       // Second update with same value - should not save
-      mockStorage.setItem.mockClear();
+      vi.clearAllMocks();
       controller.hostUpdated();
       expect(mockStorage.setItem).not.toHaveBeenCalled();
 
