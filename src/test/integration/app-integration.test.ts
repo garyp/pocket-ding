@@ -114,21 +114,25 @@ function findTextInShadowDOM(element: Element, text: string): Element | null {
       }
     }
     
-    // Also search in nested shadow roots
-    const elements = root.querySelectorAll('*');
-    for (const el of elements) {
-      if (el.shadowRoot) {
-        const found = searchInElement(el.shadowRoot);
-        if (found) return found;
-      }
-    }
-    
     return null;
   }
   
+  // Special handling for bookmark-list-container nested shadow DOM
   if (element.shadowRoot) {
-    return searchInElement(element.shadowRoot);
+    // Search directly in the container's shadow root
+    let found = searchInElement(element.shadowRoot);
+    if (found) return found;
+    
+    // Look specifically for bookmark-list components and search their shadow roots
+    const bookmarkLists = element.shadowRoot.querySelectorAll('bookmark-list');
+    for (const bookmarkList of bookmarkLists) {
+      if (bookmarkList.shadowRoot) {
+        found = searchInElement(bookmarkList.shadowRoot);
+        if (found) return found;
+      }
+    }
   }
+  
   return searchInElement(element);
 }
 

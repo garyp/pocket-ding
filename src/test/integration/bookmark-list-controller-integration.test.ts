@@ -254,6 +254,9 @@ describe('BookmarkList Controller Integration', () => {
     it('should handle storage errors and continue functioning', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
+      // Store original setItem function
+      const originalSetItem = localStorage.setItem;
+      
       // Mock localStorage to fail BEFORE creating component
       Object.defineProperty(global.localStorage, 'setItem', {
         value: vi.fn(() => {
@@ -281,6 +284,12 @@ describe('BookmarkList Controller Integration', () => {
       // Should have logged the error (either during init or during the filter change)
       expect(consoleWarnSpy).toHaveBeenCalled();
 
+      // Restore original localStorage functionality
+      Object.defineProperty(global.localStorage, 'setItem', {
+        value: originalSetItem,
+        writable: true
+      });
+      
       consoleWarnSpy.mockRestore();
     });
 
