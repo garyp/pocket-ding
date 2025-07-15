@@ -778,7 +778,7 @@ describe('App Integration Tests', () => {
           total: 1 
         }
       });
-      (bookmarkList as any).handleBookmarkSynced(syncEvent);
+      await (bookmarkList as any).handleBookmarkSynced(syncEvent);
       await bookmarkList.updateComplete;
 
       // New bookmark should appear immediately
