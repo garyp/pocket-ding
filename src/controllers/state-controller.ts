@@ -55,6 +55,9 @@ export class StateController<T extends Record<string, any>> implements ReactiveC
           this.currentState = { ...parsedState };
           this.syncStateToObservedProperties();
           this.host.requestUpdate();
+        } else {
+          // Fall back to default state if validation fails
+          this.currentState = { ...this.defaultState };
         }
       }
     } catch (error) {

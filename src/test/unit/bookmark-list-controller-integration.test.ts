@@ -10,6 +10,13 @@ describe('BookmarkList Controller Integration', () => {
   beforeEach(async () => {
     localStorage.clear();
     
+    // Ensure IntersectionObserver is properly mocked
+    global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    }));
+    
     mockBookmarks = [
       {
         id: 1,
@@ -149,8 +156,8 @@ describe('BookmarkList Controller Integration', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       // Mock setItem to throw error
-      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-      setItemSpy.mockImplementation(() => {
+      const originalSetItem = localStorage.setItem;
+      localStorage.setItem = vi.fn(() => {
         throw new Error('Storage quota exceeded');
       });
 
@@ -167,7 +174,7 @@ describe('BookmarkList Controller Integration', () => {
       // Should have logged warning but not crashed
       expect(consoleWarnSpy).toHaveBeenCalled();
 
-      setItemSpy.mockRestore();
+      localStorage.setItem = originalSetItem;
       consoleWarnSpy.mockRestore();
     });
   });
@@ -178,8 +185,12 @@ describe('BookmarkList Controller Integration', () => {
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Mock scroll container
-      const mockScrollContainer = { scrollTop: 250 };
+      // Mock scroll container with event methods
+      const mockScrollContainer = { 
+        scrollTop: 250,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
       (element as any).scrollContainer = mockScrollContainer;
 
       // Trigger scroll position save
@@ -202,8 +213,12 @@ describe('BookmarkList Controller Integration', () => {
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Mock scroll container
-      const mockScrollContainer = { scrollTop: 0 };
+      // Mock scroll container with event methods
+      const mockScrollContainer = { 
+        scrollTop: 0,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
       (element as any).scrollContainer = mockScrollContainer;
 
       // Trigger scroll position restore
@@ -217,8 +232,12 @@ describe('BookmarkList Controller Integration', () => {
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Mock scroll container with negative position
-      const mockScrollContainer = { scrollTop: -50 };
+      // Mock scroll container with negative position and event methods
+      const mockScrollContainer = { 
+        scrollTop: -50,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
       (element as any).scrollContainer = mockScrollContainer;
 
       // Trigger scroll position save
@@ -244,8 +263,12 @@ describe('BookmarkList Controller Integration', () => {
       archivedBtn1.click();
       await element1.updateComplete;
 
-      // Set scroll position
-      (element1 as any).scrollContainer = { scrollTop: 400 };
+      // Set scroll position with event methods
+      (element1 as any).scrollContainer = { 
+        scrollTop: 400,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
       (element1 as any).saveCurrentScrollPosition();
 
       // Remove first instance
@@ -274,8 +297,12 @@ describe('BookmarkList Controller Integration', () => {
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Mock scroll container
-      const mockScrollContainer = { scrollTop: 150 };
+      // Mock scroll container with event methods
+      const mockScrollContainer = { 
+        scrollTop: 150,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
       (element as any).scrollContainer = mockScrollContainer;
 
       // Disconnect component (should trigger save)
