@@ -196,8 +196,36 @@ export class AppRoot extends LitElement {
     this.handleRoute();
   };
 
+  private getBasePath(): string {
+    // Get base path from Vite's import.meta.env.BASE_URL or default to '/'
+    return (import.meta.env && import.meta.env.BASE_URL) || '/';
+  }
+
+  private getRouteFromPath(fullPath: string): string {
+    // Strip the base path from the full path to get the route
+    const basePath = this.getBasePath();
+    
+    // If base path is '/', return the full path as-is
+    if (basePath === '/') {
+      return fullPath;
+    }
+    
+    // Remove trailing slash from base path for comparison
+    const normalizedBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+    
+    // If the path starts with the base path, strip it
+    if (fullPath.startsWith(normalizedBasePath)) {
+      const route = fullPath.substring(normalizedBasePath.length);
+      return route || '/';
+    }
+    
+    // If path doesn't start with base path, return as-is
+    return fullPath;
+  }
+
   private handleRoute() {
-    const path = window.location.pathname;
+    const fullPath = window.location.pathname;
+    const path = this.getRouteFromPath(fullPath);
     const params = new URLSearchParams(window.location.search);
     
     if (path === '/' || path === '/bookmarks') {
@@ -225,24 +253,28 @@ export class AppRoot extends LitElement {
       return;
     }
     
-    let url = '/';
+    const basePath = this.getBasePath();
+    let route = '/';
     let title = 'Pocket Ding';
     
     switch (view) {
       case 'settings':
-        url = '/settings';
+        route = '/settings';
         title = 'Settings - Pocket Ding';
         break;
       case 'reader':
-        url = bookmarkId ? `/reader?id=${bookmarkId}` : '/reader';
+        route = bookmarkId ? `/reader?id=${bookmarkId}` : '/reader';
         title = 'Reading - Pocket Ding';
         break;
       case 'bookmarks':
       default:
-        url = '/';
+        route = '/';
         title = 'Pocket Ding';
         break;
     }
+    
+    // Construct the full URL with the base path
+    const url = basePath === '/' ? route : (basePath.replace(/\/$/, '') + route);
     
     window.history.pushState({ view, bookmarkId }, title, url);
     document.title = title;
