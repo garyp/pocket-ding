@@ -21,7 +21,7 @@ export class AppRoot extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      min-height: 100vh;
+      height: 100vh;
       background: var(--sl-color-neutral-50);
       font-family: var(--sl-font-sans);
     }
@@ -29,7 +29,7 @@ export class AppRoot extends LitElement {
     .app-container {
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
+      height: 100vh;
     }
 
     .app-header {
