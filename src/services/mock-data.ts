@@ -148,7 +148,7 @@ export const mockBookmarks: LinkdingBookmark[] = [
 ];
 
 export const mockArchivedBookmarks: LinkdingBookmark[] = mockBookmarks.filter(bookmark => bookmark.is_archived);
-export const mockUnreadBookmarks: LinkdingBookmark[] = mockBookmarks.filter(bookmark => !bookmark.is_archived);
+export const mockUnreadBookmarks: LinkdingBookmark[] = mockBookmarks.filter(bookmark => bookmark.unread);
 
 export const mockBookmarkResponse: LinkdingResponse = {
   count: mockUnreadBookmarks.length,
