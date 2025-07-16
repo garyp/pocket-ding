@@ -11,9 +11,17 @@ export class MockLinkdingAPI implements LinkdingAPI {
     // Mock implementation doesn't need to store these
   }
 
-  async getBookmarks(limit = 100, offset = 0, _modifiedSince?: string): Promise<LinkdingResponse> {
+  async getBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+    // Filter by modified date if specified
+    let unreadBookmarks = mockBookmarks.filter(bookmark => !bookmark.is_archived);
+    if (modifiedSince) {
+      const modifiedDate = new Date(modifiedSince);
+      unreadBookmarks = unreadBookmarks.filter(bookmark => 
+        new Date(bookmark.date_modified) >= modifiedDate
+      );
+    }
+    
     // Simulate pagination for mock data
-    const unreadBookmarks = mockBookmarks.filter(bookmark => !bookmark.is_archived);
     const startIndex = offset;
     const endIndex = Math.min(startIndex + limit, unreadBookmarks.length);
     const results = unreadBookmarks.slice(startIndex, endIndex);
@@ -26,9 +34,17 @@ export class MockLinkdingAPI implements LinkdingAPI {
     };
   }
 
-  async getArchivedBookmarks(limit = 100, offset = 0, _modifiedSince?: string): Promise<LinkdingResponse> {
+  async getArchivedBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+    // Filter by modified date if specified
+    let archivedBookmarks = mockBookmarks.filter(bookmark => bookmark.is_archived);
+    if (modifiedSince) {
+      const modifiedDate = new Date(modifiedSince);
+      archivedBookmarks = archivedBookmarks.filter(bookmark => 
+        new Date(bookmark.date_modified) >= modifiedDate
+      );
+    }
+    
     // Simulate pagination for mock data
-    const archivedBookmarks = mockBookmarks.filter(bookmark => bookmark.is_archived);
     const startIndex = offset;
     const endIndex = Math.min(startIndex + limit, archivedBookmarks.length);
     const results = archivedBookmarks.slice(startIndex, endIndex);
