@@ -66,11 +66,9 @@ export class MockLinkdingAPI implements LinkdingAPI {
     if (!bookmark) {
       throw new Error(`Bookmark not found: ${id}`);
     }
-    // Return a copy with unread set to false
-    return {
-      ...bookmark,
-      unread: false,
-    };
+    // Update the bookmark in memory so changes persist
+    bookmark.unread = false;
+    return bookmark;
   }
 
   async getBookmarkAssets(_bookmarkId: number): Promise<LinkdingAsset[]> {

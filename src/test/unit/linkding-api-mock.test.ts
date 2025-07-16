@@ -88,6 +88,28 @@ describe('LinkdingAPI Mock Mode', () => {
       await expect(mockApi.markBookmarkAsRead(999)).rejects.toThrow('Bookmark not found: 999');
     });
 
+    it('should persist bookmark read state across method calls', async () => {
+      const unreadBookmark = mockBookmarks.find(b => b.unread);
+      if (!unreadBookmark) throw new Error('No unread bookmark found in mock data');
+      
+      // Verify bookmark is initially unread
+      const initialBookmark = await mockApi.getBookmark(unreadBookmark.id);
+      expect(initialBookmark.unread).toBe(true);
+      
+      // Mark bookmark as read
+      const updatedBookmark = await mockApi.markBookmarkAsRead(unreadBookmark.id);
+      expect(updatedBookmark.unread).toBe(false);
+      
+      // Verify change persists in subsequent getBookmark calls
+      const persistedBookmark = await mockApi.getBookmark(unreadBookmark.id);
+      expect(persistedBookmark.unread).toBe(false);
+      
+      // Verify change persists in getBookmarks results
+      const bookmarksResponse = await mockApi.getBookmarks();
+      const bookmarkInList = bookmarksResponse.results.find(b => b.id === unreadBookmark.id);
+      expect(bookmarkInList?.unread).toBe(false);
+    });
+
     it('should return mock assets from getBookmarkAssets', async () => {
       const result = await mockApi.getBookmarkAssets(1);
       
