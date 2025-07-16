@@ -1,5 +1,10 @@
 import { appFetch } from '../utils/fetch-helper';
 import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset, LinkdingAssetResponse } from '../types';
+import { 
+  mockBookmarks, 
+  mockAssets, 
+  MOCK_URL 
+} from './mock-data';
 
 export class LinkdingAPI {
   private baseUrl: string;
@@ -8,6 +13,10 @@ export class LinkdingAPI {
   constructor(baseUrl: string, token: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.token = token;
+  }
+
+  private isMockMode(): boolean {
+    return this.baseUrl === MOCK_URL;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -30,6 +39,21 @@ export class LinkdingAPI {
   }
 
   async getBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+    if (this.isMockMode()) {
+      // Simulate pagination for mock data
+      const unreadBookmarks = mockBookmarks.filter(bookmark => !bookmark.is_archived);
+      const startIndex = offset;
+      const endIndex = Math.min(startIndex + limit, unreadBookmarks.length);
+      const results = unreadBookmarks.slice(startIndex, endIndex);
+      
+      return {
+        count: unreadBookmarks.length,
+        next: endIndex < unreadBookmarks.length ? `${MOCK_URL}/api/bookmarks/?limit=${limit}&offset=${endIndex}` : null,
+        previous: startIndex > 0 ? `${MOCK_URL}/api/bookmarks/?limit=${limit}&offset=${Math.max(0, startIndex - limit)}` : null,
+        results,
+      };
+    }
+    
     let query = `limit=${limit}&offset=${offset}`;
     if (modifiedSince) {
       query += `&modified_since=${encodeURIComponent(modifiedSince)}`;
@@ -39,6 +63,21 @@ export class LinkdingAPI {
   }
 
   async getArchivedBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+    if (this.isMockMode()) {
+      // Simulate pagination for mock data
+      const archivedBookmarks = mockBookmarks.filter(bookmark => bookmark.is_archived);
+      const startIndex = offset;
+      const endIndex = Math.min(startIndex + limit, archivedBookmarks.length);
+      const results = archivedBookmarks.slice(startIndex, endIndex);
+      
+      return {
+        count: archivedBookmarks.length,
+        next: endIndex < archivedBookmarks.length ? `${MOCK_URL}/api/bookmarks/archived/?limit=${limit}&offset=${endIndex}` : null,
+        previous: startIndex > 0 ? `${MOCK_URL}/api/bookmarks/archived/?limit=${limit}&offset=${Math.max(0, startIndex - limit)}` : null,
+        results,
+      };
+    }
+    
     let query = `limit=${limit}&offset=${offset}`;
     if (modifiedSince) {
       query += `&modified_since=${encodeURIComponent(modifiedSince)}`;
@@ -48,6 +87,18 @@ export class LinkdingAPI {
   }
 
   async getAllBookmarks(modifiedSince?: string): Promise<LinkdingBookmark[]> {
+    if (this.isMockMode()) {
+      // Filter mock bookmarks by modified date if specified
+      let filteredBookmarks = mockBookmarks;
+      if (modifiedSince) {
+        const modifiedDate = new Date(modifiedSince);
+        filteredBookmarks = mockBookmarks.filter(bookmark => 
+          new Date(bookmark.date_modified) >= modifiedDate
+        );
+      }
+      return filteredBookmarks;
+    }
+    
     const allBookmarks: LinkdingBookmark[] = [];
     
     // Fetch unarchived bookmarks
@@ -76,10 +127,30 @@ export class LinkdingAPI {
   }
 
   async getBookmark(id: number): Promise<LinkdingBookmark> {
+    if (this.isMockMode()) {
+      const bookmark = mockBookmarks.find(b => b.id === id);
+      if (!bookmark) {
+        throw new Error(`Bookmark not found: ${id}`);
+      }
+      return bookmark;
+    }
+    
     return await this.request<LinkdingBookmark>(`/bookmarks/${id}/`);
   }
 
   async markBookmarkAsRead(id: number): Promise<LinkdingBookmark> {
+    if (this.isMockMode()) {
+      const bookmark = mockBookmarks.find(b => b.id === id);
+      if (!bookmark) {
+        throw new Error(`Bookmark not found: ${id}`);
+      }
+      // Return a copy with unread set to false
+      return {
+        ...bookmark,
+        unread: false,
+      };
+    }
+    
     return await this.request<LinkdingBookmark>(`/bookmarks/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify({ unread: false }),
@@ -87,6 +158,11 @@ export class LinkdingAPI {
   }
 
   async getBookmarkAssets(bookmarkId: number): Promise<LinkdingAsset[]> {
+    if (this.isMockMode()) {
+      // Return mock assets for all bookmarks
+      return mockAssets;
+    }
+    
     const allAssets: LinkdingAsset[] = [];
     let offset = 0;
     const limit = 100;
@@ -103,6 +179,24 @@ export class LinkdingAPI {
   }
 
   async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
+    if (this.isMockMode()) {
+      // Return mock asset data (simple HTML content)
+      const mockHtml = `
+        <html>
+        <head>
+          <title>Mock Asset for Bookmark ${bookmarkId}</title>
+        </head>
+        <body>
+          <h1>Mock Asset Content</h1>
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+          <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+          <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+        </body>
+        </html>
+      `;
+      return new TextEncoder().encode(mockHtml).buffer as ArrayBuffer;
+    }
+    
     const url = `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
     
     const response = await appFetch(url, {
@@ -121,6 +215,10 @@ export class LinkdingAPI {
   static async testConnection(settings: AppSettings): Promise<boolean> {
     try {
       const api = new LinkdingAPI(settings.linkding_url, settings.linkding_token);
+      if (api.isMockMode()) {
+        // Mock mode always returns true for connection test
+        return true;
+      }
       await api.getBookmarks(1);
       return true;
     } catch (error) {

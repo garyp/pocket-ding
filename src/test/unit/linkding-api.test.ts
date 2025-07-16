@@ -6,7 +6,7 @@ describe('LinkdingAPI', () => {
   let api: LinkdingAPI;
 
   beforeEach(() => {
-    api = new LinkdingAPI('https://linkding.example.com', 'test-token');
+    api = new LinkdingAPI('https://real-linkding.example.com', 'test-token');
     vi.clearAllMocks();
   });
 
@@ -20,7 +20,7 @@ describe('LinkdingAPI', () => {
     const result = await api.getBookmarks();
     
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&q=',
+      'https://real-linkding.example.com/api/bookmarks/?limit=100&offset=0&q=',
       expect.objectContaining({
         headers: expect.objectContaining({
           'Authorization': 'Token test-token',
@@ -38,7 +38,7 @@ describe('LinkdingAPI', () => {
         ok: true,
         json: () => Promise.resolve({
           ...mockLinkdingResponse,
-          next: 'https://linkding.example.com/api/bookmarks/?limit=100&offset=100',
+          next: 'https://real-linkding.example.com/api/bookmarks/?limit=100&offset=100',
         }),
       })
       // Second page of unarchived bookmarks  
@@ -84,7 +84,7 @@ describe('LinkdingAPI', () => {
     global.fetch = mockFetch;
 
     const result = await LinkdingAPI.testConnection({
-      linkding_url: 'https://linkding.example.com',
+      linkding_url: 'https://real-linkding.example.com',
       linkding_token: 'test-token',
       sync_interval: 60,
       auto_sync: true,
@@ -105,7 +105,7 @@ describe('LinkdingAPI', () => {
     const result = await api.getBookmarks(100, 0, modifiedSince);
     
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
+      'https://real-linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
       expect.objectContaining({
         headers: expect.objectContaining({
           'Authorization': 'Token test-token',
@@ -135,11 +135,11 @@ describe('LinkdingAPI', () => {
     
     // Should call both unarchived and archived endpoints
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
+      'https://real-linkding.example.com/api/bookmarks/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
       expect.anything()
     );
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://linkding.example.com/api/bookmarks/archived/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
+      'https://real-linkding.example.com/api/bookmarks/archived/?limit=100&offset=0&modified_since=2024-01-01T00%3A00%3A00Z&q=',
       expect.anything()
     );
     expect(result).toEqual([...mockBookmarks, ...mockBookmarks]); // Both unarchived and archived
@@ -181,7 +181,7 @@ describe('LinkdingAPI', () => {
       const result = await api.getBookmarkAssets(123);
       
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=0',
+        'https://real-linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=0',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Token test-token',
@@ -222,7 +222,7 @@ describe('LinkdingAPI', () => {
           ok: true,
           json: () => Promise.resolve({
             results: firstPageAssets,
-            next: 'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=100',
+            next: 'https://real-linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=100',
             count: 2
           }),
         })
@@ -240,7 +240,7 @@ describe('LinkdingAPI', () => {
       
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch).toHaveBeenNthCalledWith(1,
-        'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=0',
+        'https://real-linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=0',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Token test-token',
@@ -249,7 +249,7 @@ describe('LinkdingAPI', () => {
         })
       );
       expect(mockFetch).toHaveBeenNthCalledWith(2,
-        'https://linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=100',
+        'https://real-linkding.example.com/api/bookmarks/123/assets/?limit=100&offset=100',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Token test-token',
@@ -271,7 +271,7 @@ describe('LinkdingAPI', () => {
       const result = await api.downloadAsset(123, 456);
       
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://linkding.example.com/api/bookmarks/123/assets/456/download/',
+        'https://real-linkding.example.com/api/bookmarks/123/assets/456/download/',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Token test-token',
