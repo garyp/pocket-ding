@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createLinkdingAPI, testLinkdingConnection, type LinkdingAPI } from '../../services/linkding-api';
+import { createLinkdingAPI, type LinkdingAPI } from '../../services/linkding-api';
 import { mockBookmarks, MOCK_URL } from '../../services/mock-data';
 
 describe('LinkdingAPI Mock Mode', () => {
@@ -194,13 +194,8 @@ describe('LinkdingAPI Mock Mode', () => {
 
   describe('Mock Mode Connection Test', () => {
     it('should always return true for connection test in mock mode', async () => {
-      const result = await testLinkdingConnection({
-        linkding_url: MOCK_URL,
-        linkding_token: 'any-value',
-        sync_interval: 60,
-        auto_sync: true,
-        reading_mode: 'readability',
-      });
+      const api = createLinkdingAPI(MOCK_URL, 'any-value');
+      const result = await api.testConnection();
       
       expect(result).toBe(true);
     });
@@ -271,13 +266,8 @@ describe('LinkdingAPI Mock Mode', () => {
       });
       global.fetch = mockFetch;
 
-      const result = await testLinkdingConnection({
-        linkding_url: 'https://real-linkding.com',
-        linkding_token: 'real-token',
-        sync_interval: 60,
-        auto_sync: true,
-        reading_mode: 'readability',
-      });
+      const api = createLinkdingAPI('https://real-linkding.com', 'real-token');
+      const result = await api.testConnection();
       
       expect(result).toBe(false);
       expect(mockFetch).toHaveBeenCalled();

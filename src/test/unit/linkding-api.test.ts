@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RealLinkdingAPI, testLinkdingConnection, type LinkdingAPI } from '../../services/linkding-api';
+import { RealLinkdingAPI, createLinkdingAPI, type LinkdingAPI } from '../../services/linkding-api';
 import { mockLinkdingResponse, mockBookmarks } from '../mocks/linkding-api.mock';
 
 describe('LinkdingAPI', () => {
@@ -83,13 +83,8 @@ describe('LinkdingAPI', () => {
     });
     global.fetch = mockFetch;
 
-    const result = await testLinkdingConnection({
-      linkding_url: 'https://real-linkding.example.com',
-      linkding_token: 'test-token',
-      sync_interval: 60,
-      auto_sync: true,
-      reading_mode: 'readability',
-    });
+    const api = createLinkdingAPI('https://real-linkding.example.com', 'test-token');
+    const result = await api.testConnection();
 
     expect(result).toBe(true);
   });

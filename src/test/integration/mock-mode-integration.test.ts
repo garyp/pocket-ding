@@ -53,8 +53,9 @@ describe('Mock Mode Integration', () => {
 
   describe('Mock API Integration', () => {
     it('should successfully test connection with mock URL', async () => {
-      const { testLinkdingConnection } = await import('../../services/linkding-api');
-      const result = await testLinkdingConnection(mockSettings);
+      const { createLinkdingAPI } = await import('../../services/linkding-api');
+      const api = createLinkdingAPI(mockSettings.linkding_url, mockSettings.linkding_token);
+      const result = await api.testConnection();
       
       expect(result).toBe(true);
     });

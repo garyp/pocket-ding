@@ -1,4 +1,4 @@
-import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset } from '../types';
+import type { LinkdingBookmark, LinkdingResponse, LinkdingAsset } from '../types';
 import type { LinkdingAPI } from './linkding-api-interface';
 import { 
   mockBookmarks, 
@@ -110,7 +110,7 @@ export class MockLinkdingAPI implements LinkdingAPI {
     return new TextEncoder().encode(mockHtml).buffer as ArrayBuffer;
   }
 
-  static async testConnection(_settings: AppSettings): Promise<boolean> {
+  async testConnection(): Promise<boolean> {
     // Mock mode always returns true for connection test
     return true;
   }

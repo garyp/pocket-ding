@@ -1,5 +1,5 @@
 import { appFetch } from '../utils/fetch-helper';
-import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset, LinkdingAssetResponse } from '../types';
+import type { LinkdingBookmark, LinkdingResponse, LinkdingAsset, LinkdingAssetResponse } from '../types';
 import type { LinkdingAPI } from './linkding-api-interface';
 
 export class RealLinkdingAPI implements LinkdingAPI {
@@ -119,10 +119,9 @@ export class RealLinkdingAPI implements LinkdingAPI {
     return await response.arrayBuffer();
   }
 
-  static async testConnection(settings: AppSettings): Promise<boolean> {
+  async testConnection(): Promise<boolean> {
     try {
-      const api = new RealLinkdingAPI(settings.linkding_url, settings.linkding_token);
-      await api.getBookmarks(1);
+      await this.getBookmarks(1);
       return true;
     } catch (error) {
       console.error('Connection test failed:', error);
