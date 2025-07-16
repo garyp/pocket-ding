@@ -127,3 +127,7 @@ Remember: Tests should be written as part of feature development, not as an afte
 - Do NOT use `npm run dev` or manual testing to verify changes work correctly  
 - Tests provide reliable, repeatable validation and prevent regressions
 - Manual testing with the dev server should only be used for exploratory work, not validation
+
+### Development Best Practices
+
+- Always check that the build works after you've gotten the tests passing

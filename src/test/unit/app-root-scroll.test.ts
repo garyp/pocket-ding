@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AppRoot } from '../../components/app-root';
-import { DatabaseService } from '../../services/database';
-import { ThemeService } from '../../services/theme-service';
 
 // Mock services
 vi.mock('../../services/database');
