@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LinkdingAPI } from '../../services/linkding-api';
+import { RealLinkdingAPI, testLinkdingConnection, type LinkdingAPI } from '../../services/linkding-api';
 import { mockLinkdingResponse, mockBookmarks } from '../mocks/linkding-api.mock';
 
 describe('LinkdingAPI', () => {
   let api: LinkdingAPI;
 
   beforeEach(() => {
-    api = new LinkdingAPI('https://real-linkding.example.com', 'test-token');
+    api = new RealLinkdingAPI('https://real-linkding.example.com', 'test-token');
     vi.clearAllMocks();
   });
 
@@ -83,7 +83,7 @@ describe('LinkdingAPI', () => {
     });
     global.fetch = mockFetch;
 
-    const result = await LinkdingAPI.testConnection({
+    const result = await testLinkdingConnection({
       linkding_url: 'https://real-linkding.example.com',
       linkding_token: 'test-token',
       sync_interval: 60,

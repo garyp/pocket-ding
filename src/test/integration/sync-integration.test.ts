@@ -25,15 +25,13 @@ vi.mock('../../services/database', () => ({
 
 // Mock LinkdingAPI
 vi.mock('../../services/linkding-api', () => ({
-  LinkdingAPI: {
-    testConnection: vi.fn(),
-  },
+  testLinkdingConnection: vi.fn(),
 }));
 
 // Import after mocking
 import { SyncService } from '../../services/sync-service';
 import { DatabaseService } from '../../services/database';
-import { LinkdingAPI } from '../../services/linkding-api';
+import { testLinkdingConnection } from '../../services/linkding-api';
 import '../../components/settings-panel';
 
 describe('Settings Panel - Sync Integration', () => {
@@ -54,7 +52,7 @@ describe('Settings Panel - Sync Integration', () => {
     (SyncService.fullSync as any).mockResolvedValue(undefined);
     (DatabaseService.saveSettings as any).mockResolvedValue(undefined);
     (DatabaseService.getSettings as any).mockResolvedValue(mockSettings);
-    (LinkdingAPI.testConnection as any).mockResolvedValue(true);
+    (testLinkdingConnection as any).mockResolvedValue(true);
 
     // Create settings panel element
     settingsPanel = document.createElement('settings-panel');

@@ -73,6 +73,19 @@ All tests should pass before considering features complete. The CI expects zero 
 - CSS custom properties for theming consistency
 - Web Components follow Lit's reactive property patterns
 
+### Code Style
+
+- **Interface Naming**: Do NOT use "I" prefix for interfaces. Name interfaces directly (e.g., `LinkdingAPI` not `ILinkdingAPI`)
+
+### Build Process
+
+**IMPORTANT**: Always run both tests AND build after making changes.
+
+- Run `npm test` to verify functionality
+- Run `npm run build` to verify TypeScript compilation
+- Both must pass before committing changes
+- CI will fail if either tests or build fail
+
 ### Shoelace Icons
 
 **IMPORTANT**: Icons must be explicitly registered to be included in builds.

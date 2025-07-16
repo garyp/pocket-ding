@@ -2,7 +2,7 @@ import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset } f
 import { MockLinkdingAPI } from './linkding-api-mock';
 import { RealLinkdingAPI } from './linkding-api-real';
 
-export interface ILinkdingAPI {
+export interface LinkdingAPI {
   getBookmarks(limit?: number, offset?: number, modifiedSince?: string): Promise<LinkdingResponse>;
   getArchivedBookmarks(limit?: number, offset?: number, modifiedSince?: string): Promise<LinkdingResponse>;
   getAllBookmarks(modifiedSince?: string): Promise<LinkdingBookmark[]>;
@@ -12,12 +12,12 @@ export interface ILinkdingAPI {
   downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer>;
 }
 
-export interface ILinkdingAPIConstructor {
-  new (baseUrl: string, token: string): ILinkdingAPI;
+export interface LinkdingAPIConstructor {
+  new (baseUrl: string, token: string): LinkdingAPI;
   testConnection(settings: AppSettings): Promise<boolean>;
 }
 
-export function createLinkdingAPI(baseUrl: string, token: string): ILinkdingAPI {
+export function createLinkdingAPI(baseUrl: string, token: string): LinkdingAPI {
   const cleanUrl = baseUrl.replace(/\/$/, '');
   const isMockMode = cleanUrl === 'https://linkding.example.com';
   

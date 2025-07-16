@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LinkdingAPI } from '../../services/linkding-api';
+import { createLinkdingAPI, testLinkdingConnection, type LinkdingAPI } from '../../services/linkding-api';
 import { mockBookmarks, MOCK_URL } from '../../services/mock-data';
 
 describe('LinkdingAPI Mock Mode', () => {
@@ -7,8 +7,8 @@ describe('LinkdingAPI Mock Mode', () => {
   let realApi: LinkdingAPI;
 
   beforeEach(() => {
-    mockApi = new LinkdingAPI(MOCK_URL, 'any-token');
-    realApi = new LinkdingAPI('https://real-linkding.com', 'real-token');
+    mockApi = createLinkdingAPI(MOCK_URL, 'any-token');
+    realApi = createLinkdingAPI('https://real-linkding.com', 'real-token');
     vi.clearAllMocks();
   });
 
@@ -17,20 +17,20 @@ describe('LinkdingAPI Mock Mode', () => {
       // Since we're using factory pattern, we can't directly test isMockMode
       // Instead, we test that the mock implementation is used by checking mock behavior
       expect(mockApi).toBeDefined();
-      expect(mockApi).toBeInstanceOf(LinkdingAPI);
+      expect(mockApi).toBeDefined();
     });
 
     it('should use real implementation when using real URL', () => {
       // Since we're using factory pattern, we can't directly test isMockMode
       // Instead, we test that the real implementation is used by checking non-mock behavior
       expect(realApi).toBeDefined();
-      expect(realApi).toBeInstanceOf(LinkdingAPI);
+      expect(realApi).toBeDefined();
     });
 
     it('should use mock implementation regardless of trailing slash', () => {
-      const apiWithSlash = new LinkdingAPI(`${MOCK_URL}/`, 'any-token');
+      const apiWithSlash = createLinkdingAPI(`${MOCK_URL}/`, 'any-token');
       expect(apiWithSlash).toBeDefined();
-      expect(apiWithSlash).toBeInstanceOf(LinkdingAPI);
+      expect(apiWithSlash).toBeDefined();
     });
   });
 
@@ -172,7 +172,7 @@ describe('LinkdingAPI Mock Mode', () => {
 
   describe('Mock Mode Connection Test', () => {
     it('should always return true for connection test in mock mode', async () => {
-      const result = await LinkdingAPI.testConnection({
+      const result = await testLinkdingConnection({
         linkding_url: MOCK_URL,
         linkding_token: 'any-value',
         sync_interval: 60,
@@ -249,7 +249,7 @@ describe('LinkdingAPI Mock Mode', () => {
       });
       global.fetch = mockFetch;
 
-      const result = await LinkdingAPI.testConnection({
+      const result = await testLinkdingConnection({
         linkding_url: 'https://real-linkding.com',
         linkding_token: 'real-token',
         sync_interval: 60,

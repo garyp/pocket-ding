@@ -3,7 +3,7 @@ import type { AppSettings, LinkdingBookmark, LocalBookmark } from '../../types';
 
 // Mock dependencies
 vi.mock('../../services/linkding-api', () => ({
-  LinkdingAPI: vi.fn().mockImplementation(() => ({
+  createLinkdingAPI: vi.fn().mockImplementation(() => ({
     getAllBookmarks: vi.fn(),
     getBookmarkAssets: vi.fn().mockResolvedValue([]), // Default to empty array
     downloadAsset: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock('../../services/content-fetcher', () => ({
 
 // Import after mocking
 import { SyncService } from '../../services/sync-service';
-import { LinkdingAPI } from '../../services/linkding-api';
+import { createLinkdingAPI } from '../../services/linkding-api';
 import { DatabaseService } from '../../services/database';
 import { ContentFetcher } from '../../services/content-fetcher';
 
@@ -110,7 +110,7 @@ describe('SyncService', () => {
       downloadAsset: vi.fn(),
       markBookmarkAsRead: vi.fn(),
     };
-    (LinkdingAPI as any).mockImplementation(() => mockApi);
+    (createLinkdingAPI as any).mockImplementation(() => mockApi);
 
     // Setup database mocks
     (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockLocalBookmarks);

@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { LinkdingAPI } from '../services/linkding-api';
+import { testLinkdingConnection } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
@@ -161,7 +161,7 @@ export class SettingsPanel extends LitElement {
 
     try {
       const testSettings = this.formData as AppSettings;
-      const isConnected = await LinkdingAPI.testConnection(testSettings);
+      const isConnected = await testLinkdingConnection(testSettings);
       
       if (isConnected) {
         this.testStatus = 'success';

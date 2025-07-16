@@ -19,7 +19,7 @@ vi.mock('../../services/database', () => ({
 }));
 
 // Import services after mocking
-import { LinkdingAPI } from '../../services/linkding-api';
+import { createLinkdingAPI } from '../../services/linkding-api';
 import '../../components/settings-panel';
 
 describe('Mock Mode Integration', () => {
@@ -53,13 +53,14 @@ describe('Mock Mode Integration', () => {
 
   describe('Mock API Integration', () => {
     it('should successfully test connection with mock URL', async () => {
-      const result = await LinkdingAPI.testConnection(mockSettings);
+      const { testLinkdingConnection } = await import('../../services/linkding-api');
+      const result = await testLinkdingConnection(mockSettings);
       
       expect(result).toBe(true);
     });
 
     it('should fetch mock bookmarks without network requests', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       
       // Mock global fetch to ensure it's not called
       const mockFetch = vi.fn();
@@ -73,7 +74,7 @@ describe('Mock Mode Integration', () => {
     });
 
     it('should fetch all mock bookmarks without network requests', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       
       // Mock global fetch to ensure it's not called
       const mockFetch = vi.fn();
@@ -87,7 +88,7 @@ describe('Mock Mode Integration', () => {
     });
 
     it('should handle bookmark operations without network requests', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       
       // Mock global fetch to ensure it's not called
       const mockFetch = vi.fn();
@@ -111,7 +112,7 @@ describe('Mock Mode Integration', () => {
     });
 
     it('should handle asset operations without network requests', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       
       // Mock global fetch to ensure it's not called
       const mockFetch = vi.fn();
@@ -138,7 +139,7 @@ describe('Mock Mode Integration', () => {
 
   describe('Mock Mode Sync Integration', () => {
     it('should create API instance for mock mode without network calls', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       
       // Mock global fetch to ensure it's not called
       const mockFetch = vi.fn();
@@ -160,7 +161,7 @@ describe('Mock Mode Integration', () => {
 
   describe('Mock Mode Content Validation', () => {
     it('should provide realistic Lorem Ipsum content', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       const bookmarks = await api.getAllBookmarks();
       
       // Check that content looks realistic
@@ -181,7 +182,7 @@ describe('Mock Mode Integration', () => {
     });
 
     it('should have diverse bookmark types and states', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       const bookmarks = await api.getAllBookmarks();
       
       // Check for diversity
@@ -207,14 +208,14 @@ describe('Mock Mode Integration', () => {
 
   describe('Mock Mode Error Handling', () => {
     it('should handle non-existent bookmark gracefully', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       
       await expect(api.getBookmark(999999)).rejects.toThrow('Bookmark not found: 999999');
       await expect(api.markBookmarkAsRead(999999)).rejects.toThrow('Bookmark not found: 999999');
     });
 
     it('should maintain consistent behavior with real API', async () => {
-      const api = new LinkdingAPI(MOCK_URL, 'any-token');
+      const api = createLinkdingAPI(MOCK_URL, 'any-token');
       
       // Test pagination behavior
       const page1 = await api.getBookmarks(3, 0);

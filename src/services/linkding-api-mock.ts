@@ -1,21 +1,17 @@
 import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset } from '../types';
-import type { ILinkdingAPI } from './linkding-api-interface';
+import type { LinkdingAPI } from './linkding-api-interface';
 import { 
   mockBookmarks, 
   mockAssets, 
   MOCK_URL 
 } from './mock-data';
 
-export class MockLinkdingAPI implements ILinkdingAPI {
-  private baseUrl: string;
-  private token: string;
-
-  constructor(baseUrl: string, token: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.token = token;
+export class MockLinkdingAPI implements LinkdingAPI {
+  constructor(_baseUrl: string, _token: string) {
+    // Mock implementation doesn't need to store these
   }
 
-  async getBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+  async getBookmarks(limit = 100, offset = 0, _modifiedSince?: string): Promise<LinkdingResponse> {
     // Simulate pagination for mock data
     const unreadBookmarks = mockBookmarks.filter(bookmark => !bookmark.is_archived);
     const startIndex = offset;
@@ -30,7 +26,7 @@ export class MockLinkdingAPI implements ILinkdingAPI {
     };
   }
 
-  async getArchivedBookmarks(limit = 100, offset = 0, modifiedSince?: string): Promise<LinkdingResponse> {
+  async getArchivedBookmarks(limit = 100, offset = 0, _modifiedSince?: string): Promise<LinkdingResponse> {
     // Simulate pagination for mock data
     const archivedBookmarks = mockBookmarks.filter(bookmark => bookmark.is_archived);
     const startIndex = offset;
@@ -77,12 +73,12 @@ export class MockLinkdingAPI implements ILinkdingAPI {
     };
   }
 
-  async getBookmarkAssets(bookmarkId: number): Promise<LinkdingAsset[]> {
+  async getBookmarkAssets(_bookmarkId: number): Promise<LinkdingAsset[]> {
     // Return mock assets for all bookmarks
     return mockAssets;
   }
 
-  async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
+  async downloadAsset(bookmarkId: number, _assetId: number): Promise<ArrayBuffer> {
     // Return mock asset data (simple HTML content)
     const mockHtml = `
       <html>
@@ -100,7 +96,7 @@ export class MockLinkdingAPI implements ILinkdingAPI {
     return new TextEncoder().encode(mockHtml).buffer as ArrayBuffer;
   }
 
-  static async testConnection(settings: AppSettings): Promise<boolean> {
+  static async testConnection(_settings: AppSettings): Promise<boolean> {
     // Mock mode always returns true for connection test
     return true;
   }

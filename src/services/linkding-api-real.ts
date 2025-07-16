@@ -1,8 +1,8 @@
 import { appFetch } from '../utils/fetch-helper';
 import type { LinkdingBookmark, LinkdingResponse, AppSettings, LinkdingAsset, LinkdingAssetResponse } from '../types';
-import type { ILinkdingAPI } from './linkding-api-interface';
+import type { LinkdingAPI } from './linkding-api-interface';
 
-export class RealLinkdingAPI implements ILinkdingAPI {
+export class RealLinkdingAPI implements LinkdingAPI {
   private baseUrl: string;
   private token: string;
 
