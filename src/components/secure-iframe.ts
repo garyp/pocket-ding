@@ -10,7 +10,6 @@ export class SecureIframe extends LitElement {
   @property({ type: Function }) onContentError: (error: string) => void = () => {};
 
   @state() private secureContent = '';
-  @state() private iframeRef: HTMLIFrameElement | null = null;
 
   static override styles = css`
     :host {
@@ -81,8 +80,6 @@ export class SecureIframe extends LitElement {
   private setupIframe() {
     const iframe = this.shadowRoot?.querySelector('.secure-iframe') as HTMLIFrameElement;
     if (!iframe) return;
-
-    this.iframeRef = iframe;
 
     // Handle iframe load event
     iframe.addEventListener('load', () => {
