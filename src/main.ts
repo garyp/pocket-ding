@@ -5,7 +5,11 @@ import { registerIcons } from './icons';
 import './components/app-root';
 
 // Set Shoelace base path for bundled assets
-setBasePath('/shoelace/');
+// Determine base path based on environment (match Vite configuration)
+const isGitHubPages = window.location.hostname === 'garyp.github.io' || 
+                      window.location.pathname.startsWith('/pocket-ding/');
+const basePath = isGitHubPages ? '/pocket-ding/shoelace/' : '/shoelace/';
+setBasePath(basePath);
 
 // Register icons for tree shaking
 registerIcons();
