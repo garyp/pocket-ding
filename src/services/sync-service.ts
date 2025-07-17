@@ -1,4 +1,4 @@
-import { LinkdingAPI } from './linkding-api';
+import { createLinkdingAPI, type LinkdingAPI } from './linkding-api';
 import { DatabaseService } from './database';
 import { FaviconService } from './favicon-service';
 import type { LocalBookmark, AppSettings, LocalAsset } from '../types';
@@ -65,7 +65,7 @@ export class SyncService extends EventTarget {
   }
 
   private static async performSync(settings: AppSettings, onProgress?: (current: number, total: number) => void): Promise<void> {
-    const api = new LinkdingAPI(settings.linkding_url, settings.linkding_token);
+    const api = createLinkdingAPI(settings.linkding_url, settings.linkding_token);
     const syncInstance = this.getInstance();
     
     try {

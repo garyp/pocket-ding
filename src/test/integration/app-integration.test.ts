@@ -36,14 +36,14 @@ vi.mock('../../services/sync-service', () => ({
 
 // Mock the linkding API
 vi.mock('../../services/linkding-api', () => ({
-  LinkdingAPI: {
-    testConnection: vi.fn(),
-  },
+  createLinkdingAPI: vi.fn(() => ({
+    testConnection: vi.fn().mockResolvedValue(true)
+  })),
 }));
 
 import { DatabaseService } from '../../services/database';
 import { SyncService } from '../../services/sync-service';
-import { LinkdingAPI } from '../../services/linkding-api';
+import { createLinkdingAPI } from '../../services/linkding-api';
 
 const mockBookmarks = [
   {
@@ -228,7 +228,6 @@ describe('App Integration Tests', () => {
     (DatabaseService.getReadProgress as any).mockResolvedValue(null);
     (DatabaseService.saveReadProgress as any).mockResolvedValue(undefined);
     (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
-    (LinkdingAPI.testConnection as any).mockResolvedValue(true);
     (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
     (SyncService.getInstance as any).mockReturnValue({
       addEventListener: vi.fn(),
@@ -402,7 +401,7 @@ describe('App Integration Tests', () => {
       await settingsPanel.updateComplete;
 
       await waitFor(() => {
-        expect(LinkdingAPI.testConnection).toHaveBeenCalled();
+        expect(createLinkdingAPI).toHaveBeenCalled();
       });
     });
   });

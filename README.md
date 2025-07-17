@@ -2,6 +2,12 @@
 
 A Progressive Web App (PWA) that provides an enhanced offline reading experience for your [Linkding](https://github.com/sissbruecker/linkding) bookmarks. Read your saved articles with improved readability, track your progress, and sync seamlessly with your Linkding server.
 
+## Try It Online
+
+You can try Pocket Ding without installation at: **[https://garyp.github.io/pocket-ding/](https://garyp.github.io/pocket-ding/)**
+
+Use the demo mode (see instructions below) to explore the app with sample data, or connect to your own Linkding server.
+
 ## Features
 
 - **Offline Reading**: Download and cache article content for reading without an internet connection
@@ -48,6 +54,15 @@ npm run dev
 4. Enter your API token (get this from your Linkding user settings)
 5. Test the connection to ensure everything works
 6. Save settings to start syncing your bookmarks
+
+### Demo Mode
+
+For testing and demonstration purposes, you can use the app without setting up a real Linkding server:
+
+1. Enter `https://linkding.example.com` as your server URL
+2. Enter any value for the API token (it will be ignored)
+3. The app will load with mock bookmark data containing Lorem Ipsum text
+4. All features will work normally, but no real data will be synced
 
 ## Usage
 

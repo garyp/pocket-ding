@@ -1,6 +1,6 @@
 import { Readability } from '@mozilla/readability';
 import { DatabaseService } from './database';
-import { LinkdingAPI } from './linkding-api';
+import { createLinkdingAPI } from './linkding-api';
 import type { LocalBookmark, ContentSource, ContentSourceOption, LocalAsset } from '../types';
 
 export class ContentFetcher {
@@ -111,7 +111,7 @@ export class ContentFetcher {
         }
 
         try {
-          const api = new LinkdingAPI(settings.linkding_url, settings.linkding_token);
+          const api = createLinkdingAPI(settings.linkding_url, settings.linkding_token);
           const content = await api.downloadAsset(bookmark.id, assetId);
           
           // For archived bookmarks, don't cache the content

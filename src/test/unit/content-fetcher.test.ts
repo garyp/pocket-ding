@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContentFetcher } from '../../services/content-fetcher';
 import { DatabaseService } from '../../services/database';
-import { LinkdingAPI } from '../../services/linkding-api';
+import { createLinkdingAPI } from '../../services/linkding-api';
 import type { LocalBookmark } from '../../types';
 
 // Mock @mozilla/readability
@@ -25,9 +25,9 @@ vi.mock('../../services/database', () => ({
   },
 }));
 
-// Mock LinkdingAPI
+// Mock createLinkdingAPI
 vi.mock('../../services/linkding-api', () => ({
-  LinkdingAPI: vi.fn().mockImplementation(() => ({
+  createLinkdingAPI: vi.fn().mockImplementation(() => ({
     downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
   })),
 }));
@@ -354,7 +354,7 @@ describe('ContentFetcher', () => {
       (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
       
       // Reset LinkdingAPI mock
-      (LinkdingAPI as any).mockImplementation(() => ({
+      (createLinkdingAPI as any).mockImplementation(() => ({
         downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
       }));
     });
@@ -364,7 +364,7 @@ describe('ContentFetcher', () => {
       const mockApi = {
         downloadAsset: vi.fn().mockResolvedValue(mockContent)
       };
-      (LinkdingAPI as any).mockImplementation(() => mockApi);
+      (createLinkdingAPI as any).mockImplementation(() => mockApi);
 
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
@@ -378,7 +378,7 @@ describe('ContentFetcher', () => {
       const mockApi = {
         downloadAsset: vi.fn().mockResolvedValue(mockContent)
       };
-      (LinkdingAPI as any).mockImplementation(() => mockApi);
+      (createLinkdingAPI as any).mockImplementation(() => mockApi);
 
       await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
@@ -396,7 +396,7 @@ describe('ContentFetcher', () => {
       const mockApi = {
         downloadAsset: vi.fn().mockResolvedValue(mockContent)
       };
-      (LinkdingAPI as any).mockImplementation(() => mockApi);
+      (createLinkdingAPI as any).mockImplementation(() => mockApi);
 
       await ContentFetcher.fetchBookmarkContent(mockBookmark, 'asset', 1);
 
@@ -414,7 +414,7 @@ describe('ContentFetcher', () => {
       const mockApi = {
         downloadAsset: vi.fn().mockRejectedValue(networkError)
       };
-      (LinkdingAPI as any).mockImplementation(() => mockApi);
+      (createLinkdingAPI as any).mockImplementation(() => mockApi);
 
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
@@ -429,7 +429,7 @@ describe('ContentFetcher', () => {
       const mockApi = {
         downloadAsset: vi.fn().mockRejectedValue(networkError)
       };
-      (LinkdingAPI as any).mockImplementation(() => mockApi);
+      (createLinkdingAPI as any).mockImplementation(() => mockApi);
 
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
@@ -443,7 +443,7 @@ describe('ContentFetcher', () => {
       const mockApi = {
         downloadAsset: vi.fn().mockRejectedValue(networkError)
       };
-      (LinkdingAPI as any).mockImplementation(() => mockApi);
+      (createLinkdingAPI as any).mockImplementation(() => mockApi);
 
       const bookmarkWithArchive = {
         ...archivedBookmark,
