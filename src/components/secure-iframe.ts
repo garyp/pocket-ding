@@ -10,6 +10,9 @@ export class SecureIframe extends LitElement {
   @property({ type: Function }) onContentError: (error: string) => void = () => {};
 
   @state() private secureContent = '';
+  @state() private readProgress = 0;
+  @state() private scrollPosition = 0;
+  @state() private iframeHeight = 0;
 
   static override styles = css`
     :host {
@@ -55,10 +58,91 @@ export class SecureIframe extends LitElement {
     }
   `;
 
+  private messageHandler = (event: MessageEvent) => {
+    // Security: Only accept messages from same origin
+    if (event.origin !== window.location.origin) {
+      return;
+    }
+
+    switch (event.data.type) {
+      case 'progress-update':
+        this.handleProgressUpdate(event.data.progress, event.data.scrollPosition);
+        break;
+      case 'request-scroll-position':
+        this.handleScrollPositionRequest(event.source as Window);
+        break;
+      case 'content-loaded':
+        this.handleContentLoaded();
+        break;
+      case 'content-error':
+        this.handleContentError(event.data.error);
+        break;
+    }
+  };
+
+  override connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener('message', this.messageHandler);
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('message', this.messageHandler);
+  }
+
   override updated(changedProperties: Map<string, any>) {
     if (changedProperties.has('content') && this.content) {
       this.processContent();
     }
+  }
+
+  private handleProgressUpdate(progress: number, scrollPosition: number) {
+    this.readProgress = progress;
+    this.scrollPosition = scrollPosition;
+
+    // Dispatch event to parent
+    this.dispatchEvent(new CustomEvent('progress-update', {
+      detail: { progress, scrollPosition },
+      bubbles: true,
+    }));
+  }
+
+  private handleScrollPositionRequest(source: Window) {
+    // Send the current scroll position to the iframe
+    if (source) {
+      source.postMessage({
+        type: 'restore-scroll-position',
+        scrollPosition: this.scrollPosition,
+      }, '*');
+    }
+  }
+
+  private handleContentLoaded() {
+    this.onContentLoad();
+    this.dispatchEvent(new CustomEvent('content-loaded', {
+      bubbles: true,
+    }));
+  }
+
+  private handleContentError(error: string) {
+    this.onContentError(error);
+    this.dispatchEvent(new CustomEvent('content-error', {
+      detail: { error },
+      bubbles: true,
+    }));
+  }
+
+  // Method to update scroll position from parent
+  public updateScrollPosition(scrollPosition: number) {
+    this.scrollPosition = scrollPosition;
+  }
+
+  // Method to get current progress
+  public getCurrentProgress(): { progress: number; scrollPosition: number } {
+    return {
+      progress: this.readProgress,
+      scrollPosition: this.scrollPosition,
+    };
   }
 
   private async processContent() {

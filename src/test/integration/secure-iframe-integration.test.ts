@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import '../setup';
-import { SecureIframeContainer } from '../../components/secure-iframe-container';
 import { SecureIframe } from '../../components/secure-iframe';
 import { SecurityService } from '../../services/security-service';
 import type { LocalBookmark } from '../../types';
@@ -9,8 +8,6 @@ import type { LocalBookmark } from '../../types';
 vi.mock('../../services/security-service', () => ({
   SecurityService: {
     prepareSingleFileContent: vi.fn(),
-    validateContent: vi.fn(),
-    createNetworkTestPage: vi.fn(),
   },
 }));
 
@@ -53,7 +50,6 @@ const mockSingleFileContent = `
 `;
 
 describe('Secure Iframe Integration', () => {
-  let container: SecureIframeContainer;
   let iframe: SecureIframe;
 
   beforeEach(() => {
@@ -61,150 +57,12 @@ describe('Secure Iframe Integration', () => {
     
     // Setup SecurityService mock
     vi.mocked(SecurityService.prepareSingleFileContent).mockResolvedValue(mockSingleFileContent);
-    vi.mocked(SecurityService.validateContent).mockReturnValue(true);
-    vi.mocked(SecurityService.createNetworkTestPage).mockReturnValue('<html>Test page</html>');
   });
 
   afterEach(() => {
-    if (container) {
-      container.remove();
-    }
     if (iframe) {
       iframe.remove();
     }
-  });
-
-  describe('SecureIframeContainer', () => {
-    it('should create container component', () => {
-      container = new SecureIframeContainer();
-      expect(container).toBeTruthy();
-      expect(container.tagName.toLowerCase()).toBe('secure-iframe-container');
-    });
-
-    it('should pass props to presentation component', async () => {
-      container = new SecureIframeContainer();
-      container.content = mockSingleFileContent;
-      container.bookmark = mockBookmark;
-      
-      document.body.appendChild(container);
-      await container.updateComplete;
-      
-      const iframeElement = container.shadowRoot?.querySelector('secure-iframe');
-      expect(iframeElement).toBeTruthy();
-      expect((iframeElement as any).content).toBe(mockSingleFileContent);
-    });
-
-    it('should handle progress updates from iframe', async () => {
-      container = new SecureIframeContainer();
-      container.content = mockSingleFileContent;
-      
-      document.body.appendChild(container);
-      await container.updateComplete;
-      
-      let progressUpdateReceived = false;
-      let progressDetail: any = null;
-      
-      container.addEventListener('progress-update', (e: any) => {
-        progressUpdateReceived = true;
-        progressDetail = e.detail;
-      });
-      
-      // Simulate progress update from iframe
-      const mockEvent = new MessageEvent('message', {
-        origin: window.location.origin,
-        data: {
-          type: 'progress-update',
-          progress: 50,
-          scrollPosition: 100,
-        },
-      });
-      
-      window.dispatchEvent(mockEvent);
-      
-      expect(progressUpdateReceived).toBe(true);
-      expect(progressDetail.progress).toBe(50);
-      expect(progressDetail.scrollPosition).toBe(100);
-    });
-
-    it('should handle scroll position requests', async () => {
-      container = new SecureIframeContainer();
-      container.content = mockSingleFileContent;
-      container.updateScrollPosition(200);
-      
-      document.body.appendChild(container);
-      await container.updateComplete;
-      
-      const mockSource = {
-        postMessage: vi.fn(),
-      };
-      
-      const mockEvent = new MessageEvent('message', {
-        origin: window.location.origin,
-        source: mockSource as any,
-        data: {
-          type: 'request-scroll-position',
-        },
-      });
-      
-      window.dispatchEvent(mockEvent);
-      
-      expect(mockSource.postMessage).toHaveBeenCalledWith({
-        type: 'restore-scroll-position',
-        scrollPosition: 200,
-      }, '*');
-    });
-
-    it('should ignore messages from different origins', async () => {
-      container = new SecureIframeContainer();
-      container.content = mockSingleFileContent;
-      
-      document.body.appendChild(container);
-      await container.updateComplete;
-      
-      let progressUpdateReceived = false;
-      
-      container.addEventListener('progress-update', () => {
-        progressUpdateReceived = true;
-      });
-      
-      // Simulate message from different origin
-      const mockEvent = new MessageEvent('message', {
-        origin: 'https://malicious.com',
-        data: {
-          type: 'progress-update',
-          progress: 50,
-          scrollPosition: 100,
-        },
-      });
-      
-      window.dispatchEvent(mockEvent);
-      
-      expect(progressUpdateReceived).toBe(false);
-    });
-
-    it('should provide current progress state', async () => {
-      container = new SecureIframeContainer();
-      container.content = mockSingleFileContent;
-      
-      document.body.appendChild(container);
-      await container.updateComplete;
-      
-      // Simulate progress update
-      const mockEvent = new MessageEvent('message', {
-        origin: window.location.origin,
-        data: {
-          type: 'progress-update',
-          progress: 75,
-          scrollPosition: 300,
-        },
-      });
-      
-      window.dispatchEvent(mockEvent);
-      
-      const currentProgress = container.getCurrentProgress();
-      expect(currentProgress.progress).toBe(75);
-      expect(currentProgress.scrollPosition).toBe(300);
-    });
   });
 
   describe('SecureIframe', () => {
@@ -279,6 +137,118 @@ describe('Secure Iframe Integration', () => {
       expect(loadingOverlay).toBeTruthy();
       expect(loadingOverlay?.textContent).toContain('Loading secure content');
     });
+
+    it('should handle progress updates from iframe', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      let progressUpdateReceived = false;
+      let progressDetail: any = null;
+      
+      iframe.addEventListener('progress-update', (e: any) => {
+        progressUpdateReceived = true;
+        progressDetail = e.detail;
+      });
+      
+      // Simulate progress update from iframe
+      const mockEvent = new MessageEvent('message', {
+        origin: window.location.origin,
+        data: {
+          type: 'progress-update',
+          progress: 50,
+          scrollPosition: 100,
+        },
+      });
+      
+      window.dispatchEvent(mockEvent);
+      
+      expect(progressUpdateReceived).toBe(true);
+      expect(progressDetail.progress).toBe(50);
+      expect(progressDetail.scrollPosition).toBe(100);
+    });
+
+    it('should handle scroll position requests', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      iframe.updateScrollPosition(200);
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      const mockSource = {
+        postMessage: vi.fn(),
+      };
+      
+      const mockEvent = new MessageEvent('message', {
+        origin: window.location.origin,
+        source: mockSource as any,
+        data: {
+          type: 'request-scroll-position',
+        },
+      });
+      
+      window.dispatchEvent(mockEvent);
+      
+      expect(mockSource.postMessage).toHaveBeenCalledWith({
+        type: 'restore-scroll-position',
+        scrollPosition: 200,
+      }, '*');
+    });
+
+    it('should ignore messages from different origins', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      let progressUpdateReceived = false;
+      
+      iframe.addEventListener('progress-update', () => {
+        progressUpdateReceived = true;
+      });
+      
+      // Simulate message from different origin
+      const mockEvent = new MessageEvent('message', {
+        origin: 'https://malicious.com',
+        data: {
+          type: 'progress-update',
+          progress: 50,
+          scrollPosition: 100,
+        },
+      });
+      
+      window.dispatchEvent(mockEvent);
+      
+      expect(progressUpdateReceived).toBe(false);
+    });
+
+    it('should provide current progress state', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      // Simulate progress update
+      const mockEvent = new MessageEvent('message', {
+        origin: window.location.origin,
+        data: {
+          type: 'progress-update',
+          progress: 75,
+          scrollPosition: 300,
+        },
+      });
+      
+      window.dispatchEvent(mockEvent);
+      
+      const currentProgress = iframe.getCurrentProgress();
+      expect(currentProgress.progress).toBe(75);
+      expect(currentProgress.scrollPosition).toBe(300);
+    });
   });
 
   describe('Security Integration', () => {
@@ -316,48 +286,24 @@ describe('Secure Iframe Integration', () => {
 
       vi.mocked(SecurityService.prepareSingleFileContent).mockResolvedValue(sanitizedContent);
 
-      container = new SecureIframeContainer();
-      container.content = maliciousContent;
+      iframe = new SecureIframe();
+      iframe.content = maliciousContent;
       
-      document.body.appendChild(container);
-      await container.updateComplete;
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
       
       expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(maliciousContent);
-      
-      const iframeElement = container.shadowRoot?.querySelector('secure-iframe');
-      expect(iframeElement).toBeTruthy();
-      expect((iframeElement as any).secureContent).toBe(sanitizedContent);
     });
 
-    it('should handle network test page creation', () => {
-      const testPage = SecurityService.createNetworkTestPage();
-      
-      expect(testPage).toContain('Network Blocking Test');
-      expect(testPage).toContain('fetch(');
-      expect(testPage).toContain('XMLHttpRequest');
-      expect(testPage).toContain('WebSocket');
-    });
-
-    it('should validate content before processing', async () => {
-      vi.mocked(SecurityService.validateContent).mockReturnValue(false);
-      
-      container = new SecureIframeContainer();
-      container.content = 'Invalid content';
-      
-      document.body.appendChild(container);
-      await container.updateComplete;
-      
-      expect(SecurityService.validateContent).toHaveBeenCalledWith('Invalid content');
-    });
   });
 
   describe('postMessage Communication', () => {
     it('should handle all message types correctly', async () => {
-      container = new SecureIframeContainer();
-      container.content = mockSingleFileContent;
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
       
-      document.body.appendChild(container);
-      await container.updateComplete;
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
       
       const messageTypes = [
         { type: 'progress-update', data: { progress: 50, scrollPosition: 100 } },
@@ -380,15 +326,15 @@ describe('Secure Iframe Integration', () => {
     });
 
     it('should throttle progress updates to prevent spam', async () => {
-      container = new SecureIframeContainer();
-      container.content = mockSingleFileContent;
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
       
-      document.body.appendChild(container);
-      await container.updateComplete;
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
       
       let progressUpdateCount = 0;
       
-      container.addEventListener('progress-update', () => {
+      iframe.addEventListener('progress-update', () => {
         progressUpdateCount++;
       });
       

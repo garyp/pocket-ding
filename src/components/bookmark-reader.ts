@@ -4,7 +4,7 @@ import { DatabaseService } from '../services/database';
 import { ContentFetcher } from '../services/content-fetcher';
 import { ThemeService } from '../services/theme-service';
 import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
-import './secure-iframe-container';
+import './secure-iframe';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
@@ -34,7 +34,7 @@ export class BookmarkReader extends LitElement {
   private progressSaveTimeout: number | null = null;
   private readMarkTimeout: number | null = null;
   private hasBeenMarkedAsRead = false;
-  private secureIframeContainer: any = null;
+  private secureIframe: any = null;
 
   static override styles = css`
     :host {
@@ -95,7 +95,7 @@ export class BookmarkReader extends LitElement {
       position: relative;
     }
 
-    .secure-iframe-container {
+    .secure-iframe {
       height: 100%;
       width: 100%;
     }
@@ -360,9 +360,9 @@ export class BookmarkReader extends LitElement {
       this.loadBookmark();
     }
     
-    // Get reference to secure iframe container after render
-    if (!this.secureIframeContainer) {
-      this.secureIframeContainer = this.shadowRoot?.querySelector('secure-iframe-container');
+    // Get reference to secure iframe after render
+    if (!this.secureIframe) {
+      this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
     }
   }
 
@@ -429,9 +429,9 @@ export class BookmarkReader extends LitElement {
     this.setupReadMarking();
     this.updateReaderTheme();
     
-    // Update iframe container with scroll position if it exists
-    if (this.secureIframeContainer) {
-      this.secureIframeContainer.updateScrollPosition(this.scrollPosition);
+    // Update iframe with scroll position if it exists
+    if (this.secureIframe) {
+      this.secureIframe.updateScrollPosition(this.scrollPosition);
     }
   }
 
@@ -605,8 +605,8 @@ export class BookmarkReader extends LitElement {
       
       // Reset scroll position when changing content source
       this.scrollPosition = 0;
-      if (this.secureIframeContainer) {
-        this.secureIframeContainer.updateScrollPosition(0);
+      if (this.secureIframe) {
+        this.secureIframe.updateScrollPosition(0);
       }
       
       this.saveProgress();
@@ -660,15 +660,13 @@ export class BookmarkReader extends LitElement {
           <span>Added ${new Date(this.bookmark.date_added).toLocaleDateString()}</span>
         </div>
       </div>
-      <secure-iframe-container
-        class="secure-iframe-container"
-        .bookmark=${this.bookmark}
+      <secure-iframe
+        class="secure-iframe"
         .content=${content}
-        .readingMode=${this.readingMode}
         @progress-update=${this.handleIframeProgressUpdate}
         @content-loaded=${this.handleIframeContentLoaded}
         @content-error=${this.handleIframeContentError}
-      ></secure-iframe-container>
+      ></secure-iframe>
     `;
   }
 
