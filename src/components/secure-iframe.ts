@@ -6,10 +6,6 @@ import { SecurityService } from '../services/security-service';
 export class SecureIframe extends LitElement {
   @property({ type: String }) content = '';
   @property({ type: Boolean }) isLoading = false;
-  @property({ type: Number }) readProgress = 0;
-  @property({ type: Number }) scrollPosition = 0;
-  @property({ type: Number }) iframeHeight = 0;
-  @property({ type: Function }) onProgressUpdate: (progress: number, scrollPosition: number) => void = () => {};
   @property({ type: Function }) onContentLoad: () => void = () => {};
   @property({ type: Function }) onContentError: (error: string) => void = () => {};
 
@@ -87,10 +83,6 @@ export class SecureIframe extends LitElement {
     if (!iframe) return;
 
     this.iframeRef = iframe;
-
-    // Set up iframe with secure content
-    iframe.sandbox.add('allow-scripts', 'allow-same-origin');
-    iframe.srcdoc = this.secureContent;
 
     // Handle iframe load event
     iframe.addEventListener('load', () => {
