@@ -11,16 +11,6 @@ export interface SecureIframeContainerState {
   iframeHeight: number;
 }
 
-export interface SecureIframeProps {
-  content: string;
-  isLoading: boolean;
-  readProgress: number;
-  scrollPosition: number;
-  iframeHeight: number;
-  onProgressUpdate: (progress: number, scrollPosition: number) => void;
-  onContentLoad: () => void;
-  onContentError: (error: string) => void;
-}
 
 @customElement('secure-iframe-container')
 export class SecureIframeContainer extends LitElement {
