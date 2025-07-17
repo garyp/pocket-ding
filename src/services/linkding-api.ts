@@ -2,6 +2,9 @@ import type { LinkdingBookmark, LinkdingResponse, LinkdingAsset } from '../types
 import { MockLinkdingAPI } from './linkding-api-mock';
 import { RealLinkdingAPI } from './linkding-api-real';
 
+// Export classes for direct testing
+export { RealLinkdingAPI, MockLinkdingAPI };
+
 export interface LinkdingAPI {
   getBookmarks(limit?: number, offset?: number, modifiedSince?: string): Promise<LinkdingResponse>;
   getArchivedBookmarks(limit?: number, offset?: number, modifiedSince?: string): Promise<LinkdingResponse>;
