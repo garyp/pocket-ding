@@ -1,0 +1,263 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { SecurityService } from '../../services/security-service';
+
+describe('SecurityService', () => {
+  describe('prepareSingleFileContent', () => {
+    it('should inject CSP meta tag into head', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).toContain('<meta http-equiv="Content-Security-Policy"');
+      expect(result).toContain('default-src \'none\'');
+      expect(result).toContain('connect-src \'none\'');
+      expect(result).toContain('form-action \'none\'');
+    });
+
+    it('should inject progress tracking script into body', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).toContain('progressTracker');
+      expect(result).toContain('calculateProgress');
+      expect(result).toContain('sendProgressUpdate');
+      expect(result).toContain('window.parent.postMessage');
+    });
+
+    it('should remove base tags for security', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <base href="https://malicious.com/">
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).not.toContain('<base');
+      expect(result).not.toContain('malicious.com');
+    });
+
+    it('should remove meta refresh redirects', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta http-equiv="refresh" content="0;url=https://malicious.com">
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).not.toContain('meta http-equiv="refresh"');
+      expect(result).not.toContain('malicious.com');
+    });
+
+    it('should remove external script tags', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <script src="https://malicious.com/script.js"></script>
+          <script>console.log('inline script should stay');</script>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).not.toContain('malicious.com/script.js');
+      expect(result).not.toContain('<script src="https://');
+      expect(result).toContain('inline script should stay');
+    });
+
+    it('should remove external link tags', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <link rel="stylesheet" href="https://malicious.com/style.css">
+          <link rel="icon" href="data:image/svg+xml,<svg/>">
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).not.toContain('malicious.com/style.css');
+      expect(result).not.toContain('<link rel="stylesheet" href="https://');
+      expect(result).toContain('data:image/svg+xml');
+    });
+
+    it('should block external images', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <img src="https://malicious.com/tracker.gif" alt="external">
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="data url">
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).not.toContain('malicious.com/tracker.gif');
+      expect(result).toContain('External image blocked for security');
+      expect(result).toContain('data:image/gif;base64');
+    });
+
+    it('should clean external URLs from CSS styles', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <div style="background: url('https://malicious.com/bg.jpg'); color: red;">
+            Test Content
+          </div>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).not.toContain('malicious.com/bg.jpg');
+      expect(result).toContain('color: red');
+    });
+
+    it('should handle invalid HTML gracefully', async () => {
+      const invalidHtml = '<div>No html or body tags</div>';
+      
+      await expect(SecurityService.prepareSingleFileContent(invalidHtml))
+        .rejects.toThrow('Invalid HTML structure');
+    });
+
+    it('should preserve legitimate content', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+          <style>
+            body { font-family: Arial, sans-serif; }
+            .content { margin: 20px; }
+          </style>
+        </head>
+        <body>
+          <h1>Test Article</h1>
+          <p class="content">This is legitimate content that should be preserved.</p>
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="data image">
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).toContain('Test Article');
+      expect(result).toContain('legitimate content');
+      expect(result).toContain('font-family: Arial');
+      expect(result).toContain('data:image/gif;base64');
+    });
+  });
+
+  describe('validateContent', () => {
+    it('should return true for valid HTML content', () => {
+      const validHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head><title>Test</title></head>
+        <body><h1>Content</h1></body>
+        </html>
+      `;
+      
+      expect(SecurityService.validateContent(validHtml)).toBe(true);
+    });
+
+    it('should return true for content with body tag', () => {
+      const htmlWithBody = '<body><h1>Content</h1></body>';
+      
+      expect(SecurityService.validateContent(htmlWithBody)).toBe(true);
+    });
+
+    it('should return false for empty content', () => {
+      expect(SecurityService.validateContent('')).toBe(false);
+    });
+
+    it('should return false for null content', () => {
+      expect(SecurityService.validateContent(null as any)).toBe(false);
+    });
+
+    it('should return false for non-HTML content', () => {
+      expect(SecurityService.validateContent('Plain text content')).toBe(false);
+    });
+  });
+
+  describe('createNetworkTestPage', () => {
+    it('should create a test page with network blocking tests', () => {
+      const testPage = SecurityService.createNetworkTestPage();
+      
+      expect(testPage).toContain('<!DOCTYPE html>');
+      expect(testPage).toContain('Network Blocking Test');
+      expect(testPage).toContain('fetch(');
+      expect(testPage).toContain('XMLHttpRequest');
+      expect(testPage).toContain('WebSocket');
+      expect(testPage).toContain('https://example.com');
+    });
+
+    it('should include test result indicators', () => {
+      const testPage = SecurityService.createNetworkTestPage();
+      
+      expect(testPage).toContain('✅');
+      expect(testPage).toContain('❌');
+      expect(testPage).toContain('blocked');
+      expect(testPage).toContain('not blocked');
+    });
+  });
+});

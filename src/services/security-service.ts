@@ -1,0 +1,314 @@
+/**
+ * SecurityService handles secure content preparation for iframe rendering
+ * Implements CSP injection, content sanitization, and progress tracking
+ */
+export class SecurityService {
+  /**
+   * Prepares SingleFile HTML content for secure iframe rendering
+   * Uses DOMParser approach as specified in requirements
+   */
+  static async prepareSingleFileContent(singleFileHtml: string): Promise<string> {
+    // Parse HTML using DOMParser
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(singleFileHtml, 'text/html');
+    
+    // Check if parsing was successful
+    if (!doc.head || !doc.body) {
+      throw new Error('Invalid HTML structure - missing head or body');
+    }
+
+    // Add CSP meta tag to head
+    this.injectCSP(doc);
+    
+    // Add progress tracking script to body
+    this.injectProgressTracking(doc);
+    
+    // Apply content sanitization
+    this.sanitizeContent(doc);
+    
+    // Serialize back to HTML
+    return doc.documentElement.outerHTML;
+  }
+
+  /**
+   * Injects Content Security Policy via meta tag
+   */
+  private static injectCSP(doc: Document): void {
+    const cspMeta = doc.createElement('meta');
+    cspMeta.setAttribute('http-equiv', 'Content-Security-Policy');
+    cspMeta.setAttribute('content', 
+      "default-src 'none'; " +
+      "script-src 'unsafe-inline' 'unsafe-eval'; " +
+      "style-src 'unsafe-inline'; " +
+      "img-src data: blob:; " +
+      "font-src data:; " +
+      "connect-src 'none'; " +
+      "form-action 'none'; " +
+      "frame-src 'none'; " +
+      "object-src 'none'; " +
+      "media-src 'none';"
+    );
+    doc.head.appendChild(cspMeta);
+  }
+
+  /**
+   * Injects progress tracking script into document body
+   */
+  private static injectProgressTracking(doc: Document): void {
+    const progressScript = doc.createElement('script');
+    progressScript.textContent = `
+(function() {
+  'use strict';
+  
+  const progressTracker = {
+    lastProgress: 0,
+    isInitialized: false,
+    
+    init() {
+      if (this.isInitialized) return;
+      this.isInitialized = true;
+      
+      this.setupScrollTracking();
+      this.requestInitialPosition();
+    },
+    
+    setupScrollTracking() {
+      let scrollTimeout;
+      
+      const handleScroll = () => {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+          const progress = this.calculateProgress();
+          
+          // Throttle updates to prevent excessive messaging
+          if (Math.abs(progress - this.lastProgress) > 0.5) {
+            this.lastProgress = progress;
+            this.sendProgressUpdate(progress);
+          }
+        }, 50); // Debounce scroll events
+      };
+      
+      window.addEventListener('scroll', handleScroll, { passive: true });
+    },
+    
+    calculateProgress() {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = window.innerHeight;
+      const maxScroll = scrollHeight - clientHeight;
+      
+      if (maxScroll <= 0) {
+        // Content fits entirely in viewport
+        return scrollHeight > 0 ? 100 : 0;
+      }
+      
+      // Calculate progress as percentage
+      const progress = (scrollTop / maxScroll) * 100;
+      return Math.min(100, Math.max(0, progress));
+    },
+    
+    sendProgressUpdate(progress) {
+      try {
+        window.parent.postMessage({
+          type: 'progress-update',
+          progress: progress,
+          scrollPosition: window.pageYOffset || document.documentElement.scrollTop
+        }, '*');
+      } catch (error) {
+        console.warn('Failed to send progress update:', error);
+      }
+    },
+    
+    requestInitialPosition() {
+      try {
+        window.parent.postMessage({
+          type: 'request-scroll-position'
+        }, '*');
+      } catch (error) {
+        console.warn('Failed to request scroll position:', error);
+      }
+    },
+    
+    restoreScrollPosition(scrollPosition) {
+      try {
+        window.scrollTo(0, scrollPosition || 0);
+        
+        // Send initial progress after restoration
+        setTimeout(() => {
+          const progress = this.calculateProgress();
+          this.sendProgressUpdate(progress);
+        }, 100);
+      } catch (error) {
+        console.warn('Failed to restore scroll position:', error);
+      }
+    }
+  };
+  
+  // Listen for scroll position restore messages
+  window.addEventListener('message', (event) => {
+    if (event.data.type === 'restore-scroll-position') {
+      progressTracker.restoreScrollPosition(event.data.scrollPosition);
+    }
+  });
+  
+  // Send content loaded signal
+  const sendContentLoaded = () => {
+    try {
+      window.parent.postMessage({
+        type: 'content-loaded'
+      }, '*');
+    } catch (error) {
+      console.warn('Failed to send content loaded signal:', error);
+    }
+  };
+  
+  // Initialize progress tracking when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      progressTracker.init();
+      sendContentLoaded();
+    });
+  } else {
+    progressTracker.init();
+    sendContentLoaded();
+  }
+})();
+`;
+    
+    doc.body.appendChild(progressScript);
+  }
+
+  /**
+   * Applies minimal content sanitization on parsed DOM
+   * Removes potentially dangerous elements that could bypass security
+   */
+  private static sanitizeContent(doc: Document): void {
+    // Remove base tags that could redirect resources
+    const baseTags = doc.querySelectorAll('base');
+    baseTags.forEach(tag => tag.remove());
+    
+    // Remove meta refresh redirects
+    const metaRefreshTags = doc.querySelectorAll('meta[http-equiv="refresh"]');
+    metaRefreshTags.forEach(tag => tag.remove());
+    
+    // Remove external script tags (CSP should block these anyway)
+    const externalScripts = doc.querySelectorAll('script[src]');
+    externalScripts.forEach(script => {
+      const src = script.getAttribute('src');
+      if (src && (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('//'))) {
+        script.remove();
+      }
+    });
+    
+    // Remove external link tags (stylesheets, etc.)
+    const externalLinks = doc.querySelectorAll('link[href]');
+    externalLinks.forEach(link => {
+      const href = link.getAttribute('href');
+      if (href && (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('//'))) {
+        link.remove();
+      }
+    });
+    
+    // Remove external image sources (replace with placeholder)
+    const externalImages = doc.querySelectorAll('img[src]');
+    externalImages.forEach(img => {
+      const src = img.getAttribute('src');
+      if (src && (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('//'))) {
+        img.removeAttribute('src');
+        img.setAttribute('alt', 'External image blocked for security');
+        img.style.display = 'none';
+      }
+    });
+    
+    // Clean up any remaining external URLs in CSS
+    const allElements = doc.querySelectorAll('*');
+    allElements.forEach(element => {
+      if (element.getAttribute('style')) {
+        const style = element.getAttribute('style');
+        if (style) {
+          const cleanStyle = style.replace(/url\(["']?https?:\/\/[^"')]*["']?\)/gi, '');
+          element.setAttribute('style', cleanStyle);
+        }
+      }
+    });
+  }
+
+  /**
+   * Validates that content is safe for iframe rendering
+   */
+  static validateContent(content: string): boolean {
+    if (!content || typeof content !== 'string') {
+      return false;
+    }
+    
+    // Basic validation - ensure it's HTML-like content
+    const hasHtmlStructure = content.includes('<html') || content.includes('<body');
+    const hasDoctype = content.includes('<!DOCTYPE') || content.includes('<!doctype');
+    
+    return hasHtmlStructure || hasDoctype;
+  }
+
+  /**
+   * Creates a test page for validating network blocking
+   * Used primarily for testing purposes
+   */
+  static createNetworkTestPage(): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Network Blocking Test</title>
+</head>
+<body>
+  <h1>Network Blocking Test Page</h1>
+  <p>This page tests whether network access is properly blocked in the iframe.</p>
+  <div id="test-results"></div>
+  
+  <script>
+    const results = document.getElementById('test-results');
+    const tests = [];
+    
+    // Test fetch API
+    try {
+      fetch('https://example.com/test')
+        .then(() => tests.push('❌ fetch() not blocked'))
+        .catch(() => tests.push('✅ fetch() blocked'));
+    } catch (e) {
+      tests.push('✅ fetch() blocked');
+    }
+    
+    // Test XMLHttpRequest
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', 'https://example.com/test');
+      xhr.send();
+      tests.push('❌ XMLHttpRequest not blocked');
+    } catch (e) {
+      tests.push('✅ XMLHttpRequest blocked');
+    }
+    
+    // Test WebSocket
+    try {
+      const ws = new WebSocket('wss://example.com/test');
+      tests.push('❌ WebSocket not blocked');
+    } catch (e) {
+      tests.push('✅ WebSocket blocked');
+    }
+    
+    // Test external image
+    const img = document.createElement('img');
+    img.src = 'https://example.com/test.jpg';
+    img.onerror = () => tests.push('✅ External image blocked');
+    img.onload = () => tests.push('❌ External image not blocked');
+    
+    // Display results after a short delay
+    setTimeout(() => {
+      results.innerHTML = tests.join('<br>');
+    }, 1000);
+  </script>
+</body>
+</html>
+    `;
+  }
+}
