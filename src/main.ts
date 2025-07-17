@@ -2,10 +2,14 @@ import { css } from 'lit';
 import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
 import { ThemeService } from './services/theme-service';
 import { registerIcons } from './icons';
+import { getBasePath } from './utils/base-path';
 import './components/app-root';
 
 // Set Shoelace base path for bundled assets
-setBasePath('/shoelace/');
+// Use shared base path utility function
+const basePath = getBasePath();
+const shoelaceBasePath = `${basePath}shoelace/`.replace(/\/+/g, '/'); // normalize double slashes
+setBasePath(shoelaceBasePath);
 
 // Register icons for tree shaking
 registerIcons();

@@ -511,6 +511,8 @@ describe('Reading Progress Integration Tests', () => {
       expect(progressText).toContain('30% read');
 
       // Continue scrolling to 60%
+      // Wait for restoration process to complete (isRestoringPosition flag to clear)
+      await new Promise(resolve => setTimeout(resolve, 150));
       await simulateScroll(360, 1000, 400); // 60%
       
       const updatedProgressText = getProgressText();
