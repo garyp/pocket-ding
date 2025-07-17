@@ -650,6 +650,16 @@ export class BookmarkReader extends LitElement {
     }
 
     return html`
+      <div class="bookmark-header">
+        <h1 class="bookmark-title">${this.bookmark.title}</h1>
+        <div class="bookmark-meta">
+          <a href="${this.bookmark.url}" target="_blank" class="bookmark-url">
+            ${this.bookmark.url}
+          </a>
+          <span>•</span>
+          <span>Added ${new Date(this.bookmark.date_added).toLocaleDateString()}</span>
+        </div>
+      </div>
       <secure-iframe-container
         class="secure-iframe-container"
         .bookmark=${this.bookmark}
