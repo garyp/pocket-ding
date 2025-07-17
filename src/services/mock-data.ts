@@ -1,4 +1,4 @@
-import type { LinkdingBookmark, LinkdingResponse, LinkdingAsset, LinkdingAssetResponse } from '../types';
+import type { LinkdingBookmark, LinkdingAsset } from '../types';
 
 export const mockBookmarks: LinkdingBookmark[] = [
   {
@@ -150,20 +150,6 @@ export const mockBookmarks: LinkdingBookmark[] = [
 export const mockArchivedBookmarks: LinkdingBookmark[] = mockBookmarks.filter(bookmark => bookmark.is_archived);
 export const mockUnreadBookmarks: LinkdingBookmark[] = mockBookmarks.filter(bookmark => bookmark.unread);
 
-export const mockBookmarkResponse: LinkdingResponse = {
-  count: mockUnreadBookmarks.length,
-  next: null,
-  previous: null,
-  results: mockUnreadBookmarks,
-};
-
-export const mockArchivedBookmarkResponse: LinkdingResponse = {
-  count: mockArchivedBookmarks.length,
-  next: null,
-  previous: null,
-  results: mockArchivedBookmarks,
-};
-
 export const mockAssets: LinkdingAsset[] = [
   {
     id: 1,
@@ -184,12 +170,5 @@ export const mockAssets: LinkdingAsset[] = [
     date_created: '2024-01-02T11:45:00Z',
   },
 ];
-
-export const mockAssetResponse: LinkdingAssetResponse = {
-  count: mockAssets.length,
-  next: null,
-  previous: null,
-  results: mockAssets,
-};
 
 export const MOCK_URL = 'https://linkding.example.com';
