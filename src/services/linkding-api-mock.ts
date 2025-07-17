@@ -1,5 +1,5 @@
 import type { LinkdingBookmark, LinkdingResponse, LinkdingAsset } from '../types';
-import type { LinkdingAPI } from './linkding-api-interface';
+import type { LinkdingAPI } from './linkding-api';
 import { 
   mockBookmarks, 
   mockAssets, 
