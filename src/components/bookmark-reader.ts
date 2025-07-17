@@ -429,10 +429,6 @@ export class BookmarkReader extends LitElement {
     this.setupReadMarking();
     this.updateReaderTheme();
     
-    // Update iframe with scroll position if it exists
-    if (this.secureIframe) {
-      this.secureIframe.updateScrollPosition(this.scrollPosition);
-    }
   }
 
   private async loadContent() {
@@ -605,9 +601,6 @@ export class BookmarkReader extends LitElement {
       
       // Reset scroll position when changing content source
       this.scrollPosition = 0;
-      if (this.secureIframe) {
-        this.secureIframe.updateScrollPosition(0);
-      }
       
       this.saveProgress();
     }
@@ -663,6 +656,7 @@ export class BookmarkReader extends LitElement {
       <secure-iframe
         class="secure-iframe"
         .content=${content}
+        .scrollPosition=${this.scrollPosition}
         @progress-update=${this.handleIframeProgressUpdate}
         @content-loaded=${this.handleIframeContentLoaded}
         @content-error=${this.handleIframeContentError}

@@ -173,7 +173,7 @@ describe('Secure Iframe Integration', () => {
     it('should handle scroll position requests', async () => {
       iframe = new SecureIframe();
       iframe.content = mockSingleFileContent;
-      iframe.updateScrollPosition(200);
+      iframe.scrollPosition = 200;
       
       document.body.appendChild(iframe);
       await iframe.updateComplete;

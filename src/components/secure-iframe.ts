@@ -9,9 +9,10 @@ export class SecureIframe extends LitElement {
   @property({ type: Function }) onContentLoad: () => void = () => {};
   @property({ type: Function }) onContentError: (error: string) => void = () => {};
 
+  @property({ type: Number }) scrollPosition = 0;
+
   @state() private secureContent = '';
   @state() private readProgress = 0;
-  @state() private scrollPosition = 0;
 
   static override styles = css`
     :host {
@@ -131,10 +132,6 @@ export class SecureIframe extends LitElement {
     }));
   }
 
-  // Method to update scroll position from parent
-  public updateScrollPosition(scrollPosition: number) {
-    this.scrollPosition = scrollPosition;
-  }
 
   // Method to get current progress
   public getCurrentProgress(): { progress: number; scrollPosition: number } {
