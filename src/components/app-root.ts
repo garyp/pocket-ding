@@ -3,6 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { ThemeService } from '../services/theme-service';
 import { configureFetchHelper } from '../utils/fetch-helper';
+import { getBasePath } from '../utils/base-path';
 import type { AppSettings } from '../types';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -200,14 +201,10 @@ export class AppRoot extends LitElement {
     this.handleRoute();
   };
 
-  private getBasePath(): string {
-    // Get base path from Vite's import.meta.env.BASE_URL or default to '/'
-    return (import.meta.env && import.meta.env.BASE_URL) || '/';
-  }
 
   private getRouteFromPath(fullPath: string): string {
     // Strip the base path from the full path to get the route
-    const basePath = this.getBasePath();
+    const basePath = getBasePath();
     
     // If base path is '/', return the full path as-is
     if (basePath === '/') {
@@ -257,7 +254,7 @@ export class AppRoot extends LitElement {
       return;
     }
     
-    const basePath = this.getBasePath();
+    const basePath = getBasePath();
     let route = '/';
     let title = 'Pocket Ding';
     
