@@ -12,7 +12,6 @@ export class SecureIframe extends LitElement {
   @state() private secureContent = '';
   @state() private readProgress = 0;
   @state() private scrollPosition = 0;
-  @state() private iframeHeight = 0;
 
   static override styles = css`
     :host {
