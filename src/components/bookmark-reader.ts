@@ -174,12 +174,12 @@ export class BookmarkReader extends LitElement {
     .content-container h6 {
       margin-top: 2rem;
       margin-bottom: 1rem;
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
     }
 
     .content-container p {
       margin-bottom: 1rem;
-      color: var(--sl-color-neutral-700);
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     .content-container img {
@@ -190,7 +190,7 @@ export class BookmarkReader extends LitElement {
     }
 
     .content-container a {
-      color: var(--sl-color-primary-600);
+      color: var(--md-sys-color-primary);
       text-decoration: none;
     }
 
@@ -201,13 +201,13 @@ export class BookmarkReader extends LitElement {
     .content-container blockquote {
       margin: 1rem 0;
       padding: 1rem;
-      background: var(--sl-color-neutral-50);
-      border-left: 4px solid var(--sl-color-primary-600);
+      background: var(--md-sys-color-surface-container);
+      border-left: 4px solid var(--md-sys-color-primary);
       border-radius: 4px;
     }
 
     .content-container pre {
-      background: var(--sl-color-neutral-100);
+      background: var(--md-sys-color-surface-container-high);
       padding: 1rem;
       border-radius: 4px;
       overflow-x: auto;
@@ -215,7 +215,7 @@ export class BookmarkReader extends LitElement {
     }
 
     .content-container code {
-      background: var(--sl-color-neutral-100);
+      background: var(--md-sys-color-surface-container-high);
       padding: 0.125rem 0.25rem;
       border-radius: 2px;
       font-size: 0.875rem;
@@ -224,13 +224,13 @@ export class BookmarkReader extends LitElement {
     .bookmark-header {
       margin-bottom: 2rem;
       padding-bottom: 1rem;
-      border-bottom: 1px solid var(--sl-color-neutral-200);
+      border-bottom: 1px solid var(--md-sys-color-outline-variant);
     }
 
     .bookmark-title {
       font-size: 1.75rem;
       font-weight: 700;
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
       margin: 0 0 0.5rem 0;
       line-height: 1.2;
     }
@@ -241,11 +241,11 @@ export class BookmarkReader extends LitElement {
       gap: 1rem;
       flex-wrap: wrap;
       font-size: 0.875rem;
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     .bookmark-url {
-      color: var(--sl-color-primary-600);
+      color: var(--md-sys-color-primary);
       text-decoration: none;
       word-break: break-all;
     }
@@ -266,29 +266,29 @@ export class BookmarkReader extends LitElement {
     .error-message {
       text-align: center;
       padding: 2rem;
-      color: var(--sl-color-danger-600);
+      color: var(--md-sys-color-error);
     }
 
     .fallback-content {
       text-align: center;
       padding: 2rem;
-      background: var(--sl-color-neutral-50);
+      background: var(--md-sys-color-surface-container);
       border-radius: 8px;
       margin: 2rem 0;
     }
 
     .fallback-content h1 {
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
       margin-bottom: 1rem;
     }
 
     .fallback-content p {
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       margin-bottom: 1rem;
     }
 
     .fallback-content a {
-      color: var(--sl-color-primary-600);
+      color: var(--md-sys-color-primary);
       text-decoration: none;
       font-weight: 500;
     }
@@ -300,19 +300,19 @@ export class BookmarkReader extends LitElement {
     .unsupported-content {
       text-align: center;
       padding: 2rem;
-      background: var(--sl-color-neutral-50);
-      border: 2px dashed var(--sl-color-neutral-300);
+      background: var(--md-sys-color-surface-container);
+      border: 2px dashed var(--md-sys-color-outline-variant);
       border-radius: 8px;
       margin: 2rem 0;
     }
 
     .unsupported-content h2 {
-      color: var(--sl-color-warning-600);
+      color: var(--md-sys-color-secondary);
       margin-bottom: 1rem;
     }
 
     .unsupported-content p {
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       margin-bottom: 0.5rem;
     }
 

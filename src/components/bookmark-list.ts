@@ -174,7 +174,7 @@ export class BookmarkList extends LitElement {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      color: var(--sl-color-neutral-500);
+      color: var(--md-sys-color-outline);
       text-decoration: none;
       font-size: 0.85rem;
       margin-bottom: 0.5rem;
@@ -184,8 +184,8 @@ export class BookmarkList extends LitElement {
     }
 
     .bookmark-url:hover {
-      background-color: var(--sl-color-neutral-50);
-      color: var(--sl-color-primary-600);
+      background-color: var(--md-sys-color-surface-container);
+      color: var(--md-sys-color-primary);
     }
 
     .favicon {
@@ -208,7 +208,7 @@ export class BookmarkList extends LitElement {
 
     .progress-text {
       font-size: 0.75rem;
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       margin-bottom: 0.25rem;
     }
 
@@ -223,13 +223,13 @@ export class BookmarkList extends LitElement {
 
     .empty-state {
       text-align: center;
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       padding: 2rem;
     }
 
     .empty-state h3 {
       margin: 0 0 0.5rem 0;
-      color: var(--sl-color-neutral-700);
+      color: var(--md-sys-color-on-surface);
     }
 
     .empty-state p {
@@ -461,7 +461,7 @@ export class BookmarkList extends LitElement {
             </div>
           ` : ''}
           
-          <div style="font-size: 0.75rem; color: var(--sl-color-neutral-500); margin-top: 0.5rem;">
+          <div style="font-size: 0.75rem; color: var(--md-sys-color-outline); margin-top: 0.5rem;">
             Added ${this.formatDate(bookmark.date_added)}
           </div>
         </div>
