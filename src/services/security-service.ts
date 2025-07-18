@@ -8,6 +8,11 @@ export class SecurityService {
    * Uses DOMParser approach as specified in requirements
    */
   static async prepareSingleFileContent(singleFileHtml: string): Promise<string> {
+    // Check if input contains basic HTML structure
+    if (!singleFileHtml.includes('<html') || !singleFileHtml.includes('<body')) {
+      throw new Error('Invalid HTML structure');
+    }
+    
     // Parse HTML using DOMParser
     const parser = new DOMParser();
     const doc = parser.parseFromString(singleFileHtml, 'text/html');
