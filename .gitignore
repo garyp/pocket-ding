@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Worker specific
+worker/node_modules
+worker/.wrangler
+worker/dist
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

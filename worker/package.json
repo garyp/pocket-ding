@@ -1,0 +1,21 @@
+{
+  "name": "pocket-ding-cors-proxy",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker CORS proxy for Pocket Ding",
+  "main": "cloudflare-worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --env production",
+    "deploy:dev": "wrangler deploy --env development",
+    "tail": "wrangler tail",
+    "whoami": "wrangler whoami",
+    "login": "wrangler login",
+    "logout": "wrangler logout"
+  },
+  "keywords": ["cors", "proxy", "cloudflare", "worker", "linkding"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

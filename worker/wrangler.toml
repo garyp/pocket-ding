@@ -1,0 +1,24 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "pocket-ding-proxy"
+main = "cloudflare-worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+name = "pocket-ding-proxy"
+
+[env.development]
+name = "pocket-ding-proxy-dev"
+
+# Optional: Custom domain configuration
+# [env.production.route]
+# pattern = "cors-proxy.yourdomain.com/*"
+# zone_name = "yourdomain.com"
+
+# Worker limits and settings
+[limits]
+cpu_ms = 50
+
+# Variables that can be set via wrangler secret
+[vars]
+ENVIRONMENT = "production"

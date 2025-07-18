@@ -1,10 +1,13 @@
 /**
- * Centralized fetch helper that handles development proxy routing
- * and provides a consistent interface for all HTTP requests.
+ * Centralized fetch helper that handles development proxy routing,
+ * production CORS proxy, and provides a consistent interface for all HTTP requests.
  */
 
 // Global configuration for the fetch helper
 let linkdingBaseUrl: string | null = null;
+
+// CORS proxy configuration
+const CORS_PROXY_URL = import.meta.env.VITE_CORS_PROXY_URL || 'https://pocket-ding-proxy.your-subdomain.workers.dev';
 
 /**
  * Configure the fetch helper with the Linkding base URL
@@ -24,32 +27,43 @@ function isDevelopmentMode(): boolean {
 }
 
 /**
- * Transforms URLs to use the development proxy when needed
+ * Determines if the URL is a Linkding API request
  */
-function transformUrlForProxy(url: string): string {
-  if (!isDevelopmentMode() || !linkdingBaseUrl) {
-    return url;
-  }
-
-  // Extract the base URL without protocol for matching
+function isLinkdingApiRequest(url: string): boolean {
+  if (!linkdingBaseUrl) return false;
+  
   try {
     const configuredUrl = new URL(linkdingBaseUrl);
     const requestUrl = new URL(url);
     
-    // If the request is to the configured Linkding server, route through proxy
-    if (requestUrl.hostname === configuredUrl.hostname && requestUrl.port === configuredUrl.port) {
-      return url.replace(linkdingBaseUrl, '');
-    }
+    return requestUrl.hostname === configuredUrl.hostname && 
+           requestUrl.port === configuredUrl.port &&
+           requestUrl.pathname.includes('/api/');
   } catch (error) {
-    // If URL parsing fails, return original URL
-    console.debug('URL parsing failed in fetch helper:', error);
+    return false;
+  }
+}
+
+/**
+ * Transforms URLs for development proxy or production CORS proxy
+ */
+function transformUrlForProxy(url: string): string {
+  // In development, use Vite's proxy
+  if (isDevelopmentMode() && linkdingBaseUrl && isLinkdingApiRequest(url)) {
+    return url.replace(linkdingBaseUrl, '');
+  }
+  
+  // In production, use Cloudflare Worker CORS proxy for Linkding API requests
+  if (!isDevelopmentMode() && isLinkdingApiRequest(url)) {
+    const encodedTargetUrl = encodeURIComponent(url);
+    return `${CORS_PROXY_URL}?target=${encodedTargetUrl}`;
   }
 
   return url;
 }
 
 /**
- * Enhanced fetch that automatically handles development proxy routing
+ * Enhanced fetch that automatically handles development proxy routing and production CORS proxy
  */
 export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let url: string;

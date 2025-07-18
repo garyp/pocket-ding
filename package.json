@@ -13,7 +13,12 @@
     "test": "vitest run",
     "test:unit": "vitest run src/test/unit",
     "test:integration": "vitest run src/test/integration",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker:dev": "cd worker && npm run dev",
+    "worker:deploy": "cd worker && npm run deploy",
+    "worker:deploy:dev": "cd worker && npm run deploy:dev",
+    "worker:tail": "cd worker && npm run tail",
+    "worker:setup": "cd worker && npm install"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",

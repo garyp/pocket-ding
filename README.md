@@ -147,6 +147,63 @@ The app stores settings locally in IndexedDB:
 - **Auto Sync**: Whether to sync automatically
 - **Reading Mode**: Default reading mode preference
 
+### CORS Configuration for Production Deployment
+
+When deploying Pocket Ding to a domain different from your Linkding server (e.g., GitHub Pages), you need to configure CORS (Cross-Origin Resource Sharing) on your Linkding server.
+
+**Required CORS Headers:**
+Your Linkding server must include these headers to allow Pocket Ding to access the API:
+```
+Access-Control-Allow-Origin: https://your-pocket-ding-domain.com
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Allow-Credentials: true
+```
+
+**For Linkding with Reverse Proxy (Nginx/Apache):**
+
+If you're running Linkding behind a reverse proxy, add these headers to your server configuration:
+
+**Nginx Example:**
+```nginx
+location /api/ {
+    add_header Access-Control-Allow-Origin https://garyp.github.io;
+    add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS";
+    add_header Access-Control-Allow-Headers "Content-Type, Authorization";
+    add_header Access-Control-Allow-Credentials true;
+    
+    if ($request_method = OPTIONS) {
+        return 204;
+    }
+    
+    proxy_pass http://linkding-backend;
+}
+```
+
+**Apache Example:**
+```apache
+<Location "/api/">
+    Header always set Access-Control-Allow-Origin "https://garyp.github.io"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+    Header always set Access-Control-Allow-Credentials "true"
+    
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ $1 [R=204,L]
+</Location>
+```
+
+**Note:** Replace `https://garyp.github.io` with your actual Pocket Ding deployment URL.
+
+**For Docker Deployments:**
+If you're using Docker, you may need to modify your Linkding container's reverse proxy or add a separate proxy container with CORS headers.
+
+**Security Considerations:**
+- Only allow specific origins (avoid using `*` in production)
+- Use HTTPS for both Linkding and Pocket Ding
+- Regularly rotate your API tokens
+
 ## Browser Support
 
 Pocket Ding works on all modern browsers that support:
