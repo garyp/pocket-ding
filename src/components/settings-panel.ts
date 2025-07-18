@@ -5,15 +5,15 @@ import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
 import type { AppSettings } from '../types';
-import '@shoelace-style/shoelace/dist/components/input/input.js';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/card/card.js';
-import '@shoelace-style/shoelace/dist/components/switch/switch.js';
-import '@shoelace-style/shoelace/dist/components/select/select.js';
-import '@shoelace-style/shoelace/dist/components/option/option.js';
-import '@shoelace-style/shoelace/dist/components/alert/alert.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
+import 'material/textfield/outlined-text-field.js';
+import 'material/button/filled-button.js';
+import 'material/button/text-button.js';
+import 'material/card/outlined-card.js';
+import 'material/switch/switch.js';
+import 'material/select/outlined-select.js';
+import 'material/select/select-option.js';
+import 'material/progress/circular-progress.js';
+import 'material/progress/linear-progress.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
@@ -44,7 +44,7 @@ export class SettingsPanel extends LitElement {
 
     .form-section h3 {
       margin-bottom: 1rem;
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
     }
 
     .form-group {
@@ -55,7 +55,7 @@ export class SettingsPanel extends LitElement {
       display: block;
       margin-bottom: 0.5rem;
       font-weight: 500;
-      color: var(--sl-color-neutral-700);
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     .form-actions {
@@ -77,20 +77,20 @@ export class SettingsPanel extends LitElement {
     }
 
     .danger-zone {
-      border: 1px solid var(--sl-color-danger-300);
-      background: var(--sl-color-danger-50);
+      border: 1px solid var(--md-sys-color-error);
+      background: var(--md-sys-color-error-container);
       padding: 1rem;
-      border-radius: 8px;
+      border-radius: 12px;
       margin-top: 2rem;
     }
 
     .danger-zone h3 {
-      color: var(--sl-color-danger-700);
+      color: var(--md-sys-color-on-error-container);
       margin-bottom: 1rem;
     }
 
     .danger-zone p {
-      color: var(--sl-color-danger-600);
+      color: var(--md-sys-color-on-error-container);
       margin-bottom: 1rem;
       font-size: 0.9rem;
     }
@@ -104,14 +104,14 @@ export class SettingsPanel extends LitElement {
     .sync-progress {
       margin-top: 1rem;
       padding: 1rem;
-      background: var(--sl-color-primary-50);
-      border-radius: 8px;
-      border: 1px solid var(--sl-color-primary-200);
+      background: var(--md-sys-color-primary-container);
+      border-radius: 12px;
+      border: 1px solid var(--md-sys-color-outline-variant);
     }
 
     .sync-progress-text {
       font-size: 0.875rem;
-      color: var(--sl-color-primary-700);
+      color: var(--md-sys-color-on-primary-container);
       margin-bottom: 0.5rem;
     }
 
@@ -268,7 +268,7 @@ export class SettingsPanel extends LitElement {
 
   override render() {
     return html`
-      <sl-card class="settings-card">
+      <md-outlined-card class="settings-card">
         <div slot="header">
           <h2>Settings</h2>
         </div>
@@ -278,47 +278,46 @@ export class SettingsPanel extends LitElement {
           
           <div class="form-group">
             <label for="url">Server URL</label>
-            <sl-input
+            <md-outlined-text-field
               id="url"
               placeholder="https://your-linkding-instance.com"
               .value=${this.formData.linkding_url || ''}
-              @sl-input=${(e: any) => this.handleInputChange('linkding_url', e.target.value)}
-            ></sl-input>
+              @input=${(e: any) => this.handleInputChange('linkding_url', e.target.value)}
+            ></md-outlined-text-field>
           </div>
           
           <div class="form-group">
             <label for="token">API Token</label>
-            <sl-input
+            <md-outlined-text-field
               id="token"
               type="password"
               placeholder="Your API token"
               .value=${this.formData.linkding_token || ''}
-              @sl-input=${(e: any) => this.handleInputChange('linkding_token', e.target.value)}
-            ></sl-input>
+              @input=${(e: any) => this.handleInputChange('linkding_token', e.target.value)}
+            ></md-outlined-text-field>
           </div>
           
           <div class="test-connection">
-            <sl-button
-              variant="default"
-              size="small"
+            <md-text-button
               @click=${this.handleTestConnection}
               ?disabled=${this.testStatus === 'testing'}
             >
               ${this.testStatus === 'testing' ? html`
-                <sl-spinner style="font-size: 1rem;"></sl-spinner>
+                <md-circular-progress indeterminate slot="icon" style="width: 16px; height: 16px;"></md-circular-progress>
                 Testing...
               ` : 'Test Connection'}
-            </sl-button>
+            </md-text-button>
           </div>
           
           ${this.testStatus !== 'idle' ? html`
-            <sl-alert
-              variant=${this.testStatus === 'success' ? 'success' : this.testStatus === 'error' ? 'danger' : 'neutral'}
-              open
-              class="status-message"
-            >
+            <div class="status-message" style="
+              padding: 0.75rem;
+              border-radius: 8px;
+              background: ${this.testStatus === 'success' ? 'var(--md-sys-color-primary-container)' : 'var(--md-sys-color-error-container)'};
+              color: ${this.testStatus === 'success' ? 'var(--md-sys-color-on-primary-container)' : 'var(--md-sys-color-on-error-container)'};
+            ">
               ${this.testMessage}
-            </sl-alert>
+            </div>
           ` : ''}
         </div>
         
@@ -327,45 +326,43 @@ export class SettingsPanel extends LitElement {
           
           <div class="form-group">
             <label for="auto-sync">Auto Sync</label>
-            <sl-switch
+            <md-switch
               id="auto-sync"
-              ?checked=${this.formData.auto_sync}
-              @sl-change=${(e: any) => this.handleInputChange('auto_sync', e.target.checked)}
+              ?selected=${this.formData.auto_sync}
+              @change=${(e: any) => this.handleInputChange('auto_sync', e.target.selected)}
             >
               Automatically sync bookmarks
-            </sl-switch>
+            </md-switch>
           </div>
           
           <div class="form-group">
             <label for="sync-interval">Sync Interval (minutes)</label>
-            <sl-input
+            <md-outlined-text-field
               id="sync-interval"
               type="number"
               min="5"
               max="1440"
               .value=${this.formData.sync_interval?.toString() || '60'}
-              @sl-input=${(e: any) => this.handleInputChange('sync_interval', parseInt(e.target.value))}
-            ></sl-input>
+              @input=${(e: any) => this.handleInputChange('sync_interval', parseInt(e.target.value))}
+            ></md-outlined-text-field>
           </div>
 
           <div class="sync-actions">
-            <sl-button
-              variant="default"
+            <md-text-button
               @click=${this.handleFullSync}
               ?disabled=${this.isFullSyncing || !this.settings?.linkding_url || !this.settings?.linkding_token}
-              ?loading=${this.isFullSyncing}
             >
               ${this.isFullSyncing ? 'Syncing...' : 'Force Full Sync'}
-            </sl-button>
+            </md-text-button>
             
             ${this.isFullSyncing ? html`
               <div class="sync-progress">
                 <div class="sync-progress-text">
                   Syncing bookmarks... ${this.fullSyncProgress} / ${this.fullSyncTotal}
                 </div>
-                <sl-progress-bar
-                  .value=${this.fullSyncTotal > 0 ? (this.fullSyncProgress / this.fullSyncTotal) * 100 : 0}
-                ></sl-progress-bar>
+                <md-linear-progress
+                  .value=${this.fullSyncTotal > 0 ? (this.fullSyncProgress / this.fullSyncTotal) : 0}
+                ></md-linear-progress>
               </div>
             ` : ''}
           </div>
@@ -376,51 +373,49 @@ export class SettingsPanel extends LitElement {
           
           <div class="form-group">
             <label for="reading-mode">Default Reading Mode</label>
-            <sl-select
+            <md-outlined-select
               id="reading-mode"
               .value=${this.formData.reading_mode || 'readability'}
-              @sl-change=${(e: any) => this.handleInputChange('reading_mode', e.target.value)}
+              @change=${(e: any) => this.handleInputChange('reading_mode', e.target.value)}
             >
-              <sl-option value="readability">Reader Mode</sl-option>
-              <sl-option value="original">Original</sl-option>
-            </sl-select>
+              <md-select-option value="readability">Reader Mode</md-select-option>
+              <md-select-option value="original">Original</md-select-option>
+            </md-outlined-select>
           </div>
           
           <div class="form-group">
             <label for="theme-mode">Theme</label>
-            <sl-select
+            <md-outlined-select
               id="theme-mode"
               .value=${this.formData.theme_mode || 'system'}
-              @sl-change=${(e: any) => this.handleInputChange('theme_mode', e.target.value)}
+              @change=${(e: any) => this.handleInputChange('theme_mode', e.target.value)}
             >
-              <sl-option value="system">Follow System</sl-option>
-              <sl-option value="light">Light</sl-option>
-              <sl-option value="dark">Dark</sl-option>
-            </sl-select>
+              <md-select-option value="system">Follow System</md-select-option>
+              <md-select-option value="light">Light</md-select-option>
+              <md-select-option value="dark">Dark</md-select-option>
+            </md-outlined-select>
           </div>
         </div>
         
         <div class="form-actions">
-          <sl-button
-            variant="primary"
+          <md-filled-button
             @click=${this.handleSave}
-            ?loading=${this.isLoading}
             ?disabled=${this.isLoading}
           >
             Save Settings
-          </sl-button>
+          </md-filled-button>
         </div>
-      </sl-card>
+      </md-outlined-card>
       
       <div class="danger-zone">
         <h3>Danger Zone</h3>
         <p>This will permanently delete all your bookmarks and reading progress stored locally.</p>
-        <sl-button
-          variant="danger"
+        <md-filled-button
           @click=${this.handleClearData}
+          style="--md-filled-button-container-color: var(--md-sys-color-error); --md-filled-button-label-text-color: var(--md-sys-color-on-error);"
         >
           Clear All Data
-        </sl-button>
+        </md-filled-button>
       </div>
     `;
   }
