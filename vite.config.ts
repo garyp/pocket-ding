@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { shoelaceAssets } from './vite-plugins/shoelace-assets'
 
 export default defineConfig(({ command }) => {
   // Determine base path based on environment
@@ -15,7 +14,6 @@ export default defineConfig(({ command }) => {
     base,
     root: '.',
     plugins: [
-      shoelaceAssets(),
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
