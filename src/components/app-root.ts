@@ -55,6 +55,12 @@ export class AppRoot extends LitElement {
       gap: 0.5rem;
     }
 
+    .header-content {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
     .header-actions md-text-button {
       --md-text-button-label-text-color: var(--md-sys-color-on-primary);
     }
@@ -146,6 +152,12 @@ export class AppRoot extends LitElement {
       .header-actions md-text-button {
         font-size: 0.875rem;
       }
+    }
+
+    /* Utility classes */
+    .circular-progress-48 {
+      width: 48px;
+      height: 48px;
     }
   `;
 
@@ -337,7 +349,7 @@ export class AppRoot extends LitElement {
     
     return html`
       <div class="app-header">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <div class="header-content">
           ${showBack ? html`
             <md-text-button
               @click=${this.handleBackClick}
@@ -376,7 +388,7 @@ export class AppRoot extends LitElement {
     if (this.isLoading) {
       return html`
         <div class="loading-container">
-          <md-circular-progress indeterminate style="width: 48px; height: 48px;"></md-circular-progress>
+          <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
           <p>Loading...</p>
         </div>
       `;

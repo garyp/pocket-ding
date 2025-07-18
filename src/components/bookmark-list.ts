@@ -212,6 +212,17 @@ export class BookmarkList extends LitElement {
       margin-bottom: 0.25rem;
     }
 
+    .bookmark-date {
+      font-size: 0.75rem;
+      color: var(--md-sys-color-outline);
+      margin-top: 0.5rem;
+    }
+
+    .circular-progress-48 {
+      width: 48px;
+      height: 48px;
+    }
+
     .loading-container {
       display: flex;
       align-items: center;
@@ -461,7 +472,7 @@ export class BookmarkList extends LitElement {
             </div>
           ` : ''}
           
-          <div style="font-size: 0.75rem; color: var(--md-sys-color-outline); margin-top: 0.5rem;">
+          <div class="bookmark-date">
             Added ${this.formatDate(bookmark.date_added)}
           </div>
         </div>
@@ -473,7 +484,7 @@ export class BookmarkList extends LitElement {
     if (this.isLoading) {
       return html`
         <div class="loading-container">
-          <md-circular-progress indeterminate style="width: 48px; height: 48px;"></md-circular-progress>
+          <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
           <p>Loading bookmarks...</p>
         </div>
       `;

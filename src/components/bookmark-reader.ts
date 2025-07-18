@@ -107,14 +107,14 @@ export class BookmarkReader extends LitElement {
       line-height: 1.6;
     }
 
-    /* Dark mode overrides for reader content */
+    /* Dark mode overrides for reader content using Material Design tokens */
     :host(.reader-dark-mode) .reader-content {
-      background: #1a1a1a;
-      color: #e0e0e0;
+      background: var(--md-sys-color-surface);
+      color: var(--md-sys-color-on-surface);
     }
 
     :host(.reader-dark-mode) .content-container {
-      color: #e0e0e0;
+      color: var(--md-sys-color-on-surface);
     }
 
     :host(.reader-dark-mode) .content-container h1,
@@ -123,47 +123,47 @@ export class BookmarkReader extends LitElement {
     :host(.reader-dark-mode) .content-container h4,
     :host(.reader-dark-mode) .content-container h5,
     :host(.reader-dark-mode) .content-container h6 {
-      color: #ffffff;
+      color: var(--md-sys-color-on-surface);
     }
 
     :host(.reader-dark-mode) .content-container p {
-      color: #d0d0d0;
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     :host(.reader-dark-mode) .content-container a {
-      color: #4d9eff;
+      color: var(--md-sys-color-primary);
     }
 
     :host(.reader-dark-mode) .content-container blockquote {
-      background: #2a2a2a;
-      border-left-color: #4d9eff;
-      color: #d0d0d0;
+      background: var(--md-sys-color-surface-container);
+      border-left-color: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     :host(.reader-dark-mode) .content-container pre {
-      background: #2a2a2a;
-      color: #e0e0e0;
+      background: var(--md-sys-color-surface-container);
+      color: var(--md-sys-color-on-surface);
     }
 
     :host(.reader-dark-mode) .content-container code {
-      background: #2a2a2a;
-      color: #e0e0e0;
+      background: var(--md-sys-color-surface-container);
+      color: var(--md-sys-color-on-surface);
     }
 
     :host(.reader-dark-mode) .bookmark-header {
-      border-bottom-color: #404040;
+      border-bottom-color: var(--md-sys-color-outline-variant);
     }
 
     :host(.reader-dark-mode) .bookmark-title {
-      color: #ffffff;
+      color: var(--md-sys-color-on-surface);
     }
 
     :host(.reader-dark-mode) .bookmark-meta {
-      color: #a0a0a0;
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     :host(.reader-dark-mode) .bookmark-url {
-      color: #4d9eff;
+      color: var(--md-sys-color-primary);
     }
 
     .content-container h1,
@@ -339,6 +339,21 @@ export class BookmarkReader extends LitElement {
       .bookmark-meta {
         font-size: 0.8rem;
       }
+    }
+
+    /* Utility classes */
+    .circular-progress-24 {
+      width: 24px;
+      height: 24px;
+    }
+
+    .circular-progress-48 {
+      width: 48px;
+      height: 48px;
+    }
+
+    .flex-1 {
+      flex: 1;
     }
   `;
 
@@ -619,7 +634,7 @@ export class BookmarkReader extends LitElement {
     if (this.isLoadingContent) {
       return html`
         <div class="loading-container">
-          <md-circular-progress indeterminate style="width: 24px; height: 24px;"></md-circular-progress>
+          <md-circular-progress indeterminate class="circular-progress-24"></md-circular-progress>
           <p>Loading content...</p>
         </div>
       `;
@@ -673,7 +688,7 @@ export class BookmarkReader extends LitElement {
     if (this.isLoading) {
       return html`
         <div class="loading-container">
-          <md-circular-progress indeterminate style="width: 48px; height: 48px;"></md-circular-progress>
+          <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
           <p>Loading article...</p>
         </div>
       `;
@@ -747,7 +762,7 @@ export class BookmarkReader extends LitElement {
             </span>
             <md-linear-progress 
               .value=${this.readProgress / 100}
-              style="flex: 1;"
+              class="flex-1"
             ></md-linear-progress>
           </div>
           
