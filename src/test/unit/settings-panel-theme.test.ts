@@ -72,7 +72,7 @@ describe('SettingsPanel Theme', () => {
       expect(themeSelect).toBeTruthy();
       expect(themeSelect?.value).toBe('system');
 
-      const options = element.shadowRoot?.querySelectorAll('#theme-mode sl-option');
+      const options = element.shadowRoot?.querySelectorAll('#theme-mode md-select-option');
       expect(options?.length).toBe(3);
       
       const optionValues = Array.from(options || []).map(opt => opt.getAttribute('value'));
