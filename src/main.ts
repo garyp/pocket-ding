@@ -1,18 +1,8 @@
 import { css } from 'lit';
-import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
 import { ThemeService } from './services/theme-service';
-import { registerIcons } from './icons';
-import { getBasePath } from './utils/base-path';
 import './components/app-root';
 
-// Set Shoelace base path for bundled assets
-// Use shared base path utility function
-const basePath = getBasePath();
-const shoelaceBasePath = `${basePath}shoelace/`.replace(/\/+/g, '/'); // normalize double slashes
-setBasePath(shoelaceBasePath);
-
-// Register icons for tree shaking
-registerIcons();
+// Material Web Components will be imported directly in components as needed
 
 // Initialize theme service for dark mode support
 ThemeService.init();
@@ -43,13 +33,13 @@ const globalStyles = css`
   
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: var(--sl-color-neutral-50);
-    color: var(--sl-color-neutral-900);
+    background: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
     transition: background-color 0.2s ease, color 0.2s ease;
   }
   
@@ -75,23 +65,4 @@ const style = document.createElement('style');
 style.textContent = globalStyles.cssText;
 document.head.appendChild(style);
 
-// Apply CSS custom properties for consistent theming
-const theme = css`
-  :root {
-    --sl-color-primary-50: #eff6ff;
-    --sl-color-primary-100: #dbeafe;
-    --sl-color-primary-200: #bfdbfe;
-    --sl-color-primary-300: #93c5fd;
-    --sl-color-primary-400: #60a5fa;
-    --sl-color-primary-500: #3b82f6;
-    --sl-color-primary-600: #2563eb;
-    --sl-color-primary-700: #1d4ed8;
-    --sl-color-primary-800: #1e40af;
-    --sl-color-primary-900: #1e3a8a;
-    --sl-color-primary-950: #172554;
-  }
-`;
-
-const themeStyle = document.createElement('style');
-themeStyle.textContent = theme.cssText;
-document.head.appendChild(themeStyle);
+// Material Design tokens will be applied by the theme service and Material components
