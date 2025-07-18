@@ -226,9 +226,7 @@ describe('Secure Iframe Integration', () => {
       
       window.dispatchEvent(mockEvent);
       
-      const currentProgress = iframe.getCurrentProgress();
-      expect(currentProgress.progress).toBe(75);
-      expect(currentProgress.scrollPosition).toBe(300);
+      expect(iframe.scrollPosition).toBe(300);
     });
   });
 

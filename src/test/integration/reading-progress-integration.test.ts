@@ -172,8 +172,11 @@ describe('Reading Progress Integration Tests', () => {
       bubbles: true
     });
     
-    // Dispatch the event on the element to simulate iframe → BookmarkReader communication
-    element.dispatchEvent(progressEvent);
+    // Dispatch the event on the secure-iframe element to simulate iframe → BookmarkReader communication
+    const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
+    if (secureIframe) {
+      secureIframe.dispatchEvent(progressEvent);
+    }
 
     // Wait for the component to update
     await element.updateComplete;
@@ -213,8 +216,11 @@ describe('Reading Progress Integration Tests', () => {
       bubbles: true
     });
     
-    // Dispatch the event on the element to simulate iframe → BookmarkReader communication
-    element.dispatchEvent(progressEvent);
+    // Dispatch the event on the secure-iframe element to simulate iframe → BookmarkReader communication
+    const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
+    if (secureIframe) {
+      secureIframe.dispatchEvent(progressEvent);
+    }
 
     // Wait for the component to update
     await element.updateComplete;

@@ -133,14 +133,6 @@ export class SecureIframe extends LitElement {
   }
 
 
-  // Method to get current progress
-  public getCurrentProgress(): { progress: number; scrollPosition: number } {
-    return {
-      progress: this.readProgress,
-      scrollPosition: this.scrollPosition,
-    };
-  }
-
   private async processContent() {
     if (!this.content) {
       this.secureContent = '';
