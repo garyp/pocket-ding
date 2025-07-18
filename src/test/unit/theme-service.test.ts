@@ -104,8 +104,8 @@ describe('ThemeService', () => {
     it('should set light theme', async () => {
       ThemeService.setTheme('light');
       
-      // Wait for theme to be applied
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for theme to be applied - needs more time for async import
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('theme-mode', 'light');
       expect(document.documentElement.className).toBe('light');
@@ -118,7 +118,7 @@ describe('ThemeService', () => {
       ThemeService.setTheme('dark');
       
       // Wait for theme to be applied - needs more time for async import
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('theme-mode', 'dark');
       expect(document.documentElement.className).toBe('dark');

@@ -134,7 +134,7 @@ describe('Reading Progress Integration Tests', () => {
   };
 
   const getProgressBar = (): Element | null => {
-    return element.shadowRoot?.querySelector('sl-progress-bar') || null;
+    return element.shadowRoot?.querySelector('md-linear-progress') || null;
   };
 
   const getContentElement = (): HTMLElement | null => {
@@ -320,13 +320,13 @@ describe('Reading Progress Integration Tests', () => {
       await simulateScroll(180, 1000, 400); // 180/(1000-400) = 30%
       await element.updateComplete;
       
-      expect(progressBar?.getAttribute('value')).toBe('30');
+      expect((progressBar as any)?.value).toBe(0.3);
 
       // Test at 60% scroll  
       await simulateScroll(360, 1000, 400); // 360/(1000-400) = 60%
       await element.updateComplete;
       
-      expect(progressBar?.getAttribute('value')).toBe('60');
+      expect((progressBar as any)?.value).toBe(0.6);
     });
 
     it('should handle rapid scrolling without breaking', async () => {
@@ -640,7 +640,7 @@ describe('Reading Progress Integration Tests', () => {
       expect(getProgressText()).toContain('40% read');
 
       // Find the original button (currently not primary since we start in readability mode)
-      const originalButton = element.shadowRoot?.querySelector('.reading-mode-toggle sl-button:nth-child(2)') as HTMLElement;
+      const originalButton = element.shadowRoot?.querySelector('.reading-mode-toggle md-text-button') as HTMLElement;
       expect(originalButton?.textContent?.trim()).toBe('Original');
       
       originalButton?.click();
@@ -650,7 +650,7 @@ describe('Reading Progress Integration Tests', () => {
       expect(getProgressText()).toContain('40% read');
 
       // Switch back to readability mode
-      const readerButton = element.shadowRoot?.querySelector('.reading-mode-toggle sl-button:nth-child(1)') as HTMLElement;
+      const readerButton = element.shadowRoot?.querySelector('.reading-mode-toggle md-text-button') as HTMLElement;
       expect(readerButton?.textContent?.trim()).toBe('Reader');
       
       readerButton?.click();
