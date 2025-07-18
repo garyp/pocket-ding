@@ -11,7 +11,7 @@ export class ThemeService {
     this.mediaQuery = null;
     this.listeners = [];
     document.documentElement.className = '';
-    document.querySelectorAll('link[data-shoelace-theme]').forEach(link => link.remove());
+    document.querySelectorAll('link[data-material-theme]').forEach(link => link.remove());
   }
 
   static init() {
@@ -82,25 +82,26 @@ export class ThemeService {
     // Update document root class for global styles
     document.documentElement.className = resolvedTheme;
     
-    // Update Shoelace theme
-    this.updateShoelaceTheme(resolvedTheme);
+    // Update Material theme
+    this.updateMaterialTheme(resolvedTheme);
     
     // Notify listeners
     this.listeners.forEach(listener => listener(resolvedTheme));
   }
 
-  private static updateShoelaceTheme(theme: 'light' | 'dark') {
+  private static updateMaterialTheme(theme: 'light' | 'dark') {
     // Remove existing theme link
-    const existingLink = document.querySelector('link[data-shoelace-theme]');
+    const existingLink = document.querySelector('link[data-material-theme]');
     if (existingLink) {
       existingLink.remove();
     }
 
-    // Add new theme link using the shoelace base path
+    // Material Web Components uses CSS custom properties for theming
+    // Import the theme CSS file that defines Material Design tokens
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = `/shoelace/themes/${theme}.css`;
-    link.setAttribute('data-shoelace-theme', theme);
+    link.href = `/node_modules/material/demo/css/${theme}.css`;
+    link.setAttribute('data-material-theme', theme);
     document.head.appendChild(link);
   }
 }

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { materialTheme } from './src/vite-plugins/material-theme'
 
 export default defineConfig(({ command }) => {
   // Determine base path based on environment
@@ -14,6 +15,7 @@ export default defineConfig(({ command }) => {
     base,
     root: '.',
     plugins: [
+      materialTheme(),
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
