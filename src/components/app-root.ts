@@ -63,6 +63,11 @@ export class AppRoot extends LitElement {
       --md-text-button-label-text-color: var(--md-sys-color-on-primary);
     }
 
+    .header-actions md-text-button md-icon,
+    .app-header md-text-button md-icon {
+      color: var(--md-sys-color-on-primary);
+    }
+
     .app-content {
       flex: 1;
       overflow-y: auto;
