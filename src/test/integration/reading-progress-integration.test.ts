@@ -122,14 +122,7 @@ describe('Reading Progress Integration Tests', () => {
       return contentElement !== null;
     }, { timeout: 1000 });
 
-    // CRITICAL: Ensure scroll tracking is set up after content is rendered
-    // Force setupScrollTracking to be called again to ensure scroll listeners are attached
-    const setupMethod = (element as any).setupScrollTracking;
-    if (setupMethod) {
-      setupMethod.call(element);
-    }
-    
-    // Wait a bit more for scroll tracking to be established
+    // Wait a bit more for secure iframe to be set up
     await new Promise(resolve => setTimeout(resolve, 50));
 
     return element;
@@ -169,29 +162,18 @@ describe('Reading Progress Integration Tests', () => {
       configurable: true 
     });
 
-    // Update the scroll position property on the element
-    (element as any).scrollPosition = scrollTop;
-
-    // Try dispatching scroll event first (for integration testing)
-    const scrollEvent = new Event('scroll', { bubbles: true });
-    contentElement.dispatchEvent(scrollEvent);
-
-    // Give a moment for the scroll event to be processed
-    await new Promise(resolve => setTimeout(resolve, 5));
-    
-    // If scroll event didn't work (common in test environments), call updateReadProgress directly
-    // This ensures the test works regardless of scroll event handling differences
-    const currentProgress = element['readProgress'];
+    // Calculate progress based on scroll position
     const scrollableHeight = scrollHeight - clientHeight;
-    const expectedProgress = scrollableHeight <= 0 ? (scrollHeight > 0 ? 100 : 0) : Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100));
+    const progress = scrollableHeight <= 0 ? (scrollHeight > 0 ? 100 : 0) : Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100));
     
-    // If progress didn't update from scroll event, call updateReadProgress directly
-    if (Math.abs(currentProgress - expectedProgress) > 1) {
-      const updateMethod = (element as any).updateReadProgress;
-      if (updateMethod) {
-        updateMethod.call(element);
-      }
-    }
+    // Dispatch progress-update event to simulate iframe communication
+    const progressEvent = new CustomEvent('progress-update', {
+      detail: { progress, scrollPosition: scrollTop },
+      bubbles: true
+    });
+    
+    // Dispatch the event on the element to simulate iframe → BookmarkReader communication
+    element.dispatchEvent(progressEvent);
 
     // Wait for the component to update
     await element.updateComplete;
@@ -221,14 +203,18 @@ describe('Reading Progress Integration Tests', () => {
       configurable: true 
     });
 
-    // Update the scroll position property directly
-    (element as any).scrollPosition = scrollTop;
-
-    // Directly call the internal updateReadProgress method (for isolated testing)
-    const updateMethod = (element as any).updateReadProgress;
-    if (updateMethod) {
-      updateMethod.call(element);
-    }
+    // Calculate progress based on scroll position
+    const scrollableHeight = scrollHeight - clientHeight;
+    const progress = scrollableHeight <= 0 ? (scrollHeight > 0 ? 100 : 0) : Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100));
+    
+    // Dispatch progress-update event to simulate iframe communication
+    const progressEvent = new CustomEvent('progress-update', {
+      detail: { progress, scrollPosition: scrollTop },
+      bubbles: true
+    });
+    
+    // Dispatch the event on the element to simulate iframe → BookmarkReader communication
+    element.dispatchEvent(progressEvent);
 
     // Wait for the component to update
     await element.updateComplete;
