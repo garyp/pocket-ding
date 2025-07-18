@@ -17,6 +17,13 @@ export class BookmarkListContainer extends LitElement {
     syncedBookmarkIds: new Set<number>(),
     faviconCache: new Map<number, string>(),
     bookmarksWithAssets: new Set<number>(),
+    pagination: {
+      currentPage: 1,
+      pageSize: 25,
+      totalCount: 0,
+      totalPages: 1,
+      filter: 'all'
+    }
   };
 
   private syncService: SyncService | null = null;
@@ -108,25 +115,7 @@ export class BookmarkListContainer extends LitElement {
         isLoading: true,
       };
 
-      const bookmarks = await DatabaseService.getAllBookmarks();
-      
-      // Check which bookmarks have assets
-      const bookmarksWithAssets = new Set<number>();
-      for (const bookmark of bookmarks) {
-        const assets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmark.id);
-        if (assets.length > 0) {
-          bookmarksWithAssets.add(bookmark.id);
-        }
-      }
-
-      this.containerState = {
-        ...this.containerState,
-        bookmarks,
-        isLoading: false,
-        bookmarksWithAssets,
-      };
-
-      console.log(`Local bookmarks loaded: ${bookmarks.length} total, ${bookmarks.filter(b => b.is_archived).length} archived`);
+      await this.loadBookmarksPage(this.containerState.pagination.filter, this.containerState.pagination.currentPage);
       
       // Check for ongoing sync
       this.checkOngoingSync();
@@ -135,6 +124,55 @@ export class BookmarkListContainer extends LitElement {
       this.initializeFavicons();
     } catch (error) {
       console.error('Failed to load bookmarks:', error);
+      this.containerState = {
+        ...this.containerState,
+        isLoading: false,
+      };
+    }
+  }
+
+  private async loadBookmarksPage(filter: 'all' | 'unread' | 'archived', page: number) {
+    try {
+      const pageSize = this.containerState.pagination.pageSize;
+      
+      // Get paginated bookmarks and total count
+      const [bookmarks, totalCount] = await Promise.all([
+        DatabaseService.getBookmarksPaginated(filter, page, pageSize),
+        DatabaseService.getBookmarkCount(filter)
+      ]);
+      
+      // Get asset information for current page bookmarks
+      const bookmarkIds = bookmarks.map(b => b.id);
+      const assetCounts = await DatabaseService.getBookmarksWithAssetCounts(bookmarkIds);
+      
+      // Convert to Set for compatibility with existing code
+      const bookmarksWithAssets = new Set<number>();
+      assetCounts.forEach((hasAssets, bookmarkId) => {
+        if (hasAssets) {
+          bookmarksWithAssets.add(bookmarkId);
+        }
+      });
+
+      const totalPages = Math.ceil(totalCount / pageSize);
+
+      this.containerState = {
+        ...this.containerState,
+        bookmarks,
+        isLoading: false,
+        bookmarksWithAssets,
+        pagination: {
+          ...this.containerState.pagination,
+          currentPage: page,
+          totalCount,
+          totalPages,
+          filter
+        }
+      };
+
+      console.log(`Loaded page ${page} of ${totalPages} (${bookmarks.length} bookmarks, ${totalCount} total for filter '${filter}')`);
+      
+    } catch (error) {
+      console.error('Failed to load bookmarks page:', error);
       this.containerState = {
         ...this.containerState,
         isLoading: false,
@@ -203,8 +241,8 @@ export class BookmarkListContainer extends LitElement {
       syncTotal: 0,
     };
 
-    // Reload bookmarks after sync
-    await this.loadBookmarks();
+    // Reload current page after sync
+    await this.loadBookmarksPage(this.containerState.pagination.filter, this.containerState.pagination.currentPage);
     
     // Clear synced highlights after delay
     setTimeout(() => {
@@ -329,6 +367,19 @@ export class BookmarkListContainer extends LitElement {
     });
   };
 
+  private handlePageChange = async (page: number) => {
+    if (page !== this.containerState.pagination.currentPage) {
+      await this.loadBookmarksPage(this.containerState.pagination.filter, page);
+    }
+  };
+
+  private handleFilterChange = async (filter: 'all' | 'unread' | 'archived') => {
+    if (filter !== this.containerState.pagination.filter) {
+      // Reset to page 1 when changing filters
+      await this.loadBookmarksPage(filter, 1);
+    }
+  };
+
   override render() {
     return html`
       <bookmark-list
@@ -344,10 +395,13 @@ export class BookmarkListContainer extends LitElement {
           faviconCache: this.containerState.faviconCache,
           bookmarksWithAssets: this.containerState.bookmarksWithAssets,
         }}
+        .paginationState=${this.containerState.pagination}
         .onBookmarkSelect=${this.handleBookmarkSelect}
         .onSyncRequested=${this.handleSyncRequested}
         .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
         .onVisibilityChanged=${this.handleVisibilityChanged}
+        .onPageChange=${this.handlePageChange}
+        .onFilterChange=${this.handleFilterChange}
       ></bookmark-list>
     `;
   }
