@@ -34,6 +34,7 @@ export class BookmarkReader extends LitElement {
   private progressSaveTimeout: number | null = null;
   private readMarkTimeout: number | null = null;
   private hasBeenMarkedAsRead = false;
+  private isRestoringPosition = false;
   private secureIframe: any = null;
 
   static override styles = css`
@@ -478,7 +479,7 @@ export class BookmarkReader extends LitElement {
     this.scheduleProgressSave();
   }
 
-  private handleIframeContentLoaded(event: CustomEvent) {
+  private handleIframeContentLoaded(_event: CustomEvent) {
     // Content loaded in iframe, no additional action needed
     console.log('Iframe content loaded successfully');
   }
@@ -488,33 +489,6 @@ export class BookmarkReader extends LitElement {
     console.error('Iframe content error:', error);
   }
 
-  // Legacy methods for test compatibility
-  private setupScrollTracking() {
-    // This is now handled by the secure iframe
-    // This method exists for test compatibility
-  }
-
-  private updateReadProgress() {
-    // Calculate progress based on current scroll position
-    // This method exists for test compatibility with tests that call it directly
-    const contentElement = this.shadowRoot?.querySelector('.reader-content') as HTMLElement;
-    if (contentElement) {
-      const scrollTop = contentElement.scrollTop;
-      const scrollHeight = contentElement.scrollHeight;
-      const clientHeight = contentElement.clientHeight;
-      const maxScroll = scrollHeight - clientHeight;
-      
-      if (maxScroll <= 0) {
-        this.readProgress = scrollHeight > 0 ? 100 : 0;
-      } else {
-        const progress = (scrollTop / maxScroll) * 100;
-        this.readProgress = Math.min(100, Math.max(0, progress));
-      }
-      
-      this.scheduleProgressSave();
-      this.requestUpdate();
-    }
-  }
 
   private scheduleProgressSave() {
     if (this.progressSaveTimeout) {
