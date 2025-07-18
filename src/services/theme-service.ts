@@ -4,12 +4,14 @@ export class ThemeService {
   private static currentTheme: ThemeMode = 'system';
   private static mediaQuery: MediaQueryList | null = null;
   private static listeners: ((theme: 'light' | 'dark') => void)[] = [];
+  private static updateInProgress: Promise<void> | null = null;
 
   // For testing purposes - reset the service state
   static reset() {
     this.currentTheme = 'system';
     this.mediaQuery = null;
     this.listeners = [];
+    this.updateInProgress = null;
     document.documentElement.className = '';
     document.querySelectorAll('style[data-material-theme]').forEach(style => style.remove());
   }
@@ -82,19 +84,21 @@ export class ThemeService {
     // Update document root class for global styles
     document.documentElement.className = resolvedTheme;
     
-    // Update Material theme (async)
-    this.updateMaterialTheme(resolvedTheme);
+    // Update Material theme (async) - wait for previous update to complete
+    if (this.updateInProgress) {
+      this.updateInProgress = this.updateInProgress.then(() => this.updateMaterialTheme(resolvedTheme));
+    } else {
+      this.updateInProgress = this.updateMaterialTheme(resolvedTheme);
+    }
     
     // Notify listeners
     this.listeners.forEach(listener => listener(resolvedTheme));
   }
 
   private static async updateMaterialTheme(theme: 'light' | 'dark') {
-    // Remove existing theme styles
-    const existingStyle = document.querySelector('style[data-material-theme]');
-    if (existingStyle) {
-      existingStyle.remove();
-    }
+    // Remove existing theme styles (remove all to handle race conditions)
+    const existingStyles = document.querySelectorAll('style[data-material-theme]');
+    existingStyles.forEach(style => style.remove());
 
     // Import the theme CSS dynamically
     try {

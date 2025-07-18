@@ -56,12 +56,14 @@ describe('ThemeService', () => {
     });
 
     it('should initialize with dark theme when system prefers dark', async () => {
+      // Set up mock to prefer dark mode BEFORE init is called
       mockMediaQuery.matches = true;
+      mockMatchMedia.mockReturnValue(mockMediaQuery);
       
       ThemeService.init();
       
       // Wait for theme to be applied - needs more time for async import
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       expect(document.documentElement.className).toBe('dark');
       const themeStyle = document.querySelector('style[data-material-theme]');
@@ -107,7 +109,7 @@ describe('ThemeService', () => {
       ThemeService.setTheme('dark');
       
       // Wait for theme to be applied - needs more time for async import
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('theme-mode', 'dark');
       expect(document.documentElement.className).toBe('dark');
