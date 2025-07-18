@@ -2,8 +2,7 @@ import { css } from 'lit';
 import { ThemeService } from './services/theme-service';
 import './components/app-root';
 
-// Import Material Icons font for offline bundling
-import '@fontsource/material-icons';
+// Material Symbols font loaded via Google Fonts link in index.html
 
 // Material Web Components will be imported directly in components as needed
 

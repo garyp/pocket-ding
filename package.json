@@ -30,7 +30,6 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@fontsource/material-icons": "^5.2.5",
     "@lit/reactive-element": "^2.1.0",
     "@material/web": "^2.3.0",
     "@mozilla/readability": "^0.6.0",
