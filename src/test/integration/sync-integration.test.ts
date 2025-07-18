@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { AppSettings } from '../../types';
 
 // Setup DOM environment
-import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
-setBasePath('/node_modules/@shoelace-style/shoelace/dist/');
+// Material Web Components doesn't require base path setup
 
 // Mock the SyncService
 vi.mock('../../services/sync-service', () => ({
@@ -71,7 +70,7 @@ describe('Settings Panel - Sync Integration', () => {
   describe('Full Sync Button', () => {
     it('should render full sync button', async () => {
       // Button should exist (using a more flexible approach)
-      const buttons = settingsPanel.shadowRoot.querySelectorAll('sl-button');
+      const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
       const fullSyncButton = Array.from(buttons).find((btn: any) => 
         btn.textContent?.includes('Force Full Sync') || btn.textContent?.includes('Syncing')
       );
@@ -83,7 +82,7 @@ describe('Settings Panel - Sync Integration', () => {
       settingsPanel.settings = mockSettings;
       await settingsPanel.updateComplete;
       
-      const buttons = settingsPanel.shadowRoot.querySelectorAll('sl-button');
+      const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
       const fullSyncButton = Array.from(buttons).find((btn: any) => 
         btn.textContent?.includes('Force Full Sync')
       ) as any;
@@ -95,7 +94,7 @@ describe('Settings Panel - Sync Integration', () => {
       settingsPanel.settings = null;
       await settingsPanel.updateComplete;
       
-      const buttons = settingsPanel.shadowRoot.querySelectorAll('sl-button');
+      const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
       const fullSyncButton = Array.from(buttons).find((btn: any) => 
         btn.textContent?.includes('Force Full Sync')
       ) as any;
@@ -261,7 +260,7 @@ describe('Settings Panel - Sync Integration', () => {
         await new Promise(resolve => setTimeout(resolve, 10));
         await settingsPanel.updateComplete;
         
-        const progressBar = settingsPanel.shadowRoot.querySelector('sl-progress-bar');
+        const progressBar = settingsPanel.shadowRoot.querySelector('md-linear-progress');
         expect(progressBar).toBeTruthy();
         
         const progressText = settingsPanel.shadowRoot.querySelector('.sync-progress-text');
@@ -283,7 +282,7 @@ describe('Settings Panel - Sync Integration', () => {
         await settingsPanel.handleFullSync();
         await settingsPanel.updateComplete;
         
-        const progressBar = settingsPanel.shadowRoot.querySelector('sl-progress-bar');
+        const progressBar = settingsPanel.shadowRoot.querySelector('md-linear-progress');
         expect(progressBar).toBeFalsy();
         
         expect(settingsPanel.isFullSyncing).toBe(false);

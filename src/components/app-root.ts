@@ -5,9 +5,10 @@ import { ThemeService } from '../services/theme-service';
 import { configureFetchHelper } from '../utils/fetch-helper';
 import { getBasePath } from '../utils/base-path';
 import type { AppSettings } from '../types';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
+import '@material/web/button/filled-button.js';
+import '@material/web/button/text-button.js';
+import '@material/web/icon/icon.js';
+import '@material/web/progress/circular-progress.js';
 import './bookmark-list-container';
 import './bookmark-reader';
 import './settings-panel';
@@ -23,8 +24,8 @@ export class AppRoot extends LitElement {
     :host {
       display: block;
       height: 100vh;
-      background: var(--sl-color-neutral-50);
-      font-family: var(--sl-font-sans);
+      background: var(--md-sys-color-surface);
+      font-family: 'Roboto', sans-serif;
     }
 
     .app-container {
@@ -34,8 +35,8 @@ export class AppRoot extends LitElement {
     }
 
     .app-header {
-      background: var(--sl-color-primary-600);
-      color: white;
+      background: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
       padding: 1rem;
       display: flex;
       align-items: center;
@@ -54,20 +55,12 @@ export class AppRoot extends LitElement {
       gap: 0.5rem;
     }
 
-    .header-actions sl-button {
-      color: white;
+    .header-actions md-text-button {
+      --md-text-button-label-text-color: var(--md-sys-color-on-primary);
     }
 
-    .header-actions sl-button::part(base) {
-      color: white;
-    }
-
-    .app-header sl-button {
-      color: white;
-    }
-
-    .app-header sl-button::part(base) {
-      color: white;
+    .app-header md-text-button {
+      --md-text-button-label-text-color: var(--md-sys-color-on-primary);
     }
 
     .app-content {
@@ -96,19 +89,19 @@ export class AppRoot extends LitElement {
     }
 
     .setup-card {
-      background: white;
-      border-radius: 8px;
+      background: var(--md-sys-color-surface-container);
+      border-radius: 12px;
       padding: 2rem;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
     .setup-card h2 {
       margin-top: 0;
-      color: var(--sl-color-neutral-700);
+      color: var(--md-sys-color-on-surface);
     }
 
     .setup-card p {
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       margin-bottom: 1.5rem;
     }
 
@@ -120,19 +113,19 @@ export class AppRoot extends LitElement {
     }
 
     .not-found-content {
-      background: white;
-      border-radius: 8px;
+      background: var(--md-sys-color-surface-container);
+      border-radius: 12px;
       padding: 2rem;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
     .not-found-content h2 {
       margin-top: 0;
-      color: var(--sl-color-neutral-700);
+      color: var(--md-sys-color-on-surface);
     }
 
     .not-found-content p {
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       margin-bottom: 1.5rem;
     }
 
@@ -145,8 +138,8 @@ export class AppRoot extends LitElement {
         font-size: 1.1rem;
       }
       
-      .header-actions sl-button {
-        --sl-button-font-size-medium: 0.875rem;
+      .header-actions md-text-button {
+        font-size: 0.875rem;
       }
     }
   `;
@@ -341,13 +334,11 @@ export class AppRoot extends LitElement {
       <div class="app-header">
         <div style="display: flex; align-items: center; gap: 0.5rem;">
           ${showBack ? html`
-            <sl-button
-              variant="text"
-              size="medium"
+            <md-text-button
               @click=${this.handleBackClick}
             >
-              <sl-icon name="arrow-left"></sl-icon>
-            </sl-button>
+              <md-icon slot="icon">arrow_back</md-icon>
+            </md-text-button>
           ` : ''}
           <h1 class="app-title">
             ${this.currentView === 'bookmarks' ? 'My Bookmarks' : 
@@ -358,22 +349,18 @@ export class AppRoot extends LitElement {
         
         <div class="header-actions">
           ${this.currentView === 'bookmarks' && this.settings ? html`
-            <sl-button
-              variant="text"
-              size="medium"
+            <md-text-button
               @click=${this.handleSyncClick}
             >
-              <sl-icon name="arrow-clockwise"></sl-icon>
-            </sl-button>
+              <md-icon slot="icon">sync</md-icon>
+            </md-text-button>
           ` : ''}
           ${this.currentView === 'bookmarks' ? html`
-            <sl-button
-              variant="text"
-              size="medium"
+            <md-text-button
               @click=${this.handleSettingsClick}
             >
-              <sl-icon name="gear"></sl-icon>
-            </sl-button>
+              <md-icon slot="icon">settings</md-icon>
+            </md-text-button>
           ` : ''}
         </div>
       </div>
@@ -384,7 +371,7 @@ export class AppRoot extends LitElement {
     if (this.isLoading) {
       return html`
         <div class="loading-container">
-          <sl-spinner style="font-size: 2rem;"></sl-spinner>
+          <md-circular-progress indeterminate style="width: 48px; height: 48px;"></md-circular-progress>
           <p>Loading...</p>
         </div>
       `;
@@ -398,12 +385,11 @@ export class AppRoot extends LitElement {
               <div class="setup-card">
                 <h2>Welcome to Pocket Ding</h2>
                 <p>To get started, you need to configure your Linkding server connection.</p>
-                <sl-button
-                  variant="primary"
+                <md-filled-button
                   @click=${this.handleSettingsClick}
                 >
                   Configure Settings
-                </sl-button>
+                </md-filled-button>
               </div>
             </div>
           `;
@@ -433,15 +419,14 @@ export class AppRoot extends LitElement {
             <div class="not-found-content">
               <h2>404 - Page Not Found</h2>
               <p>The page you're looking for doesn't exist.</p>
-              <sl-button
-                variant="primary"
+              <md-filled-button
                 @click=${() => {
                   this.currentView = 'bookmarks';
                   this.updateUrl('bookmarks');
                 }}
               >
                 Go to Bookmarks
-              </sl-button>
+              </md-filled-button>
             </div>
           </div>
         `;

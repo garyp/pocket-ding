@@ -261,8 +261,8 @@ describe('BookmarkReader Dark Mode', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      const iconElement = element.shadowRoot?.querySelector('sl-dropdown sl-button[slot="trigger"] sl-icon');
-      expect(iconElement?.getAttribute('name')).toBe('sun-fill');
+      const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
+      expect(iconElement?.textContent).toBe('light_mode');
     });
 
     it('should render correct icon for dark mode', async () => {
@@ -274,8 +274,8 @@ describe('BookmarkReader Dark Mode', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      const iconElement = element.shadowRoot?.querySelector('sl-dropdown sl-button[slot="trigger"] sl-icon');
-      expect(iconElement?.getAttribute('name')).toBe('moon-fill');
+      const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
+      expect(iconElement?.textContent).toBe('dark_mode');
     });
 
     it('should render correct icon for dark override', async () => {
@@ -291,11 +291,11 @@ describe('BookmarkReader Dark Mode', () => {
       element['updateReaderTheme']();
       await element.updateComplete;
 
-      const iconElement = element.shadowRoot?.querySelector('sl-dropdown sl-button[slot="trigger"] sl-icon');
-      expect(iconElement?.getAttribute('name')).toBe('moon-fill');
+      const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
+      expect(iconElement?.textContent).toBe('dark_mode');
     });
 
-    it('should render correct menu item text for no override', async () => {
+    it('should render correct button title for no override', async () => {
       element['systemTheme'] = 'light';
       element['darkModeOverride'] = null;
       element.bookmarkId = 1;
@@ -304,11 +304,11 @@ describe('BookmarkReader Dark Mode', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      const menuItem = element.shadowRoot?.querySelector('sl-menu-item');
-      expect(menuItem?.textContent?.trim()).toContain('Follow System');
+      const button = element.shadowRoot?.querySelector('md-text-button[title]');
+      expect(button?.getAttribute('title')).toBe('Follow System');
     });
 
-    it('should render correct menu item text for dark override', async () => {
+    it('should render correct button title for dark override', async () => {
       element['systemTheme'] = 'light';
       element.bookmarkId = 1;
       await element.updateComplete;
@@ -320,11 +320,11 @@ describe('BookmarkReader Dark Mode', () => {
       element['darkModeOverride'] = 'dark';
       await element.updateComplete;
 
-      const menuItem = element.shadowRoot?.querySelector('sl-menu-item');
-      expect(menuItem?.textContent?.trim()).toContain('Dark Mode');
+      const button = element.shadowRoot?.querySelector('md-text-button[title]');
+      expect(button?.getAttribute('title')).toBe('Dark Mode');
     });
 
-    it('should render correct menu item text for light override', async () => {
+    it('should render correct button title for light override', async () => {
       element['systemTheme'] = 'dark';
       element.bookmarkId = 1;
       await element.updateComplete;
@@ -336,8 +336,8 @@ describe('BookmarkReader Dark Mode', () => {
       element['darkModeOverride'] = 'light';
       await element.updateComplete;
 
-      const menuItem = element.shadowRoot?.querySelector('sl-menu-item');
-      expect(menuItem?.textContent?.trim()).toContain('Light Mode');
+      const button = element.shadowRoot?.querySelector('md-text-button[title]');
+      expect(button?.getAttribute('title')).toBe('Light Mode');
     });
   });
 

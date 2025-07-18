@@ -49,9 +49,9 @@ export class SecureIframe extends LitElement {
     .error-container {
       padding: 2rem;
       text-align: center;
-      color: var(--sl-color-danger-600);
-      background: var(--sl-color-danger-50);
-      border: 1px solid var(--sl-color-danger-200);
+      color: var(--md-sys-color-on-error-container);
+      background: var(--md-sys-color-error-container);
+      border: 1px solid var(--md-sys-color-error);
       border-radius: 8px;
       margin: 1rem;
     }

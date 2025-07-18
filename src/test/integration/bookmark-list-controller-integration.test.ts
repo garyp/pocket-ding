@@ -123,7 +123,7 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // User changes filter to 'unread'
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       unreadBtn.click();
       await element.updateComplete;
@@ -151,9 +151,9 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Verify filter state was restored
-      const newButtons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const newButtons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
       const restoredUnreadBtn = newButtons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
-      expect(restoredUnreadBtn?.getAttribute('variant')).toBe('primary');
+      expect(restoredUnreadBtn?.tagName.toLowerCase()).toBe('md-filled-button');
 
       // Verify content is still filtered correctly
       bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');
@@ -172,7 +172,7 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Test filter sequence: all -> unread -> archived -> all
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       const archivedBtn = buttons.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
@@ -213,7 +213,7 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Set filter to unread
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       unreadBtn.click();
       await element.updateComplete;
@@ -246,9 +246,9 @@ describe('BookmarkList Controller Integration', () => {
       expect(bookmarkCards?.length).toBe(2); // Both unread bookmarks
 
       // Filter button should still be active
-      const currentButtons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const currentButtons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
       const currentUnreadBtn = currentButtons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
-      expect(currentUnreadBtn?.getAttribute('variant')).toBe('primary');
+      expect(currentUnreadBtn?.tagName.toLowerCase()).toBe('md-filled-button');
     });
 
     it('should handle storage errors and continue functioning', async () => {
@@ -270,7 +270,7 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Component should still function despite storage errors
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       
       unreadBtn.click();
@@ -302,9 +302,9 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Should fall back to default state
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
-      expect(allBtn?.getAttribute('variant')).toBe('primary');
+      expect(allBtn?.tagName.toLowerCase()).toBe('md-filled-button');
 
       // Should display all non-archived bookmarks
       const bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');

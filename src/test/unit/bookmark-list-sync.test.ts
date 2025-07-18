@@ -216,8 +216,8 @@ describe('BookmarkListContainer Background Sync', () => {
       const progressText = presentationComponent?.shadowRoot?.querySelector('.sync-progress-text span');
       expect(progressText?.textContent).toContain('3/10');
 
-      const progressBar = presentationComponent?.shadowRoot?.querySelector('sl-progress-bar');
-      expect(progressBar?.getAttribute('value')).toBe('30');
+      const progressBar = presentationComponent?.shadowRoot?.querySelector('md-linear-progress');
+      expect((progressBar as any)?.value).toBe(0.3);
     });
   });
 
@@ -325,7 +325,7 @@ describe('BookmarkListContainer Background Sync', () => {
 
       // Check for cached badge by looking for download icon
       const presentationComponent = getPresentationComponent();
-      const downloadIcon = presentationComponent?.shadowRoot?.querySelector('sl-icon[name="download"]');
+      const downloadIcon = [...(presentationComponent?.shadowRoot?.querySelectorAll('md-icon') || [])].find(icon => icon.textContent === 'download');
       expect(downloadIcon).toBeTruthy();
     });
   });

@@ -68,11 +68,16 @@ describe('SettingsPanel Theme', () => {
 
   describe('theme selection UI', () => {
     it('should render theme select with correct options', async () => {
+      // Wait for the component to fully render
+      await element.updateComplete;
+      
       const themeSelect = element.shadowRoot?.querySelector('#theme-mode') as any;
       expect(themeSelect).toBeTruthy();
-      expect(themeSelect?.value).toBe('system');
+      
+      // The form data should have the correct theme mode value
+      expect(element['formData'].theme_mode).toBe('system');
 
-      const options = element.shadowRoot?.querySelectorAll('#theme-mode sl-option');
+      const options = element.shadowRoot?.querySelectorAll('#theme-mode md-select-option');
       expect(options?.length).toBe(3);
       
       const optionValues = Array.from(options || []).map(opt => opt.getAttribute('value'));

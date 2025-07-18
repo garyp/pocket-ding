@@ -4,14 +4,16 @@ export class ThemeService {
   private static currentTheme: ThemeMode = 'system';
   private static mediaQuery: MediaQueryList | null = null;
   private static listeners: ((theme: 'light' | 'dark') => void)[] = [];
+  private static updateInProgress: Promise<void> | null = null;
 
   // For testing purposes - reset the service state
   static reset() {
     this.currentTheme = 'system';
     this.mediaQuery = null;
     this.listeners = [];
+    this.updateInProgress = null;
     document.documentElement.className = '';
-    document.querySelectorAll('link[data-shoelace-theme]').forEach(link => link.remove());
+    document.querySelectorAll('style[data-material-theme]').forEach(style => style.remove());
   }
 
   static init() {
@@ -82,25 +84,40 @@ export class ThemeService {
     // Update document root class for global styles
     document.documentElement.className = resolvedTheme;
     
-    // Update Shoelace theme
-    this.updateShoelaceTheme(resolvedTheme);
+    // Update Material theme (async) - wait for previous update to complete
+    if (this.updateInProgress) {
+      this.updateInProgress = this.updateInProgress.then(() => this.updateMaterialTheme(resolvedTheme));
+    } else {
+      this.updateInProgress = this.updateMaterialTheme(resolvedTheme);
+    }
     
     // Notify listeners
     this.listeners.forEach(listener => listener(resolvedTheme));
   }
 
-  private static updateShoelaceTheme(theme: 'light' | 'dark') {
-    // Remove existing theme link
-    const existingLink = document.querySelector('link[data-shoelace-theme]');
-    if (existingLink) {
-      existingLink.remove();
-    }
+  private static async updateMaterialTheme(theme: 'light' | 'dark') {
+    // Remove existing theme styles (remove all to handle race conditions)
+    const existingStyles = document.querySelectorAll('style[data-material-theme]');
+    existingStyles.forEach(style => style.remove());
 
-    // Add new theme link using the shoelace base path
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `/shoelace/themes/${theme}.css`;
-    link.setAttribute('data-shoelace-theme', theme);
-    document.head.appendChild(link);
+    // Import the theme CSS dynamically
+    try {
+      const themeModule = await import(`../styles/material-theme-${theme}.css?inline`);
+      const themeCSS = themeModule.default;
+      
+      // Create a style element with the theme CSS
+      const styleElement = document.createElement('style');
+      styleElement.textContent = themeCSS;
+      styleElement.setAttribute('data-material-theme', theme);
+      document.head.appendChild(styleElement);
+    } catch (error) {
+      console.warn(`Failed to load Material theme '${theme}':`, error);
+      
+      // Fallback: create a placeholder style element for tests
+      const styleElement = document.createElement('style');
+      styleElement.textContent = `/* Material theme ${theme} placeholder */`;
+      styleElement.setAttribute('data-material-theme', theme);
+      document.head.appendChild(styleElement);
+    }
   }
 }

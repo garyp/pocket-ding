@@ -88,10 +88,10 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Should default to 'all' filter
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       
-      expect(allBtn?.getAttribute('variant')).toBe('primary');
+      expect(allBtn?.tagName.toLowerCase()).toBe('md-filled-button');
     });
 
     it('should restore previously saved filter state', async () => {
@@ -106,12 +106,12 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Should restore 'unread' filter
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       
-      expect(unreadBtn?.getAttribute('variant')).toBe('primary');
-      expect(allBtn?.getAttribute('variant')).toBe('default');
+      expect(unreadBtn?.tagName.toLowerCase()).toBe('md-filled-button');
+      expect(allBtn?.tagName.toLowerCase()).toBe('md-text-button');
     });
 
     it('should persist filter changes through the controller', async () => {
@@ -120,7 +120,7 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Click archived filter
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const archivedBtn = buttons.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
       
       expect(archivedBtn).toBeTruthy();
@@ -146,10 +146,10 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Should fall back to default 'all' filter
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       
-      expect(allBtn?.getAttribute('variant')).toBe('primary');
+      expect(allBtn?.tagName.toLowerCase()).toBe('md-filled-button');
     });
 
     it('should handle storage errors gracefully', async () => {
@@ -170,9 +170,9 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Try to change filter (this should trigger save)
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
-      unreadBtn.click();
+      unreadBtn?.click();
       await element.updateComplete;
 
       // Should have logged warning but not crashed
@@ -266,9 +266,9 @@ describe('BookmarkList Controller Integration', () => {
       await element1.updateComplete;
 
       // Change filter
-      const buttons1 = Array.from(element1.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons1 = Array.from(element1.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const archivedBtn1 = buttons1.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
-      archivedBtn1.click();
+      archivedBtn1?.click();
       await element1.updateComplete;
 
       // Set scroll position with event methods
@@ -288,9 +288,9 @@ describe('BookmarkList Controller Integration', () => {
       await element2.updateComplete;
 
       // Verify state was restored
-      const buttons2 = Array.from(element2.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons2 = Array.from(element2.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const archivedBtn2 = buttons2.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
-      expect(archivedBtn2?.getAttribute('variant')).toBe('primary');
+      expect(archivedBtn2?.tagName.toLowerCase()).toBe('md-filled-button');
 
       // Verify scroll position in localStorage
       const savedData = localStorage.getItem('bookmark-list-state');
@@ -368,7 +368,7 @@ describe('BookmarkList Controller Integration', () => {
       await element.updateComplete;
 
       // Check filter button counts
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('sl-button') || []);
+      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       const archivedBtn = buttons.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;

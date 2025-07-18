@@ -22,7 +22,7 @@ Pocket Ding is a Progressive Web App (PWA) that provides an offline reading expe
 - **Framework**: Lit (Web Components)
 - **Build Tool**: Vite
 - **TypeScript**: Strict mode enabled with experimental decorators
-- **UI Components**: Shoelace Design System
+- **UI Components**: Material Web Components (Material Design 3)
 - **Database**: Dexie (IndexedDB wrapper)
 - **Content Processing**: Mozilla Readability
 - **Testing**: Vitest with Happy DOM environment
@@ -67,7 +67,7 @@ All tests should pass before considering features complete. The CI expects zero 
 
 ## Development Notes
 
-- Uses Shoelace CDN for UI components with base path configuration
+- Uses Material Web Components for UI with Material Design 3 styling
 - Implements strict TypeScript with unused parameter/variable checking
 - Service worker registration for PWA functionality
 - CSS custom properties for theming consistency
@@ -86,23 +86,23 @@ All tests should pass before considering features complete. The CI expects zero 
 - Both must pass before committing changes
 - CI will fail if either tests or build fail
 
-### Shoelace Icons
+### Material Icons
 
-**IMPORTANT**: Icons must be explicitly registered to be included in builds.
+**IMPORTANT**: Material Web Components uses Material Icons with simpler integration.
 
-When adding new Shoelace icons:
-1. Add the icon name to the `REQUIRED_ICONS` array in `src/icons/index.ts`
-2. Use the icon in your component: `<sl-icon name="icon-name"></sl-icon>`
-3. The build system will automatically copy the icon to the output
+When adding new Material icons:
+1. Use the icon in your component: `<md-icon>icon_name</md-icon>`
+2. Icons are loaded from Google Material Icons font
+3. No explicit registration required
 
-The build system does NOT automatically scan for icons. All icons must be explicitly registered in the `REQUIRED_ICONS` array. Find available icons at: https://shoelace.style/components/icon
+Find available icons at: https://fonts.google.com/icons
 
 ### Dark Mode Support
 
 The application includes comprehensive dark mode support:
 - **System Detection**: Automatically follows system dark mode preference
 - **Per-Bookmark Override**: Users can override dark mode per bookmark in the reader
-- **Theme Service**: Manages global theme state and Shoelace CSS switching
+- **Theme Service**: Manages global theme state and Material Design theme switching
 - **Persistent Preferences**: Dark mode overrides are saved per bookmark
 
 ## Testing Requirements

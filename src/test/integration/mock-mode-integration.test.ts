@@ -3,8 +3,7 @@ import type { AppSettings } from '../../types';
 import { mockBookmarks, MOCK_URL } from '../../services/mock-data';
 
 // Setup DOM environment
-import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
-setBasePath('/node_modules/@shoelace-style/shoelace/dist/');
+// Material Web Components doesn't require base path setup
 
 // Mock DatabaseService to avoid actual database operations
 vi.mock('../../services/database', () => ({

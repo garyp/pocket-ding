@@ -72,7 +72,7 @@ describe('BookmarkList', () => {
       const loadingContainer = element.shadowRoot?.querySelector('.loading-container');
       expect(loadingContainer).toBeTruthy();
       
-      const spinner = element.shadowRoot?.querySelector('sl-spinner');
+      const spinner = element.shadowRoot?.querySelector('md-circular-progress');
       expect(spinner).toBeTruthy();
     });
 
@@ -109,9 +109,9 @@ describe('BookmarkList', () => {
       const syncProgress = element.shadowRoot?.querySelector('.sync-progress');
       expect(syncProgress).toBeTruthy();
       
-      const progressBar = element.shadowRoot?.querySelector('sl-progress-bar');
+      const progressBar = element.shadowRoot?.querySelector('md-linear-progress');
       expect(progressBar).toBeTruthy();
-      expect(progressBar?.getAttribute('value')).toBe('50');
+      expect((progressBar as any)?.value).toBe(0.5);
     });
 
     it('should show empty state when no bookmarks', async () => {
@@ -127,7 +127,7 @@ describe('BookmarkList', () => {
       const emptyState = element.shadowRoot?.querySelector('.empty-state');
       expect(emptyState).toBeTruthy();
       
-      const syncButton = element.shadowRoot?.querySelector('.empty-state sl-button');
+      const syncButton = element.shadowRoot?.querySelector('.empty-state md-filled-button');
       expect(syncButton).toBeTruthy();
     });
   });
@@ -165,7 +165,7 @@ describe('BookmarkList', () => {
       document.body.appendChild(element);
       await element.updateComplete;
       
-      const syncButton = element.shadowRoot?.querySelector('.empty-state sl-button');
+      const syncButton = element.shadowRoot?.querySelector('.empty-state md-filled-button');
       (syncButton as HTMLElement)?.click();
       
       expect(onSyncRequested).toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe('BookmarkList', () => {
       const tags = element.shadowRoot?.querySelectorAll('.bookmark-tags');
       expect(tags).toHaveLength(2);
       
-      const firstBookmarkTags = tags?.[0]?.querySelectorAll('sl-badge');
+      const firstBookmarkTags = tags?.[0]?.querySelectorAll('md-badge');
       expect(firstBookmarkTags).toHaveLength(1);
       expect(firstBookmarkTags?.[0]?.textContent).toBe('test');
     });
@@ -215,12 +215,12 @@ describe('BookmarkList', () => {
       // First bookmark is unread
       const unreadIcon = element.shadowRoot?.querySelector('.bookmark-card:first-child .unread-icon');
       expect(unreadIcon).toBeTruthy();
-      expect(unreadIcon?.getAttribute('name')).toBe('envelope');
+      expect(unreadIcon?.textContent).toBe('email');
       
       // Second bookmark is read
       const readIcon = element.shadowRoot?.querySelector('.bookmark-card:last-child .read-icon');
       expect(readIcon).toBeTruthy();
-      expect(readIcon?.getAttribute('name')).toBe('envelope-open');
+      expect(readIcon?.textContent).toBe('drafts');
     });
   });
 });

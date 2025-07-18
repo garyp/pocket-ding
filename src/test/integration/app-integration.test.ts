@@ -140,8 +140,8 @@ function findTextInShadowDOM(element: Element, text: string): Element | null {
 // Helper function to find a specific button by text in shadow DOM recursively
 function findButtonByText(element: Element, text: string): HTMLElement | null {
   function searchInElement(root: Element | ShadowRoot): HTMLElement | null {
-    // Search for sl-button elements in current level
-    const buttons = root.querySelectorAll('sl-button');
+    // Search for Material Web Components button elements in current level
+    const buttons = root.querySelectorAll('md-filled-button, md-text-button, md-icon-button');
     for (const button of buttons) {
       if (button.textContent?.includes(text)) {
         return button as HTMLElement;
@@ -340,12 +340,12 @@ describe('App Integration Tests', () => {
       const urlInput = settingsPanel.shadowRoot?.querySelector('#url') as any;
       const tokenInput = settingsPanel.shadowRoot?.querySelector('#token') as any;
       
-      // Set values directly on Shoelace inputs and dispatch events
+      // Set values directly on Material Web Components inputs and dispatch events
       urlInput.value = 'https://demo.linkding.link';
-      urlInput.dispatchEvent(new CustomEvent('sl-input', { bubbles: true, composed: true }));
+      urlInput.dispatchEvent(new CustomEvent('input', { bubbles: true, composed: true }));
       
       tokenInput.value = 'test-token';
-      tokenInput.dispatchEvent(new CustomEvent('sl-input', { bubbles: true, composed: true }));
+      tokenInput.dispatchEvent(new CustomEvent('input', { bubbles: true, composed: true }));
       
       await settingsPanel.updateComplete;
 
@@ -382,12 +382,12 @@ describe('App Integration Tests', () => {
       const urlInput = settingsPanel.shadowRoot?.querySelector('#url') as any;
       const tokenInput = settingsPanel.shadowRoot?.querySelector('#token') as any;
       
-      // Set values directly on Shoelace inputs and dispatch events
+      // Set values directly on Material Web Components inputs and dispatch events
       urlInput.value = 'https://demo.linkding.link';
-      urlInput.dispatchEvent(new CustomEvent('sl-input', { bubbles: true, composed: true }));
+      urlInput.dispatchEvent(new CustomEvent('input', { bubbles: true, composed: true }));
       
       tokenInput.value = 'test-token';
-      tokenInput.dispatchEvent(new CustomEvent('sl-input', { bubbles: true, composed: true }));
+      tokenInput.dispatchEvent(new CustomEvent('input', { bubbles: true, composed: true }));
       
       await settingsPanel.updateComplete;
       
@@ -499,7 +499,7 @@ describe('App Integration Tests', () => {
         expect(article1).toBeTruthy();
       });
 
-      const bookmarkCard = findTextInShadowDOM(bookmarkList, 'Test Article 1')?.closest('sl-card') as HTMLElement;
+      const bookmarkCard = findTextInShadowDOM(bookmarkList, 'Test Article 1')?.closest('md-outlined-card') as HTMLElement;
       await user.click(bookmarkCard);
       await bookmarkList.updateComplete;
       
@@ -555,7 +555,7 @@ describe('App Integration Tests', () => {
 
       // Should start in reader mode
       const readerButton = findButtonByText(bookmarkReader, 'Reader') as HTMLElement;
-      expect(readerButton?.getAttribute('variant')).toBe('primary');
+      expect(readerButton?.tagName.toLowerCase()).toBe('md-filled-button');
 
       // Switch to original mode
       const originalButton = findButtonByText(bookmarkReader, 'Original') as HTMLElement;
@@ -1059,7 +1059,7 @@ describe('App Integration Tests', () => {
       });
 
       // User should be able to click bookmarks during sync
-      const bookmarkCard = findTextInShadowDOM(bookmarkList, 'Test Article 1')?.closest('sl-card') as HTMLElement;
+      const bookmarkCard = findTextInShadowDOM(bookmarkList, 'Test Article 1')?.closest('md-outlined-card') as HTMLElement;
       await user.click(bookmarkCard);
       await bookmarkList.updateComplete;
 
@@ -1112,7 +1112,7 @@ describe('App Integration Tests', () => {
       // Should show immediate feedback with "Starting sync..." text
       await waitFor(() => {
         const startingText = findTextInShadowDOM(bookmarkList, 'Starting sync...');
-        const progressBar = findElementInShadowDOM(bookmarkList, 'sl-progress-bar');
+        const progressBar = findElementInShadowDOM(bookmarkList, 'md-linear-progress');
         
         expect(startingText).toBeTruthy();
         expect(progressBar?.hasAttribute('indeterminate')).toBe(true);
@@ -1124,7 +1124,7 @@ describe('App Integration Tests', () => {
 
       await waitFor(() => {
         const progressText = findTextInShadowDOM(bookmarkList, '0/10');
-        const progressBar = findElementInShadowDOM(bookmarkList, 'sl-progress-bar');
+        const progressBar = findElementInShadowDOM(bookmarkList, 'md-linear-progress');
         
         expect(progressText).toBeTruthy();
         expect(progressBar?.hasAttribute('indeterminate')).toBe(false);

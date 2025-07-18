@@ -5,15 +5,15 @@ import { ContentFetcher } from '../services/content-fetcher';
 import { ThemeService } from '../services/theme-service';
 import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
 import './secure-iframe';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
-import '@shoelace-style/shoelace/dist/components/select/select.js';
-import '@shoelace-style/shoelace/dist/components/option/option.js';
-import '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
-import '@shoelace-style/shoelace/dist/components/menu/menu.js';
-import '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js';
+import '@material/web/button/filled-button.js';
+import '@material/web/button/text-button.js';
+import '@material/web/icon/icon.js';
+import '@material/web/progress/circular-progress.js';
+import '@material/web/progress/linear-progress.js';
+import '@material/web/select/outlined-select.js';
+import '@material/web/select/select-option.js';
+import '@material/web/menu/menu.js';
+import '@material/web/menu/menu-item.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
@@ -55,8 +55,8 @@ export class BookmarkReader extends LitElement {
       justify-content: space-between;
       align-items: center;
       padding: 0.75rem 1rem;
-      background: var(--sl-color-neutral-50);
-      border-bottom: 1px solid var(--sl-color-neutral-200);
+      background: var(--md-sys-color-surface-container);
+      border-bottom: 1px solid var(--md-sys-color-outline-variant);
       gap: 1rem;
     }
 
@@ -85,7 +85,7 @@ export class BookmarkReader extends LitElement {
 
     .progress-text {
       font-size: 0.875rem;
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       white-space: nowrap;
     }
 
@@ -174,12 +174,12 @@ export class BookmarkReader extends LitElement {
     .content-container h6 {
       margin-top: 2rem;
       margin-bottom: 1rem;
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
     }
 
     .content-container p {
       margin-bottom: 1rem;
-      color: var(--sl-color-neutral-700);
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     .content-container img {
@@ -190,7 +190,7 @@ export class BookmarkReader extends LitElement {
     }
 
     .content-container a {
-      color: var(--sl-color-primary-600);
+      color: var(--md-sys-color-primary);
       text-decoration: none;
     }
 
@@ -201,13 +201,13 @@ export class BookmarkReader extends LitElement {
     .content-container blockquote {
       margin: 1rem 0;
       padding: 1rem;
-      background: var(--sl-color-neutral-50);
-      border-left: 4px solid var(--sl-color-primary-600);
+      background: var(--md-sys-color-surface-container);
+      border-left: 4px solid var(--md-sys-color-primary);
       border-radius: 4px;
     }
 
     .content-container pre {
-      background: var(--sl-color-neutral-100);
+      background: var(--md-sys-color-surface-container-high);
       padding: 1rem;
       border-radius: 4px;
       overflow-x: auto;
@@ -215,7 +215,7 @@ export class BookmarkReader extends LitElement {
     }
 
     .content-container code {
-      background: var(--sl-color-neutral-100);
+      background: var(--md-sys-color-surface-container-high);
       padding: 0.125rem 0.25rem;
       border-radius: 2px;
       font-size: 0.875rem;
@@ -224,13 +224,13 @@ export class BookmarkReader extends LitElement {
     .bookmark-header {
       margin-bottom: 2rem;
       padding-bottom: 1rem;
-      border-bottom: 1px solid var(--sl-color-neutral-200);
+      border-bottom: 1px solid var(--md-sys-color-outline-variant);
     }
 
     .bookmark-title {
       font-size: 1.75rem;
       font-weight: 700;
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
       margin: 0 0 0.5rem 0;
       line-height: 1.2;
     }
@@ -241,11 +241,11 @@ export class BookmarkReader extends LitElement {
       gap: 1rem;
       flex-wrap: wrap;
       font-size: 0.875rem;
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
     }
 
     .bookmark-url {
-      color: var(--sl-color-primary-600);
+      color: var(--md-sys-color-primary);
       text-decoration: none;
       word-break: break-all;
     }
@@ -266,29 +266,29 @@ export class BookmarkReader extends LitElement {
     .error-message {
       text-align: center;
       padding: 2rem;
-      color: var(--sl-color-danger-600);
+      color: var(--md-sys-color-error);
     }
 
     .fallback-content {
       text-align: center;
       padding: 2rem;
-      background: var(--sl-color-neutral-50);
+      background: var(--md-sys-color-surface-container);
       border-radius: 8px;
       margin: 2rem 0;
     }
 
     .fallback-content h1 {
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
       margin-bottom: 1rem;
     }
 
     .fallback-content p {
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       margin-bottom: 1rem;
     }
 
     .fallback-content a {
-      color: var(--sl-color-primary-600);
+      color: var(--md-sys-color-primary);
       text-decoration: none;
       font-weight: 500;
     }
@@ -300,19 +300,19 @@ export class BookmarkReader extends LitElement {
     .unsupported-content {
       text-align: center;
       padding: 2rem;
-      background: var(--sl-color-neutral-50);
-      border: 2px dashed var(--sl-color-neutral-300);
+      background: var(--md-sys-color-surface-container);
+      border: 2px dashed var(--md-sys-color-outline-variant);
       border-radius: 8px;
       margin: 2rem 0;
     }
 
     .unsupported-content h2 {
-      color: var(--sl-color-warning-600);
+      color: var(--md-sys-color-secondary);
       margin-bottom: 1rem;
     }
 
     .unsupported-content p {
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       margin-bottom: 0.5rem;
     }
 
@@ -619,7 +619,7 @@ export class BookmarkReader extends LitElement {
     if (this.isLoadingContent) {
       return html`
         <div class="loading-container">
-          <sl-spinner style="font-size: 1.5rem;"></sl-spinner>
+          <md-circular-progress indeterminate style="width: 24px; height: 24px;"></md-circular-progress>
           <p>Loading content...</p>
         </div>
       `;
@@ -673,7 +673,7 @@ export class BookmarkReader extends LitElement {
     if (this.isLoading) {
       return html`
         <div class="loading-container">
-          <sl-spinner style="font-size: 2rem;"></sl-spinner>
+          <md-circular-progress indeterminate style="width: 48px; height: 48px;"></md-circular-progress>
           <p>Loading article...</p>
         </div>
       `;
@@ -692,69 +692,71 @@ export class BookmarkReader extends LitElement {
       <div class="reader-container">
         <div class="reader-toolbar">
           <div class="toolbar-section">
-            <sl-select
+            <md-outlined-select
               class="content-source-selector"
-              value=${this.selectedContentSource ? this.getSourceValue(this.selectedContentSource) : ''}
-              size="small"
-              @sl-change=${this.handleContentSourceChange}
+              .value=${this.selectedContentSource ? this.getSourceValue(this.selectedContentSource) : ''}
+              @change=${this.handleContentSourceChange}
             >
               ${this.availableContentSources.map(source => html`
-                <sl-option value=${this.getSourceValue(source)}>
+                <md-select-option value=${this.getSourceValue(source)}>
                   ${source.label}
-                </sl-option>
+                </md-select-option>
               `)}
-            </sl-select>
+            </md-outlined-select>
             
             <div class="reading-mode-toggle">
-              <sl-button
-                variant=${this.readingMode === 'readability' ? 'primary' : 'default'}
-                size="small"
-                @click=${() => this.handleReadingModeChange('readability')}
-              >
-                Reader
-              </sl-button>
-              <sl-button
-                variant=${this.readingMode === 'original' ? 'primary' : 'default'}
-                size="small"
-                @click=${() => this.handleReadingModeChange('original')}
-              >
-                Original
-              </sl-button>
+              ${this.readingMode === 'readability' ? html`
+                <md-filled-button
+                  @click=${() => this.handleReadingModeChange('readability')}
+                >
+                  Reader
+                </md-filled-button>
+              ` : html`
+                <md-text-button
+                  @click=${() => this.handleReadingModeChange('readability')}
+                >
+                  Reader
+                </md-text-button>
+              `}
+              ${this.readingMode === 'original' ? html`
+                <md-filled-button
+                  @click=${() => this.handleReadingModeChange('original')}
+                >
+                  Original
+                </md-filled-button>
+              ` : html`
+                <md-text-button
+                  @click=${() => this.handleReadingModeChange('original')}
+                >
+                  Original
+                </md-text-button>
+              `}
             </div>
             
-            <sl-dropdown>
-              <sl-button slot="trigger" variant="text" size="small" caret>
-                <sl-icon name=${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'moon-fill' : 'sun-fill'}></sl-icon>
-              </sl-button>
-              <sl-menu>
-                <sl-menu-item 
-                  @click=${this.handleDarkModeToggle}
-                  ?checked=${this.darkModeOverride !== null}
-                >
-                  <sl-icon slot="prefix" name=${this.darkModeOverride === 'dark' ? 'moon-fill' : this.darkModeOverride === 'light' ? 'sun-fill' : 'circle-half'}></sl-icon>
-                  ${this.darkModeOverride === null ? 'Follow System' : this.darkModeOverride === 'dark' ? 'Dark Mode' : 'Light Mode'}
-                </sl-menu-item>
-              </sl-menu>
-            </sl-dropdown>
+            <md-text-button
+              @click=${this.handleDarkModeToggle}
+              title=${this.darkModeOverride === null ? 'Follow System' : this.darkModeOverride === 'dark' ? 'Dark Mode' : 'Light Mode'}
+            >
+              <md-icon slot="icon">${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'dark_mode' : 'light_mode'}</md-icon>
+            </md-text-button>
           </div>
           
           <div class="progress-section">
             <span class="progress-text">
               ${Math.round(this.readProgress)}% read
             </span>
-            <sl-progress-bar 
-              value=${this.readProgress}
+            <md-linear-progress 
+              .value=${this.readProgress / 100}
               style="flex: 1;"
-            ></sl-progress-bar>
+            ></md-linear-progress>
           </div>
           
-          <sl-button
-            variant="text"
-            size="small"
+          <md-text-button
             @click=${this.handleOpenOriginal}
+            title="Open original"
           >
-            <sl-icon name="box-arrow-up-right"></sl-icon>
-          </sl-button>
+            <md-icon slot="icon">open_in_new</md-icon>
+          </md-text-button>
         </div>
         
         <div class="reader-content">

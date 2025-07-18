@@ -54,7 +54,6 @@ describe('Dark Mode Integration', () => {
     
     // Clean up document
     document.documentElement.className = '';
-    document.querySelectorAll('link[data-shoelace-theme]').forEach(link => link.remove());
     
     // Wait for any pending async operations to complete
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -108,7 +107,6 @@ describe('Dark Mode Integration', () => {
 
   afterEach(() => {
     element?.remove();
-    document.querySelectorAll('link[data-shoelace-theme]').forEach(link => link.remove());
   });
 
   describe('System theme integration', () => {
@@ -127,9 +125,10 @@ describe('Dark Mode Integration', () => {
       expect(document.documentElement.className).toBe('dark');
       expect(element.classList.contains('reader-dark-mode')).toBe(true);
       
-      // Shoelace theme should be dark
-      const themeLink = document.querySelector('link[data-shoelace-theme]');
-      expect(themeLink?.getAttribute('href')).toContain('dark.css');
+      // Material theme should be dark (allow time for async theme loading)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const themeStyle = document.querySelector('style[data-material-theme]');
+      expect(themeStyle?.getAttribute('data-material-theme')).toBe('dark');
     });
 
     it('should sync reader theme when global theme changes', async () => {
@@ -319,26 +318,30 @@ describe('Dark Mode Integration', () => {
     });
 
     it('should update UI elements when toggling', async () => {
-      // Wait for component to fully render
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Wait for component to fully render and load bookmark
+      await new Promise(resolve => setTimeout(resolve, 50));
       await element.updateComplete;
       
-      // Check initial state
-      let triggerIcon = element.shadowRoot?.querySelector('sl-dropdown sl-button[slot="trigger"] sl-icon');
-      expect(triggerIcon?.getAttribute('name')).toBe('sun-fill');
+      // Check initial state - make sure the element is rendered
+      expect(element.shadowRoot).toBeTruthy();
       
-      let menuText = element.shadowRoot?.querySelector('sl-menu-item')?.textContent?.trim();
-      expect(menuText).toContain('Follow System');
+      let triggerIcon = element.shadowRoot?.querySelector('md-text-button md-icon');
+      expect(triggerIcon?.textContent).toBe('light_mode');
+      
+      let toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-text-button') || [])
+        .find(btn => btn.querySelector('md-icon')?.textContent === 'light_mode' || btn.querySelector('md-icon')?.textContent === 'dark_mode') as HTMLElement;
+      expect(toggleButton?.getAttribute('title')).toBe('Follow System');
       
       // Toggle to dark
       element['handleDarkModeToggle']();
       await element.updateComplete;
       
-      triggerIcon = element.shadowRoot?.querySelector('sl-dropdown sl-button[slot="trigger"] sl-icon');
-      expect(triggerIcon?.getAttribute('name')).toBe('moon-fill');
+      triggerIcon = element.shadowRoot?.querySelector('md-text-button md-icon');
+      expect(triggerIcon?.textContent).toBe('dark_mode');
       
-      menuText = element.shadowRoot?.querySelector('sl-menu-item')?.textContent?.trim();
-      expect(menuText).toContain('Dark Mode');
+      toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-text-button') || [])
+        .find(btn => btn.querySelector('md-icon')?.textContent === 'light_mode' || btn.querySelector('md-icon')?.textContent === 'dark_mode') as HTMLElement;
+      expect(toggleButton?.getAttribute('title')).toBe('Dark Mode');
     });
   });
 
