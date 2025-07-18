@@ -2,12 +2,13 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { LocalBookmark, BookmarkFilter, BookmarkListState } from '../types';
 import { StateController } from '../controllers/state-controller';
-import '@shoelace-style/shoelace/dist/components/card/card.js';
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
+import 'material/card/outlined-card.js';
+import 'material/badge/badge.js';
+import 'material/button/filled-button.js';
+import 'material/button/text-button.js';
+import 'material/icon/icon.js';
+import 'material/progress/circular-progress.js';
+import 'material/progress/linear-progress.js';
 
 @customElement('bookmark-list')
 export class BookmarkList extends LitElement {
@@ -79,9 +80,9 @@ export class BookmarkList extends LitElement {
       z-index: 10;
       margin-bottom: 1rem;
       padding: 0.75rem;
-      border-radius: 0.5rem;
-      background: var(--sl-color-primary-50);
-      border: 1px solid var(--sl-color-primary-200);
+      border-radius: 12px;
+      background: var(--md-sys-color-primary-container);
+      border: 1px solid var(--md-sys-color-outline-variant);
     }
 
     .sync-progress-text {
@@ -109,7 +110,7 @@ export class BookmarkList extends LitElement {
     .bookmark-card {
       cursor: pointer;
       transition: transform 0.2s ease;
-      border: 1px solid var(--sl-color-neutral-200);
+      border: 1px solid var(--md-sys-color-outline-variant);
     }
 
     .bookmark-card:hover {
@@ -118,14 +119,14 @@ export class BookmarkList extends LitElement {
     }
 
     .bookmark-card.synced {
-      border-color: var(--sl-color-success-500);
-      background: var(--sl-color-success-50);
+      border-color: var(--md-sys-color-primary);
+      background: var(--md-sys-color-primary-container);
       animation: syncFlash 0.5s ease-in-out;
     }
 
     @keyframes syncFlash {
-      0% { background: var(--sl-color-success-200); }
-      100% { background: var(--sl-color-success-50); }
+      0% { background: var(--md-sys-color-primary); }
+      100% { background: var(--md-sys-color-primary-container); }
     }
 
     .bookmark-content {
@@ -143,7 +144,7 @@ export class BookmarkList extends LitElement {
       margin: 0;
       font-size: 1.1rem;
       font-weight: 600;
-      color: var(--sl-color-neutral-900);
+      color: var(--md-sys-color-on-surface);
       flex: 1;
       margin-right: 1rem;
     }
@@ -156,16 +157,16 @@ export class BookmarkList extends LitElement {
     }
 
     .unread-icon {
-      color: var(--sl-color-primary-500);
+      color: var(--md-sys-color-primary);
     }
 
     .read-icon {
-      color: var(--sl-color-neutral-400);
+      color: var(--md-sys-color-outline);
     }
 
     .bookmark-description {
       margin: 0 0 0.75rem 0;
-      color: var(--sl-color-neutral-600);
+      color: var(--md-sys-color-on-surface-variant);
       line-height: 1.4;
     }
 
@@ -403,7 +404,7 @@ export class BookmarkList extends LitElement {
     const isRecentlySynced = this.syncState.syncedBookmarkIds.has(bookmark.id);
     
     return html`
-      <sl-card 
+      <md-outlined-card 
         class="bookmark-card ${isRecentlySynced ? 'synced' : ''}"
         data-bookmark-id="${bookmark.id}"
         @click=${() => this.handleBookmarkClick(bookmark)}
@@ -413,18 +414,18 @@ export class BookmarkList extends LitElement {
             <h3 class="bookmark-title">${bookmark.title}</h3>
             <div class="bookmark-meta">
               ${bookmark.unread ? html`
-                <sl-icon name="envelope" class="unread-icon" title="Unread"></sl-icon>
+                <md-icon class="unread-icon" title="Unread">email</md-icon>
               ` : html`
-                <sl-icon name="envelope-open" class="read-icon" title="Read"></sl-icon>
+                <md-icon class="read-icon" title="Read">drafts</md-icon>
               `}
               ${bookmark.is_archived ? html`
-                <sl-badge variant="neutral" size="small">Archived</sl-badge>
+                <md-badge>Archived</md-badge>
               ` : ''}
               ${this.faviconState.bookmarksWithAssets.has(bookmark.id) ? html`
-                <sl-badge variant="success" size="small">
-                  <sl-icon name="download"></sl-icon>
+                <md-badge>
+                  <md-icon slot="icon">download</md-icon>
                   Cached
-                </sl-badge>
+                </md-badge>
               ` : ''}
             </div>
           </div>
@@ -446,7 +447,7 @@ export class BookmarkList extends LitElement {
           ${bookmark.tag_names.length > 0 ? html`
             <div class="bookmark-tags">
               ${bookmark.tag_names.map(tag => html`
-                <sl-badge variant="neutral" size="small">${tag}</sl-badge>
+                <md-badge>${tag}</md-badge>
               `)}
             </div>
           ` : ''}
@@ -456,7 +457,7 @@ export class BookmarkList extends LitElement {
               <div class="progress-text">
                 ${Math.round(bookmark.read_progress!)}% read
               </div>
-              <sl-progress-bar value=${bookmark.read_progress}></sl-progress-bar>
+              <md-linear-progress .value=${bookmark.read_progress! / 100}></md-linear-progress>
             </div>
           ` : ''}
           
@@ -464,7 +465,7 @@ export class BookmarkList extends LitElement {
             Added ${this.formatDate(bookmark.date_added)}
           </div>
         </div>
-      </sl-card>
+      </md-outlined-card>
     `;
   }
 
@@ -472,7 +473,7 @@ export class BookmarkList extends LitElement {
     if (this.isLoading) {
       return html`
         <div class="loading-container">
-          <sl-spinner style="font-size: 2rem;"></sl-spinner>
+          <md-circular-progress indeterminate style="width: 48px; height: 48px;"></md-circular-progress>
           <p>Loading bookmarks...</p>
         </div>
       `;
@@ -490,40 +491,58 @@ export class BookmarkList extends LitElement {
                 : 'Starting sync...'
               }
             </span>
-            <sl-badge variant="primary" size="small" class="sync-badge">
-              <sl-icon name="arrow-repeat"></sl-icon>
+            <md-badge class="sync-badge">
+              <md-icon slot="icon">sync</md-icon>
               Syncing
-            </sl-badge>
+            </md-badge>
           </div>
-          <sl-progress-bar 
-            value=${this.syncState.syncTotal > 0 ? (this.syncState.syncProgress / this.syncState.syncTotal) * 100 : 0}
+          <md-linear-progress 
+            .value=${this.syncState.syncTotal > 0 ? (this.syncState.syncProgress / this.syncState.syncTotal) : 0}
             ?indeterminate=${this.syncState.syncTotal === 0}
-          ></sl-progress-bar>
+          ></md-linear-progress>
         </div>
       ` : ''}
       
       <div class="filters">
-        <sl-button
-          variant=${this.selectedFilter === 'all' ? 'primary' : 'default'}
-          size="small"
-          @click=${() => this.handleFilterChange('all')}
-        >
-          All (${this.bookmarks.filter(b => !b.is_archived).length})
-        </sl-button>
-        <sl-button
-          variant=${this.selectedFilter === 'unread' ? 'primary' : 'default'}
-          size="small"
-          @click=${() => this.handleFilterChange('unread')}
-        >
-          Unread (${this.bookmarks.filter(b => b.unread && !b.is_archived).length})
-        </sl-button>
-        <sl-button
-          variant=${this.selectedFilter === 'archived' ? 'primary' : 'default'}
-          size="small"
-          @click=${() => this.handleFilterChange('archived')}
-        >
-          Archived (${this.bookmarks.filter(b => b.is_archived).length})
-        </sl-button>
+        ${this.selectedFilter === 'all' ? html`
+          <md-filled-button
+            @click=${() => this.handleFilterChange('all')}
+          >
+            All (${this.bookmarks.filter(b => !b.is_archived).length})
+          </md-filled-button>
+        ` : html`
+          <md-text-button
+            @click=${() => this.handleFilterChange('all')}
+          >
+            All (${this.bookmarks.filter(b => !b.is_archived).length})
+          </md-text-button>
+        `}
+        ${this.selectedFilter === 'unread' ? html`
+          <md-filled-button
+            @click=${() => this.handleFilterChange('unread')}
+          >
+            Unread (${this.bookmarks.filter(b => b.unread && !b.is_archived).length})
+          </md-filled-button>
+        ` : html`
+          <md-text-button
+            @click=${() => this.handleFilterChange('unread')}
+          >
+            Unread (${this.bookmarks.filter(b => b.unread && !b.is_archived).length})
+          </md-text-button>
+        `}
+        ${this.selectedFilter === 'archived' ? html`
+          <md-filled-button
+            @click=${() => this.handleFilterChange('archived')}
+          >
+            Archived (${this.bookmarks.filter(b => b.is_archived).length})
+          </md-filled-button>
+        ` : html`
+          <md-text-button
+            @click=${() => this.handleFilterChange('archived')}
+          >
+            Archived (${this.bookmarks.filter(b => b.is_archived).length})
+          </md-text-button>
+        `}
       </div>
 
       ${bookmarks.length === 0 ? html`
@@ -536,10 +555,10 @@ export class BookmarkList extends LitElement {
               ? 'You have no archived bookmarks.'
               : 'Sync your bookmarks to get started.'}
           </p>
-          <sl-button variant="primary" @click=${() => this.onSyncRequested()}>
-            <sl-icon name="arrow-repeat"></sl-icon>
+          <md-filled-button @click=${() => this.onSyncRequested()}>
+            <md-icon slot="icon">sync</md-icon>
             Sync Now
-          </sl-button>
+          </md-filled-button>
         </div>
       ` : html`
         <div class="bookmark-list">
