@@ -68,6 +68,89 @@ export class DatabaseService {
     return await db.bookmarks.where('unread').equals(1).toArray();
   }
 
+  static async getBookmarksPaginated(filter: 'all' | 'unread' | 'archived', page: number, pageSize: number): Promise<LocalBookmark[]> {
+    const offset = (page - 1) * pageSize;
+    
+    if (filter === 'unread') {
+      return await db.bookmarks
+        .where('unread').equals(1)
+        .and(bookmark => !bookmark.is_archived)
+        .offset(offset)
+        .limit(pageSize)
+        .toArray();
+    } else if (filter === 'archived') {
+      return await db.bookmarks
+        .where('is_archived').equals(1)
+        .offset(offset)
+        .limit(pageSize)
+        .toArray();
+    } else {
+      // 'all' filter shows only unarchived bookmarks
+      return await db.bookmarks
+        .orderBy('date_added')
+        .reverse()
+        .filter(bookmark => !bookmark.is_archived)
+        .offset(offset)
+        .limit(pageSize)
+        .toArray();
+    }
+  }
+
+  static async getBookmarkCount(filter: 'all' | 'unread' | 'archived'): Promise<number> {
+    if (filter === 'unread') {
+      return await db.bookmarks.where('unread').equals(1).and(bookmark => !bookmark.is_archived).count();
+    } else if (filter === 'archived') {
+      return await db.bookmarks.where('is_archived').equals(1).count();
+    } else {
+      // 'all' filter shows only unarchived bookmarks
+      return await db.bookmarks.filter(bookmark => !bookmark.is_archived).count();
+    }
+  }
+
+  static async findBookmarkPage(bookmarkId: number, filter: 'all' | 'unread' | 'archived', pageSize: number): Promise<number> {
+    let bookmarks: LocalBookmark[] = [];
+    
+    if (filter === 'unread') {
+      bookmarks = await db.bookmarks
+        .where('unread').equals(1)
+        .and(bookmark => !bookmark.is_archived)
+        .toArray();
+    } else if (filter === 'archived') {
+      bookmarks = await db.bookmarks
+        .where('is_archived').equals(1)
+        .toArray();
+    } else {
+      // 'all' filter shows only unarchived bookmarks
+      bookmarks = await db.bookmarks
+        .orderBy('date_added')
+        .reverse()
+        .filter(bookmark => !bookmark.is_archived)
+        .toArray();
+    }
+    
+    const index = bookmarks.findIndex(bookmark => bookmark.id === bookmarkId);
+    
+    if (index === -1) {
+      return 1; // Default to first page if bookmark not found
+    }
+    
+    return Math.floor(index / pageSize) + 1;
+  }
+
+  static async getBookmarksWithAssetCounts(bookmarkIds: number[]): Promise<Map<number, boolean>> {
+    const assetCounts = new Map<number, boolean>();
+    
+    for (const bookmarkId of bookmarkIds) {
+      const assets = await db.assets
+        .where('bookmark_id').equals(bookmarkId)
+        .and(asset => asset.status === 'complete')
+        .count();
+      assetCounts.set(bookmarkId, assets > 0);
+    }
+    
+    return assetCounts;
+  }
+
   static async saveReadProgress(progress: ReadProgress): Promise<void> {
     await db.readProgress.put(progress);
   }

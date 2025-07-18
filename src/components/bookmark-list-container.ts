@@ -3,7 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
-import type { LocalBookmark } from '../types';
+import type { LocalBookmark, PaginationState } from '../types';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
@@ -47,10 +47,18 @@ export class BookmarkListContainer extends LitElement {
     bookmarks: LocalBookmark[];
     isLoading: boolean;
     bookmarksWithAssets: Set<number>;
+    pagination: PaginationState;
   } = {
     bookmarks: [],
     isLoading: true,
     bookmarksWithAssets: new Set<number>(),
+    pagination: {
+      currentPage: 1,
+      pageSize: 25,
+      totalCount: 0,
+      totalPages: 1,
+      filter: 'all'
+    }
   };
 
   // Reactive controllers
@@ -78,27 +86,61 @@ export class BookmarkListContainer extends LitElement {
         isLoading: true,
       };
 
-      const bookmarks = await DatabaseService.getAllBookmarks();
+      await this.loadBookmarksPage(this.containerState.pagination.filter, this.containerState.pagination.currentPage);
       
-      // Check which bookmarks have assets
+      // Initialize favicon controller with bookmark data
+      this.faviconController.observeBookmarks(bookmarks);
+    } catch (error) {
+      console.error('Failed to load bookmarks:', error);
+      this.containerState = {
+        ...this.containerState,
+        isLoading: false,
+      };
+    }
+  }
+
+  private async loadBookmarksPage(filter: 'all' | 'unread' | 'archived', page: number) {
+    try {
+      const pageSize = this.containerState.pagination.pageSize;
+      
+      // Get paginated bookmarks and total count
+      const [bookmarks, totalCount] = await Promise.all([
+        DatabaseService.getBookmarksPaginated(filter, page, pageSize),
+        DatabaseService.getBookmarkCount(filter)
+      ]);
+      
+      // Get asset information for current page bookmarks
+      const bookmarkIds = bookmarks.map(b => b.id);
+      const assetCounts = await DatabaseService.getBookmarksWithAssetCounts(bookmarkIds);
+      
+      // Convert to Set for compatibility with existing code
       const bookmarksWithAssets = new Set<number>();
-      for (const bookmark of bookmarks) {
-        const assets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmark.id);
-        if (assets.length > 0) {
-          bookmarksWithAssets.add(bookmark.id);
+      assetCounts.forEach((hasAssets, bookmarkId) => {
+        if (hasAssets) {
+          bookmarksWithAssets.add(bookmarkId);
         }
-      }
+      });
+
+      const totalPages = Math.ceil(totalCount / pageSize);
 
       this.containerState = {
         ...this.containerState,
         bookmarks,
         isLoading: false,
         bookmarksWithAssets,
+        pagination: {
+          ...this.containerState.pagination,
+          currentPage: page,
+          totalCount,
+          totalPages,
+          filter
+        }
       };
 
-      console.log(`Local bookmarks loaded: ${bookmarks.length} total, ${bookmarks.filter(b => b.is_archived).length} archived`);
+      console.log(`Loaded page ${page} of ${totalPages} (${bookmarks.length} bookmarks, ${totalCount} total for filter '${filter}')`);
+      
     } catch (error) {
-      console.error('Failed to load bookmarks:', error);
+      console.error('Failed to load bookmarks page:', error);
       this.containerState = {
         ...this.containerState,
         isLoading: false,
@@ -173,6 +215,19 @@ export class BookmarkListContainer extends LitElement {
     this.faviconController.handleVisibilityChanged(visibleBookmarkIds, this.containerState.bookmarks);
   };
 
+  private handlePageChange = async (page: number) => {
+    if (page !== this.containerState.pagination.currentPage) {
+      await this.loadBookmarksPage(this.containerState.pagination.filter, page);
+    }
+  };
+
+  private handleFilterChange = async (filter: 'all' | 'unread' | 'archived') => {
+    if (filter !== this.containerState.pagination.filter) {
+      // Reset to page 1 when changing filters
+      await this.loadBookmarksPage(filter, 1);
+    }
+  };
+
   override render() {
     const syncState = this.syncController.getSyncState();
     const faviconState = this.faviconController.getFaviconState();
@@ -205,10 +260,13 @@ export class BookmarkListContainer extends LitElement {
         .bookmarksWithAssets=${this.containerState.bookmarksWithAssets}
         .faviconCache=${faviconState.faviconCache}
         .syncedBookmarkIds=${syncState.syncedBookmarkIds}
+        .paginationState=${this.containerState.pagination}
         .onBookmarkSelect=${this.handleBookmarkSelect}
         .onSyncRequested=${this.handleSyncRequested}
         .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
         .onVisibilityChanged=${this.handleVisibilityChanged}
+        .onPageChange=${this.handlePageChange}
+        .onFilterChange=${this.handleFilterChange}
       ></bookmark-list>
     `;
   }

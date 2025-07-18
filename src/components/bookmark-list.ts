@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { LocalBookmark, BookmarkFilter, BookmarkListState } from '../types';
+import type { LocalBookmark, BookmarkFilter, BookmarkListState, PaginationState } from '../types';
 import { StateController } from '../controllers/state-controller';
 import '@material/web/labs/card/outlined-card.js';
 import '@material/web/labs/badge/badge.js';
@@ -9,6 +9,7 @@ import '@material/web/button/text-button.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/circular-progress.js';
 import '@material/web/progress/linear-progress.js';
+import './pagination-controls.js';
 
 @customElement('bookmark-list')
 export class BookmarkList extends LitElement {
@@ -23,14 +24,24 @@ export class BookmarkList extends LitElement {
   // Sync props
   @property({ type: Set }) syncedBookmarkIds: Set<number> = new Set<number>();
   
+  // Pagination state props
+  @property({ type: Object }) paginationState: PaginationState = {
+    currentPage: 1,
+    pageSize: 25,
+    totalCount: 0,
+    totalPages: 1,
+    filter: 'all'
+  };
+  
   // Callback props
   @property({ type: Function }) onBookmarkSelect: (bookmarkId: number) => void = () => {};
   @property({ type: Function }) onSyncRequested: () => void = () => {};
   @property({ type: Function }) onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void = () => {};
   @property({ type: Function }) onVisibilityChanged: (visibleBookmarkIds: number[]) => void = () => {};
+  @property({ type: Function }) onPageChange: (page: number) => void = () => {};
+  @property({ type: Function }) onFilterChange: (filter: BookmarkFilter) => void = () => {};
   
   // UI state (internal only)
-  @state() private selectedFilter: BookmarkFilter = 'all';
   @state() private scrollPosition: number = 0;
   
   private scrollContainer: Element | null = null;
@@ -39,15 +50,31 @@ export class BookmarkList extends LitElement {
   // State controller for persistence with automatic observation
   private stateController = new StateController<BookmarkListState>(this, {
     storageKey: 'bookmark-list-state',
-    defaultState: { selectedFilter: 'all', scrollPosition: 0 },
-    observedProperties: ['selectedFilter', 'scrollPosition'],
+    defaultState: { 
+      selectedFilter: 'all', 
+      scrollPosition: 0,
+      pagination: {
+        all: { currentPage: 1 },
+        unread: { currentPage: 1 },
+        archived: { currentPage: 1 }
+      }
+    },
+    observedProperties: ['scrollPosition'],
     validator: (state: any): state is BookmarkListState => {
       return (
         state &&
         typeof state === 'object' &&
         ['all', 'unread', 'archived'].includes(state.selectedFilter) &&
         typeof state.scrollPosition === 'number' &&
-        state.scrollPosition >= 0
+        state.scrollPosition >= 0 &&
+        state.pagination &&
+        typeof state.pagination === 'object' &&
+        typeof state.pagination.all === 'object' &&
+        typeof state.pagination.unread === 'object' &&
+        typeof state.pagination.archived === 'object' &&
+        typeof state.pagination.all.currentPage === 'number' &&
+        typeof state.pagination.unread.currentPage === 'number' &&
+        typeof state.pagination.archived.currentPage === 'number'
       );
     }
   });
@@ -357,10 +384,10 @@ export class BookmarkList extends LitElement {
   }
 
   private get filteredBookmarks() {
-    if (this.selectedFilter === 'unread') {
+    if (this.paginationState.filter === 'unread') {
       return this.bookmarks.filter(bookmark => bookmark.unread && !bookmark.is_archived);
     }
-    if (this.selectedFilter === 'archived') {
+    if (this.paginationState.filter === 'archived') {
       return this.bookmarks.filter(bookmark => bookmark.is_archived);
     }
     // Default 'all' filter shows only unarchived bookmarks
@@ -368,9 +395,12 @@ export class BookmarkList extends LitElement {
   }
 
   private handleFilterChange(filter: BookmarkFilter) {
-    this.selectedFilter = filter;
-    // State is automatically saved by StateController observing selectedFilter property
+    this.onFilterChange(filter);
   }
+
+  private handlePageChange = (page: number) => {
+    this.onPageChange(page);
+  };
 
   private handleBookmarkClick(bookmark: LocalBookmark) {
     this.onBookmarkSelect(bookmark.id);
@@ -472,43 +502,43 @@ export class BookmarkList extends LitElement {
 
     return html`
       <div class="filters">
-        ${this.selectedFilter === 'all' ? html`
+        ${this.paginationState.filter === 'all' ? html`
           <md-filled-button
             @click=${() => this.handleFilterChange('all')}
           >
-            All (${this.bookmarks.filter(b => !b.is_archived).length})
+            All (${this.paginationState.totalCount})
           </md-filled-button>
         ` : html`
           <md-text-button
             @click=${() => this.handleFilterChange('all')}
           >
-            All (${this.bookmarks.filter(b => !b.is_archived).length})
+            All (0)
           </md-text-button>
         `}
-        ${this.selectedFilter === 'unread' ? html`
+        ${this.paginationState.filter === 'unread' ? html`
           <md-filled-button
             @click=${() => this.handleFilterChange('unread')}
           >
-            Unread (${this.bookmarks.filter(b => b.unread && !b.is_archived).length})
+            Unread (${this.paginationState.totalCount})
           </md-filled-button>
         ` : html`
           <md-text-button
             @click=${() => this.handleFilterChange('unread')}
           >
-            Unread (${this.bookmarks.filter(b => b.unread && !b.is_archived).length})
+            Unread (0)
           </md-text-button>
         `}
-        ${this.selectedFilter === 'archived' ? html`
+        ${this.paginationState.filter === 'archived' ? html`
           <md-filled-button
             @click=${() => this.handleFilterChange('archived')}
           >
-            Archived (${this.bookmarks.filter(b => b.is_archived).length})
+            Archived (${this.paginationState.totalCount})
           </md-filled-button>
         ` : html`
           <md-text-button
             @click=${() => this.handleFilterChange('archived')}
           >
-            Archived (${this.bookmarks.filter(b => b.is_archived).length})
+            Archived (0)
           </md-text-button>
         `}
       </div>
@@ -517,9 +547,9 @@ export class BookmarkList extends LitElement {
         <div class="empty-state">
           <h3>No bookmarks found</h3>
           <p>
-            ${this.selectedFilter === 'unread' 
+            ${this.paginationState.filter === 'unread' 
               ? 'You have no unread bookmarks.' 
-              : this.selectedFilter === 'archived'
+              : this.paginationState.filter === 'archived'
               ? 'You have no archived bookmarks.'
               : 'Sync your bookmarks to get started.'}
           </p>
@@ -529,9 +559,23 @@ export class BookmarkList extends LitElement {
           </md-filled-button>
         </div>
       ` : html`
+        <pagination-controls
+          .currentPage=${this.paginationState.currentPage}
+          .totalPages=${this.paginationState.totalPages}
+          .disabled=${this.isLoading || this.syncState.isSyncing}
+          .onPageChange=${this.handlePageChange}
+        ></pagination-controls>
+        
         <div class="bookmark-list">
           ${bookmarks.map(bookmark => this.renderBookmark(bookmark))}
         </div>
+        
+        <pagination-controls
+          .currentPage=${this.paginationState.currentPage}
+          .totalPages=${this.paginationState.totalPages}
+          .disabled=${this.isLoading || this.syncState.isSyncing}
+          .onPageChange=${this.handlePageChange}
+        ></pagination-controls>
       `}
     `;
   }
