@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { AppSettings } from '../../types';
 
 // Setup DOM environment
-import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
-setBasePath('/node_modules/@shoelace-style/shoelace/dist/');
+// Material Web Components doesn't require base path setup
 
 // Mock the SyncService
 vi.mock('../../services/sync-service', () => ({

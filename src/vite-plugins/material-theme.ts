@@ -7,7 +7,7 @@
  * - Production build: Copies theme files to dist/material/ for deployment
  */
 
-import { Plugin } from 'vite'
+import type { Plugin } from 'vite'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { resolve, join } from 'path'
 
