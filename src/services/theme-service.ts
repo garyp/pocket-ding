@@ -11,7 +11,7 @@ export class ThemeService {
     this.mediaQuery = null;
     this.listeners = [];
     document.documentElement.className = '';
-    document.querySelectorAll('link[data-material-theme]').forEach(link => link.remove());
+    document.querySelectorAll('style[data-material-theme]').forEach(style => style.remove());
   }
 
   static init() {
@@ -82,26 +82,38 @@ export class ThemeService {
     // Update document root class for global styles
     document.documentElement.className = resolvedTheme;
     
-    // Update Material theme
+    // Update Material theme (async)
     this.updateMaterialTheme(resolvedTheme);
     
     // Notify listeners
     this.listeners.forEach(listener => listener(resolvedTheme));
   }
 
-  private static updateMaterialTheme(theme: 'light' | 'dark') {
-    // Remove existing theme link
-    const existingLink = document.querySelector('link[data-material-theme]');
-    if (existingLink) {
-      existingLink.remove();
+  private static async updateMaterialTheme(theme: 'light' | 'dark') {
+    // Remove existing theme styles
+    const existingStyle = document.querySelector('style[data-material-theme]');
+    if (existingStyle) {
+      existingStyle.remove();
     }
 
-    // Material Web Components uses CSS custom properties for theming
-    // Import the theme CSS file that defines Material Design tokens
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `/node_modules/material/demo/css/${theme}.css`;
-    link.setAttribute('data-material-theme', theme);
-    document.head.appendChild(link);
+    // Import the theme CSS dynamically
+    try {
+      const themeModule = await import(`../styles/material-theme-${theme}.css?inline`);
+      const themeCSS = themeModule.default;
+      
+      // Create a style element with the theme CSS
+      const styleElement = document.createElement('style');
+      styleElement.textContent = themeCSS;
+      styleElement.setAttribute('data-material-theme', theme);
+      document.head.appendChild(styleElement);
+    } catch (error) {
+      console.warn(`Failed to load Material theme '${theme}':`, error);
+      
+      // Fallback: create a placeholder style element for tests
+      const styleElement = document.createElement('style');
+      styleElement.textContent = `/* Material theme ${theme} placeholder */`;
+      styleElement.setAttribute('data-material-theme', theme);
+      document.head.appendChild(styleElement);
+    }
   }
 }

@@ -2,13 +2,13 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { LocalBookmark, BookmarkFilter, BookmarkListState } from '../types';
 import { StateController } from '../controllers/state-controller';
-import 'material/card/outlined-card.js';
-import 'material/badge/badge.js';
-import 'material/button/filled-button.js';
-import 'material/button/text-button.js';
-import 'material/icon/icon.js';
-import 'material/progress/circular-progress.js';
-import 'material/progress/linear-progress.js';
+import '@material/web/labs/card/outlined-card.js';
+import '@material/web/labs/badge/badge.js';
+import '@material/web/button/filled-button.js';
+import '@material/web/button/text-button.js';
+import '@material/web/icon/icon.js';
+import '@material/web/progress/circular-progress.js';
+import '@material/web/progress/linear-progress.js';
 
 @customElement('bookmark-list')
 export class BookmarkList extends LitElement {

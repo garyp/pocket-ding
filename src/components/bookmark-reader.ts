@@ -5,15 +5,15 @@ import { ContentFetcher } from '../services/content-fetcher';
 import { ThemeService } from '../services/theme-service';
 import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
 import './secure-iframe';
-import 'material/button/filled-button.js';
-import 'material/button/text-button.js';
-import 'material/icon/icon.js';
-import 'material/progress/circular-progress.js';
-import 'material/progress/linear-progress.js';
-import 'material/select/outlined-select.js';
-import 'material/select/select-option.js';
-import 'material/menu/menu.js';
-import 'material/menu/menu-item.js';
+import '@material/web/button/filled-button.js';
+import '@material/web/button/text-button.js';
+import '@material/web/icon/icon.js';
+import '@material/web/progress/circular-progress.js';
+import '@material/web/progress/linear-progress.js';
+import '@material/web/select/outlined-select.js';
+import '@material/web/select/select-option.js';
+import '@material/web/menu/menu.js';
+import '@material/web/menu/menu-item.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {

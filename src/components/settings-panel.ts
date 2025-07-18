@@ -5,15 +5,15 @@ import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
 import type { AppSettings } from '../types';
-import 'material/textfield/outlined-text-field.js';
-import 'material/button/filled-button.js';
-import 'material/button/text-button.js';
-import 'material/card/outlined-card.js';
-import 'material/switch/switch.js';
-import 'material/select/outlined-select.js';
-import 'material/select/select-option.js';
-import 'material/progress/circular-progress.js';
-import 'material/progress/linear-progress.js';
+import '@material/web/textfield/outlined-text-field.js';
+import '@material/web/button/filled-button.js';
+import '@material/web/button/text-button.js';
+import '@material/web/labs/card/outlined-card.js';
+import '@material/web/switch/switch.js';
+import '@material/web/select/outlined-select.js';
+import '@material/web/select/select-option.js';
+import '@material/web/progress/circular-progress.js';
+import '@material/web/progress/linear-progress.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
