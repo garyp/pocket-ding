@@ -2,6 +2,9 @@ import { css } from 'lit';
 import { ThemeService } from './services/theme-service';
 import './components/app-root';
 
+// Import Material Icons font for offline bundling
+import '@fontsource/material-icons';
+
 // Material Web Components will be imported directly in components as needed
 
 // Initialize theme service for dark mode support
