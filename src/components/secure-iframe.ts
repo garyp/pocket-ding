@@ -173,15 +173,6 @@ export class SecureIframe extends LitElement {
     });
   }
 
-  private renderError() {
-    return html`
-      <div class="error-container">
-        <h3>Content Error</h3>
-        <p>The content could not be loaded in secure mode.</p>
-        <p>This may be due to security restrictions or malformed content.</p>
-      </div>
-    `;
-  }
 
   private renderLoading() {
     return html`

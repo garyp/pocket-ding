@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import '../setup';
 import { SecureIframe } from '../../components/secure-iframe';
 import { SecurityService } from '../../services/security-service';
-import type { LocalBookmark } from '../../types';
 
 // Mock the SecurityService
 vi.mock('../../services/security-service', () => ({
@@ -11,24 +10,6 @@ vi.mock('../../services/security-service', () => ({
   },
 }));
 
-const mockBookmark: LocalBookmark = {
-  id: 1,
-  url: 'https://example.com/article',
-  title: 'Test Article',
-  description: 'Test Description',
-  notes: '',
-  website_title: 'Example Site',
-  website_description: 'Example Description',
-  web_archive_snapshot_url: '',
-  favicon_url: 'https://example.com/favicon.ico',
-  preview_image_url: '',
-  is_archived: false,
-  unread: true,
-  shared: false,
-  tag_names: ['test'],
-  date_added: '2024-01-01T00:00:00Z',
-  date_modified: '2024-01-01T00:00:00Z',
-};
 
 const mockSingleFileContent = `
 <!DOCTYPE html>

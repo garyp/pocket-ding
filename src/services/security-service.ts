@@ -221,7 +221,7 @@ export class SecurityService {
       if (src && (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('//'))) {
         img.removeAttribute('src');
         img.setAttribute('alt', 'External image blocked for security');
-        img.style.display = 'none';
+        (img as HTMLElement).style.display = 'none';
       }
     });
     

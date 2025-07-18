@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { SecurityService } from '../../services/security-service';
 
 describe('SecurityService', () => {
