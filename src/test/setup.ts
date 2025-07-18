@@ -52,6 +52,86 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// Mock Element Internals API for Material Web Components
+if (!HTMLElement.prototype.attachInternals) {
+  HTMLElement.prototype.attachInternals = function() {
+    return {
+      // Mock ElementInternals interface
+      form: null,
+      shadowRoot: null,
+      willValidate: true,
+      validity: {
+        valid: true,
+        valueMissing: false,
+        typeMismatch: false,
+        patternMismatch: false,
+        tooLong: false,
+        tooShort: false,
+        rangeUnderflow: false,
+        rangeOverflow: false,
+        stepMismatch: false,
+        badInput: false,
+        customError: false,
+      },
+      validationMessage: '',
+      checkValidity: () => true,
+      reportValidity: () => true,
+      setFormValue: () => {},
+      setValidity: () => {},
+      labels: [],
+      ariaAtomic: null,
+      ariaAutoComplete: null,
+      ariaBusy: null,
+      ariaChecked: null,
+      ariaColCount: null,
+      ariaColIndex: null,
+      ariaColSpan: null,
+      ariaCurrent: null,
+      ariaDescription: null,
+      ariaDisabled: null,
+      ariaExpanded: null,
+      ariaHasPopup: null,
+      ariaHidden: null,
+      ariaKeyShortcuts: null,
+      ariaLabel: null,
+      ariaLevel: null,
+      ariaLive: null,
+      ariaModal: null,
+      ariaMultiLine: null,
+      ariaMultiSelectable: null,
+      ariaOrientation: null,
+      ariaPlaceholder: null,
+      ariaPosInSet: null,
+      ariaPressed: null,
+      ariaReadOnly: null,
+      ariaRequired: null,
+      ariaRoleDescription: null,
+      ariaRowCount: null,
+      ariaRowIndex: null,
+      ariaRowSpan: null,
+      ariaSelected: null,
+      ariaSetSize: null,
+      ariaSort: null,
+      ariaValueMax: null,
+      ariaValueMin: null,
+      ariaValueNow: null,
+      ariaValueText: null,
+      role: null,
+      // Additional properties for TypeScript compatibility
+      states: new Set(),
+      ariaBrailleLabel: null,
+      ariaBrailleRoleDescription: null,
+      ariaColIndexText: null,
+      ariaRowIndexText: null,
+      ariaInvalid: null,
+      ariaRelevant: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    } as any;
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   consoleErrorSpy.mockClear();

@@ -555,7 +555,7 @@ describe('App Integration Tests', () => {
 
       // Should start in reader mode
       const readerButton = findButtonByText(bookmarkReader, 'Reader') as HTMLElement;
-      expect(readerButton?.getAttribute('variant')).toBe('primary');
+      expect(readerButton?.tagName.toLowerCase()).toBe('md-filled-button');
 
       // Switch to original mode
       const originalButton = findButtonByText(bookmarkReader, 'Original') as HTMLElement;

@@ -304,7 +304,7 @@ describe('BookmarkReader Dark Mode', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      const button = element.shadowRoot?.querySelector('md-text-button');
+      const button = element.shadowRoot?.querySelector('md-text-button[title]');
       expect(button?.getAttribute('title')).toBe('Follow System');
     });
 
@@ -320,7 +320,7 @@ describe('BookmarkReader Dark Mode', () => {
       element['darkModeOverride'] = 'dark';
       await element.updateComplete;
 
-      const button = element.shadowRoot?.querySelector('md-text-button');
+      const button = element.shadowRoot?.querySelector('md-text-button[title]');
       expect(button?.getAttribute('title')).toBe('Dark Mode');
     });
 
@@ -336,7 +336,7 @@ describe('BookmarkReader Dark Mode', () => {
       element['darkModeOverride'] = 'light';
       await element.updateComplete;
 
-      const button = element.shadowRoot?.querySelector('md-text-button');
+      const button = element.shadowRoot?.querySelector('md-text-button[title]');
       expect(button?.getAttribute('title')).toBe('Light Mode');
     });
   });
