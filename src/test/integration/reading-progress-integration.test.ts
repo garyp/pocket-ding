@@ -465,9 +465,10 @@ describe('Reading Progress Integration Tests', () => {
         return progressText?.includes('75% read');
       }, { timeout: 1000 });
 
-      // Check that scroll position was restored
-      const contentElement = getContentElement();
-      expect(contentElement?.scrollTop).toBe(450);
+      // Check that scroll position was restored on the component
+      // Note: After secure iframe refactoring, scrolling happens inside iframe,
+      // not directly on the .reader-content element
+      expect((element as any).scrollPosition).toBe(450);
     });
 
     it('should update progress when navigating away and back', async () => {
