@@ -34,7 +34,6 @@ export class BookmarkReader extends LitElement {
   private progressSaveTimeout: number | null = null;
   private readMarkTimeout: number | null = null;
   private hasBeenMarkedAsRead = false;
-  private isRestoringPosition = false;
   private secureIframe: any = null;
 
   static override styles = css`
@@ -386,7 +385,6 @@ export class BookmarkReader extends LitElement {
     try {
       this.isLoading = true;
       this.hasBeenMarkedAsRead = false; // Reset for new bookmark
-      this.isRestoringPosition = false; // Reset restoration flag
       
       // Reset progress state to prevent carryover from previous bookmarks
       this.readProgress = 0;

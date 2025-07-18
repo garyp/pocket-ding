@@ -12,7 +12,6 @@ export class SecureIframe extends LitElement {
   @property({ type: Number }) scrollPosition = 0;
 
   @state() private secureContent = '';
-  @state() private readProgress = 0;
 
   static override styles = css`
     :host {
@@ -97,7 +96,6 @@ export class SecureIframe extends LitElement {
   }
 
   private handleProgressUpdate(progress: number, scrollPosition: number) {
-    this.readProgress = progress;
     this.scrollPosition = scrollPosition;
 
     // Dispatch event to parent
