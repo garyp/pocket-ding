@@ -1,10 +1,10 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { DatabaseService } from '../services/database';
 import { ContentFetcher } from '../services/content-fetcher';
 import { ThemeService } from '../services/theme-service';
 import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
+import './secure-iframe';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
@@ -31,11 +31,10 @@ export class BookmarkReader extends LitElement {
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
 
-  private scrollObserver: IntersectionObserver | null = null;
   private progressSaveTimeout: number | null = null;
   private readMarkTimeout: number | null = null;
   private hasBeenMarkedAsRead = false;
-  private isRestoringPosition = false;
+  private secureIframe: any = null;
 
   static override styles = css`
     :host {
@@ -92,9 +91,14 @@ export class BookmarkReader extends LitElement {
 
     .reader-content {
       flex: 1;
-      overflow-y: auto;
-      padding: 1rem;
       min-height: 0;
+      position: relative;
+      overflow-y: auto;
+    }
+
+    .secure-iframe {
+      height: 100%;
+      width: 100%;
     }
 
     .content-container {
@@ -356,12 +360,17 @@ export class BookmarkReader extends LitElement {
     if (changedProperties.has('bookmarkId') && this.bookmarkId) {
       this.loadBookmark();
     }
+    
+    // Get reference to secure iframe after render
+    if (!this.secureIframe) {
+      this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
+    }
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     this.saveProgress();
-    this.cleanupObserver();
+    this.cleanupTimeouts();
     
     // Remove theme change listener
     ThemeService.removeThemeChangeListener((theme) => {
@@ -376,7 +385,6 @@ export class BookmarkReader extends LitElement {
     try {
       this.isLoading = true;
       this.hasBeenMarkedAsRead = false; // Reset for new bookmark
-      this.isRestoringPosition = false; // Reset restoration flag
       
       // Reset progress state to prevent carryover from previous bookmarks
       this.readProgress = 0;
@@ -416,13 +424,11 @@ export class BookmarkReader extends LitElement {
       this.isLoading = false;
     }
 
-    // Set up scroll tracking after content loads
+    // Set up read marking and theme after content loads
     await this.updateComplete;
-    this.setupScrollTracking();
     this.setupReadMarking();
     this.updateReaderTheme();
     
-    // Note: Auto-reset was temporarily added for debugging and is now removed
   }
 
   private async loadContent() {
@@ -462,90 +468,25 @@ export class BookmarkReader extends LitElement {
     `;
   }
 
-  private setupScrollTracking() {
-    this.cleanupObserver();
-    
-    const contentElement = this.shadowRoot?.querySelector('.reader-content');
-    if (!contentElement) {
-      return;
-    }
-
-
-    // Restore scroll position after content is rendered
-    if (this.scrollPosition > 0) {
-      this.isRestoringPosition = true;
-      requestAnimationFrame(() => {
-        contentElement.scrollTop = this.scrollPosition;
-        // Allow progress updates after restoration is complete
-        setTimeout(() => {
-          this.isRestoringPosition = false;
-        }, 100);
-      });
-    } else {
-    }
-
-    // Set up intersection observer for progress tracking
-    try {
-      this.scrollObserver = new IntersectionObserver(
-        (entries) => {
-          entries.forEach(entry => {
-            if (entry.isIntersecting) {
-              this.updateReadProgress();
-            }
-          });
-        },
-        {
-          root: contentElement,
-          rootMargin: '0px',
-          threshold: 0.1
-        }
-      );
-
-      // Observe content paragraphs
-      const paragraphs = contentElement.querySelectorAll('p');
-      paragraphs.forEach(p => this.scrollObserver?.observe(p));
-    } catch (error) {
-      console.warn('IntersectionObserver not supported, falling back to scroll-based progress tracking:', error);
-      this.scrollObserver = null;
-    }
-
-    // Track scroll position and update progress
-    contentElement.addEventListener('scroll', () => {
-      this.scrollPosition = contentElement.scrollTop;
-      this.updateReadProgress();
-    });
-  }
-
-  private updateReadProgress() {
-    // Don't update progress while restoring position
-    if (this.isRestoringPosition) {
-      return;
-    }
-
-    const contentElement = this.shadowRoot?.querySelector('.reader-content');
-    if (!contentElement) return;
-
-    const scrollTop = contentElement.scrollTop;
-    const scrollHeight = contentElement.scrollHeight;
-    const clientHeight = contentElement.clientHeight;
-    
-    // Calculate progress based on scroll position
-    const scrollableHeight = scrollHeight - clientHeight;
-    
-    let progress: number;
-    if (scrollableHeight <= 0) {
-      // Content fits entirely in viewport - show 100% only if there's actually content
-      progress = scrollHeight > 0 ? 100 : 0;
-    } else {
-      // Content is scrollable - calculate based on scroll position
-      progress = Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100));
-    }
-    
+  private handleIframeProgressUpdate(event: CustomEvent) {
+    const { progress, scrollPosition } = event.detail;
     
     this.readProgress = progress;
+    this.scrollPosition = scrollPosition;
     
     this.scheduleProgressSave();
   }
+
+  private handleIframeContentLoaded(_event: CustomEvent) {
+    // Content loaded in iframe, no additional action needed
+    console.log('Iframe content loaded successfully');
+  }
+
+  private handleIframeContentError(event: CustomEvent) {
+    const { error } = event.detail;
+    console.error('Iframe content error:', error);
+  }
+
 
   private scheduleProgressSave() {
     if (this.progressSaveTimeout) {
@@ -626,11 +567,7 @@ export class BookmarkReader extends LitElement {
     }
   }
 
-  private cleanupObserver() {
-    if (this.scrollObserver) {
-      this.scrollObserver.disconnect();
-      this.scrollObserver = null;
-    }
+  private cleanupTimeouts() {
     if (this.progressSaveTimeout) {
       clearTimeout(this.progressSaveTimeout);
       this.progressSaveTimeout = null;
@@ -664,10 +601,7 @@ export class BookmarkReader extends LitElement {
       await this.loadContent();
       
       // Reset scroll position when changing content source
-      const contentElement = this.shadowRoot?.querySelector('.reader-content');
-      if (contentElement) {
-        contentElement.scrollTop = 0;
-      }
+      this.scrollPosition = 0;
       
       this.saveProgress();
     }
@@ -720,9 +654,14 @@ export class BookmarkReader extends LitElement {
           <span>Added ${new Date(this.bookmark.date_added).toLocaleDateString()}</span>
         </div>
       </div>
-      <div class="content-container">
-        ${unsafeHTML(content)}
-      </div>
+      <secure-iframe
+        class="secure-iframe"
+        .content=${content}
+        .scrollPosition=${this.scrollPosition}
+        @progress-update=${this.handleIframeProgressUpdate}
+        @content-loaded=${this.handleIframeContentLoaded}
+        @content-error=${this.handleIframeContentError}
+      ></secure-iframe>
     `;
   }
 
