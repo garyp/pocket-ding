@@ -364,7 +364,7 @@ describe('Reading Progress Integration Tests', () => {
       expect(progressText).toContain('100% read');
       
       const progressBar = getProgressBar();
-      expect(Number(progressBar?.getAttribute('value') || '0')).toBeLessThanOrEqual(100);
+      expect(Number((progressBar as any)?.value || 0)).toBeLessThanOrEqual(1);
     });
 
     it('should never display negative progress', async () => {
@@ -379,7 +379,7 @@ describe('Reading Progress Integration Tests', () => {
       expect(progressText).not.toContain('-');
       
       const progressBar = getProgressBar();
-      expect(Number(progressBar?.getAttribute('value') || '0')).toBeGreaterThanOrEqual(0);
+      expect(Number((progressBar as any)?.value || 0)).toBeGreaterThanOrEqual(0);
     });
 
     it('should update progress via real scroll events (integration test)', async () => {
@@ -640,7 +640,7 @@ describe('Reading Progress Integration Tests', () => {
       expect(getProgressText()).toContain('40% read');
 
       // Find the original button (currently not primary since we start in readability mode)
-      const originalButton = element.shadowRoot?.querySelector('.reading-mode-toggle md-text-button') as HTMLElement;
+      const originalButton = element.shadowRoot?.querySelector('.reading-mode-toggle md-text-button:nth-child(2)') as HTMLElement;
       expect(originalButton?.textContent?.trim()).toBe('Original');
       
       originalButton?.click();
@@ -650,7 +650,8 @@ describe('Reading Progress Integration Tests', () => {
       expect(getProgressText()).toContain('40% read');
 
       // Switch back to readability mode
-      const readerButton = element.shadowRoot?.querySelector('.reading-mode-toggle md-text-button') as HTMLElement;
+      const readerButton = Array.from(element.shadowRoot?.querySelectorAll('.reading-mode-toggle md-text-button, .reading-mode-toggle md-filled-button') || [])
+        .find(btn => btn.textContent?.trim() === 'Reader') as HTMLElement;
       expect(readerButton?.textContent?.trim()).toBe('Reader');
       
       readerButton?.click();

@@ -54,7 +54,6 @@ describe('Dark Mode Integration', () => {
     
     // Clean up document
     document.documentElement.className = '';
-    document.querySelectorAll('link[data-shoelace-theme]').forEach(link => link.remove());
     
     // Wait for any pending async operations to complete
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -108,7 +107,6 @@ describe('Dark Mode Integration', () => {
 
   afterEach(() => {
     element?.remove();
-    document.querySelectorAll('link[data-shoelace-theme]').forEach(link => link.remove());
   });
 
   describe('System theme integration', () => {
@@ -330,8 +328,9 @@ describe('Dark Mode Integration', () => {
       let triggerIcon = element.shadowRoot?.querySelector('md-text-button md-icon');
       expect(triggerIcon?.textContent).toBe('light_mode');
       
-      let darkModeButton = element.shadowRoot?.querySelector('md-text-button[title]');
-      expect(darkModeButton?.getAttribute('title')).toBe('Follow System');
+      let toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-text-button') || [])
+        .find(btn => btn.querySelector('md-icon')?.textContent === 'light_mode' || btn.querySelector('md-icon')?.textContent === 'dark_mode') as HTMLElement;
+      expect(toggleButton?.getAttribute('title')).toBe('Follow System');
       
       // Toggle to dark
       element['handleDarkModeToggle']();
@@ -340,8 +339,9 @@ describe('Dark Mode Integration', () => {
       triggerIcon = element.shadowRoot?.querySelector('md-text-button md-icon');
       expect(triggerIcon?.textContent).toBe('dark_mode');
       
-      darkModeButton = element.shadowRoot?.querySelector('md-text-button[title]');
-      expect(darkModeButton?.getAttribute('title')).toBe('Dark Mode');
+      toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-text-button') || [])
+        .find(btn => btn.querySelector('md-icon')?.textContent === 'light_mode' || btn.querySelector('md-icon')?.textContent === 'dark_mode') as HTMLElement;
+      expect(toggleButton?.getAttribute('title')).toBe('Dark Mode');
     });
   });
 
