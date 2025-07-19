@@ -6,6 +6,8 @@ import './components/app-root';
 import '@fontsource/material-symbols-outlined';
 
 // Material Web Components will be imported directly in components as needed
+// Import Material Web typography scale styles
+import '@material/web/typography/md-typescale-styles.js';
 
 // Initialize theme service for dark mode support
 ThemeService.init();
