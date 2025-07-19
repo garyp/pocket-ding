@@ -67,7 +67,7 @@ export class FaviconController implements ReactiveController {
         });
 
         if (visibleBookmarkIds.length > 0) {
-          this.handleVisibilityChanged(visibleBookmarkIds);
+          this.handleInternalVisibilityChanged(visibleBookmarkIds);
         }
       },
       {
@@ -100,16 +100,17 @@ export class FaviconController implements ReactiveController {
     });
   }
 
-  private handleVisibilityChanged = (visibleBookmarkIds: number[]) => {
+  private handleInternalVisibilityChanged(visibleBookmarkIds: number[]) {
     // Load favicons for visible bookmarks that don't have cached favicons
+    // Note: This is for internal intersection observer use only
+    // For external use, call the public handleVisibilityChanged method
     visibleBookmarkIds.forEach(bookmarkId => {
       if (!this._faviconState.faviconCache.has(bookmarkId) && 
           !this._faviconState.isLoading.has(bookmarkId)) {
-        // Need to get favicon URL from somewhere - we'll expose a method for this
         this.requestFaviconLoad(bookmarkId);
       }
     });
-  };
+  }
 
   private requestFaviconLoad(bookmarkId: number) {
     // This method will be called when a favicon needs to be loaded
