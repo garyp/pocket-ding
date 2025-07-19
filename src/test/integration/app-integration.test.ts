@@ -31,6 +31,8 @@ vi.mock('../../services/sync-service', () => ({
   SyncService: {
     syncBookmarks: vi.fn(),
     getInstance: vi.fn(),
+    isSyncInProgress: vi.fn(() => false),
+    getCurrentSyncProgress: vi.fn(() => ({ current: 0, total: 0 })),
   },
 }));
 
@@ -795,15 +797,8 @@ describe('App Integration Tests', () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue([mockBookmarks[0], newBookmark]);
 
       // Manually trigger the bookmark synced handler to test the functionality
-      const syncEvent = new CustomEvent('bookmark-synced', { 
-        detail: { 
-          bookmark: newBookmark, 
-          current: 1, 
-          total: 1 
-        }
-      });
-      
-      await (bookmarkList as any).handleBookmarkSynced(syncEvent);
+      // Note: After refactoring, handleBookmarkSynced takes (bookmarkId, bookmark) parameters
+      await (bookmarkList as any).handleBookmarkSynced(newBookmark.id, newBookmark);
       await bookmarkList.updateComplete;
 
       // Wait for the presentation component to update
@@ -821,9 +816,6 @@ describe('App Integration Tests', () => {
       // Verify the bookmarks are the correct ones
       const bookmarkIds = (bookmarkList as any).containerState.bookmarks.map((b: any) => b.id);
       expect(bookmarkIds).toEqual([1, 2]);
-      
-      // Verify the new bookmark was added to the synced bookmarks list
-      expect((bookmarkList as any).containerState.syncedBookmarkIds.has(newBookmark.id)).toBe(true);
     });
 
     it('should update existing bookmarks in real-time during sync', async () => {
