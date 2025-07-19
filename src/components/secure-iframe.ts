@@ -188,7 +188,6 @@ export class SecureIframe extends LitElement {
           class="secure-iframe"
           sandbox="allow-scripts allow-same-origin"
           srcdoc=${this.secureContent}
-          style="width: 100%; height: 100%; border: none;"
         ></iframe>
         ${this.isLoading ? this.renderLoading() : ''}
       </div>

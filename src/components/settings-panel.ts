@@ -110,7 +110,6 @@ export class SettingsPanel extends LitElement {
     }
 
     .sync-progress-text {
-      font-size: 0.875rem;
       color: var(--md-sys-color-on-primary-container);
       margin-bottom: 0.5rem;
     }
@@ -123,6 +122,32 @@ export class SettingsPanel extends LitElement {
       .form-actions {
         flex-direction: column;
       }
+    }
+
+    /* Utility classes */
+    .circular-progress-16 {
+      width: 16px;
+      height: 16px;
+    }
+
+    .status-message {
+      padding: 0.75rem;
+      border-radius: 8px;
+    }
+
+    .status-success {
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+    }
+
+    .status-error {
+      background: var(--md-sys-color-error-container);
+      color: var(--md-sys-color-on-error-container);
+    }
+
+    .error-button {
+      --md-filled-button-container-color: var(--md-sys-color-error);
+      --md-filled-button-label-text-color: var(--md-sys-color-on-error);
     }
   `;
 
@@ -303,19 +328,14 @@ export class SettingsPanel extends LitElement {
               ?disabled=${this.testStatus === 'testing'}
             >
               ${this.testStatus === 'testing' ? html`
-                <md-circular-progress indeterminate slot="icon" style="width: 16px; height: 16px;"></md-circular-progress>
+                <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
                 Testing...
               ` : 'Test Connection'}
             </md-text-button>
           </div>
           
           ${this.testStatus !== 'idle' ? html`
-            <div class="status-message" style="
-              padding: 0.75rem;
-              border-radius: 8px;
-              background: ${this.testStatus === 'success' ? 'var(--md-sys-color-primary-container)' : 'var(--md-sys-color-error-container)'};
-              color: ${this.testStatus === 'success' ? 'var(--md-sys-color-on-primary-container)' : 'var(--md-sys-color-on-error-container)'};
-            ">
+            <div class="status-message ${this.testStatus === 'success' ? 'status-success' : 'status-error'}">
               ${this.testMessage}
             </div>
           ` : ''}
@@ -357,7 +377,7 @@ export class SettingsPanel extends LitElement {
             
             ${this.isFullSyncing ? html`
               <div class="sync-progress">
-                <div class="sync-progress-text">
+                <div class="sync-progress-text md-typescale-body-medium">
                   Syncing bookmarks... ${this.fullSyncProgress} / ${this.fullSyncTotal}
                 </div>
                 <md-linear-progress
@@ -412,7 +432,7 @@ export class SettingsPanel extends LitElement {
         <p>This will permanently delete all your bookmarks and reading progress stored locally.</p>
         <md-filled-button
           @click=${this.handleClearData}
-          style="--md-filled-button-container-color: var(--md-sys-color-error); --md-filled-button-label-text-color: var(--md-sys-color-on-error);"
+          class="error-button"
         >
           Clear All Data
         </md-filled-button>

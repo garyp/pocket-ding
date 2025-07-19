@@ -45,13 +45,17 @@ export class AppRoot extends LitElement {
     }
 
     .app-title {
-      font-size: 1.25rem;
-      font-weight: 600;
       margin: 0;
     }
 
     .header-actions {
       display: flex;
+      gap: 0.5rem;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
       gap: 0.5rem;
     }
 
@@ -139,13 +143,16 @@ export class AppRoot extends LitElement {
         padding: 0.75rem;
       }
       
-      .app-title {
-        font-size: 1.1rem;
-      }
       
       .header-actions md-text-button {
         font-size: 0.875rem;
       }
+    }
+
+    /* Utility classes */
+    .circular-progress-48 {
+      width: 48px;
+      height: 48px;
     }
   `;
 
@@ -337,7 +344,7 @@ export class AppRoot extends LitElement {
     
     return html`
       <div class="app-header">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <div class="header-content">
           ${showBack ? html`
             <md-text-button
               @click=${this.handleBackClick}
@@ -345,7 +352,7 @@ export class AppRoot extends LitElement {
               <md-icon slot="icon">arrow_back</md-icon>
             </md-text-button>
           ` : ''}
-          <h1 class="app-title">
+          <h1 class="app-title md-typescale-title-large">
             ${this.currentView === 'bookmarks' ? 'My Bookmarks' : 
               this.currentView === 'reader' ? 'Reading' : 
               this.currentView === 'settings' ? 'Settings' : 'Page Not Found'}
@@ -376,7 +383,7 @@ export class AppRoot extends LitElement {
     if (this.isLoading) {
       return html`
         <div class="loading-container">
-          <md-circular-progress indeterminate style="width: 48px; height: 48px;"></md-circular-progress>
+          <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
           <p>Loading...</p>
         </div>
       `;
