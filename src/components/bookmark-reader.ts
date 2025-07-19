@@ -228,11 +228,8 @@ export class BookmarkReader extends LitElement {
     }
 
     .bookmark-title {
-      font-size: 1.75rem;
-      font-weight: 700;
       color: var(--md-sys-color-on-surface);
       margin: 0 0 0.5rem 0;
-      line-height: 1.2;
     }
 
     .bookmark-meta {
@@ -332,9 +329,6 @@ export class BookmarkReader extends LitElement {
         padding: 0.75rem;
       }
       
-      .bookmark-title {
-        font-size: 1.5rem;
-      }
       
       .bookmark-meta {
         font-size: 0.8rem;
@@ -660,7 +654,7 @@ export class BookmarkReader extends LitElement {
 
     return html`
       <div class="bookmark-header">
-        <h1 class="bookmark-title">${this.bookmark.title}</h1>
+        <h1 class="bookmark-title md-typescale-headline-medium">${this.bookmark.title}</h1>
         <div class="bookmark-meta">
           <a href="${this.bookmark.url}" target="_blank" class="bookmark-url">
             ${this.bookmark.url}

@@ -45,8 +45,6 @@ export class AppRoot extends LitElement {
     }
 
     .app-title {
-      font-size: 1.25rem;
-      font-weight: 600;
       margin: 0;
     }
 
@@ -145,9 +143,6 @@ export class AppRoot extends LitElement {
         padding: 0.75rem;
       }
       
-      .app-title {
-        font-size: 1.1rem;
-      }
       
       .header-actions md-text-button {
         font-size: 0.875rem;
@@ -357,7 +352,7 @@ export class AppRoot extends LitElement {
               <md-icon slot="icon">arrow_back</md-icon>
             </md-text-button>
           ` : ''}
-          <h1 class="app-title">
+          <h1 class="app-title md-typescale-title-large">
             ${this.currentView === 'bookmarks' ? 'My Bookmarks' : 
               this.currentView === 'reader' ? 'Reading' : 
               this.currentView === 'settings' ? 'Settings' : 'Page Not Found'}

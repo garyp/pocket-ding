@@ -110,7 +110,6 @@ export class SettingsPanel extends LitElement {
     }
 
     .sync-progress-text {
-      font-size: 0.875rem;
       color: var(--md-sys-color-on-primary-container);
       margin-bottom: 0.5rem;
     }
@@ -378,7 +377,7 @@ export class SettingsPanel extends LitElement {
             
             ${this.isFullSyncing ? html`
               <div class="sync-progress">
-                <div class="sync-progress-text">
+                <div class="sync-progress-text md-typescale-body-medium">
                   Syncing bookmarks... ${this.fullSyncProgress} / ${this.fullSyncTotal}
                 </div>
                 <md-linear-progress

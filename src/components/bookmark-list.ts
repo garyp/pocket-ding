@@ -142,8 +142,6 @@ export class BookmarkList extends LitElement {
 
     .bookmark-title {
       margin: 0;
-      font-size: 1.1rem;
-      font-weight: 600;
       color: var(--md-sys-color-on-surface);
       flex: 1;
       margin-right: 1rem;
@@ -262,9 +260,6 @@ export class BookmarkList extends LitElement {
         padding: 0.75rem;
       }
       
-      .bookmark-title {
-        font-size: 1rem;
-      }
       
       .filters {
         padding: 0;
@@ -422,7 +417,7 @@ export class BookmarkList extends LitElement {
       >
         <div class="bookmark-content">
           <div class="bookmark-header">
-            <h3 class="bookmark-title">${bookmark.title}</h3>
+            <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
             <div class="bookmark-meta">
               ${bookmark.unread ? html`
                 <md-icon class="unread-icon" title="Unread">email</md-icon>
