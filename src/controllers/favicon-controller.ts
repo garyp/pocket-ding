@@ -112,7 +112,7 @@ export class FaviconController implements ReactiveController {
     });
   }
 
-  private requestFaviconLoad(bookmarkId: number) {
+  private requestFaviconLoad(_bookmarkId: number) {
     // This method will be called when a favicon needs to be loaded
     // The host component should provide the favicon URL
     // For now, we just mark it as a request
@@ -213,9 +213,8 @@ export class FaviconController implements ReactiveController {
     
     // Preload favicons for visible bookmarks
     setTimeout(() => {
-      const visibleElements = Array.from(
-        (this.host as any).renderRoot?.querySelectorAll?.('[data-bookmark-id]') || []
-      ).filter((el: Element) => {
+      const elements = (this.host as any).renderRoot?.querySelectorAll?.('[data-bookmark-id]') || [];
+      const visibleElements = Array.from(elements as NodeListOf<Element>).filter((el: Element) => {
         const rect = el.getBoundingClientRect();
         return rect.top >= 0 && rect.bottom <= window.innerHeight;
       });

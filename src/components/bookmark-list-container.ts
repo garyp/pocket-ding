@@ -3,12 +3,16 @@ import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
-import type { BookmarkListContainerState } from '../types';
+import type { LocalBookmark } from '../types';
 import './bookmark-list';
 
 @customElement('bookmark-list-container')
 export class BookmarkListContainer extends LitElement {
-  @state() private containerState = {
+  @state() private containerState: {
+    bookmarks: LocalBookmark[];
+    isLoading: boolean;
+    bookmarksWithAssets: Set<number>;
+  } = {
     bookmarks: [],
     isLoading: true,
     bookmarksWithAssets: new Set<number>(),
