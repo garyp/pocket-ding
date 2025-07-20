@@ -40,7 +40,6 @@ export class BookmarkList extends LitElement {
   @state() private selectedFilter: BookmarkFilter = 'all';
   @state() private scrollPosition: number = 0;
   
-  private intersectionObserver: IntersectionObserver | null = null;
   private scrollContainer: Element | null = null;
   
   // State controller for persistence with automatic observation
@@ -270,7 +269,6 @@ export class BookmarkList extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.initializeState();
-    this.setupIntersectionObserver();
     this.setupScrollTracking();
   }
 
@@ -281,11 +279,6 @@ export class BookmarkList extends LitElement {
     // Clean up scroll event listener
     if (this.scrollContainer && (this as any)._scrollHandler) {
       this.scrollContainer.removeEventListener('scroll', (this as any)._scrollHandler);
-    }
-    
-    if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect();
-      this.intersectionObserver = null;
     }
   }
 
@@ -326,43 +319,9 @@ export class BookmarkList extends LitElement {
     }
   }
 
-  private setupIntersectionObserver() {
-    this.intersectionObserver = new IntersectionObserver(
-      (entries) => {
-        const visibleBookmarkIds: number[] = [];
-        
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const bookmarkId = parseInt(entry.target.getAttribute('data-bookmark-id') || '0');
-            if (bookmarkId > 0) {
-              visibleBookmarkIds.push(bookmarkId);
-            }
-          }
-        });
-
-        if (visibleBookmarkIds.length > 0) {
-          this.onVisibilityChanged(visibleBookmarkIds);
-        }
-      },
-      {
-        root: null,
-        rootMargin: '100px',
-        threshold: 0.1,
-      }
-    );
-  }
 
   override updated(changedProperties: Map<string, any>) {
     super.updated(changedProperties);
-    
-    // Re-observe bookmark cards after updates
-    if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect();
-      const bookmarkCards = this.renderRoot.querySelectorAll('.bookmark-card');
-      bookmarkCards.forEach(card => {
-        this.intersectionObserver!.observe(card);
-      });
-    }
     
     // Restore scroll position after the first render
     if (changedProperties.has('bookmarks') && this.bookmarks.length > 0) {

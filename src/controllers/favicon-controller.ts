@@ -112,10 +112,14 @@ export class FaviconController implements ReactiveController {
     });
   }
 
-  private requestFaviconLoad(_bookmarkId: number) {
-    // This method will be called when a favicon needs to be loaded
-    // The host component should provide the favicon URL
-    // For now, we just mark it as a request
+  private requestFaviconLoad(bookmarkId: number) {
+    // This method is called by the internal intersection observer
+    // Since we need the favicon URL, we delegate to the host component
+    // through the onFaviconLoaded callback mechanism
+    
+    // The host component should implement the logic to provide the favicon URL
+    // and call loadFavicon(bookmarkId, faviconUrl) directly
+    console.debug(`Favicon load requested for bookmark ${bookmarkId}`);
   }
 
   // Public API methods
@@ -232,12 +236,6 @@ export class FaviconController implements ReactiveController {
     }, 100);
   }
 
-  /**
-   * Get favicon cache for external access
-   */
-  getFaviconCache(): Map<number, string> {
-    return new Map(this._faviconState.faviconCache);
-  }
 
   /**
    * Handle visibility changes from external observers

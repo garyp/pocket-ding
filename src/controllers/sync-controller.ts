@@ -146,11 +146,7 @@ export class SyncController implements ReactiveController {
     
     // Clear synced highlights after delay
     setTimeout(() => {
-      this._syncState = {
-        ...this._syncState,
-        syncedBookmarkIds: new Set<number>(),
-      };
-      this.host.requestUpdate();
+      this.clearSyncedHighlights();
     }, 3000);
   };
 
@@ -209,12 +205,30 @@ export class SyncController implements ReactiveController {
     try {
       const settings = await DatabaseService.getSettings();
       if (settings) {
+        // Update sync state to indicate we're starting sync
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: true,
+          syncProgress: 0,
+          syncTotal: 0,
+          syncedBookmarkIds: new Set<number>(),
+        };
+        this.host.requestUpdate();
+        
         await SyncService.syncBookmarks(settings);
         // Don't dispatch sync-requested event to avoid infinite loop
         // The sync service itself will dispatch the necessary events
       }
     } catch (error) {
       console.error('Failed to sync bookmarks:', error);
+      // Reset sync state on error
+      this._syncState = {
+        ...this._syncState,
+        isSyncing: false,
+        syncProgress: 0,
+        syncTotal: 0,
+      };
+      this.host.requestUpdate();
     }
   }
 

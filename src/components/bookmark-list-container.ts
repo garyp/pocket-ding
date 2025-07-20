@@ -155,7 +155,7 @@ export class BookmarkListContainer extends LitElement {
 
   override render() {
     const syncState = this.syncController.getSyncState();
-    const faviconCache = this.faviconController.getFaviconCache();
+    const faviconState = this.faviconController.getFaviconState();
     
     return html`
       <bookmark-list
@@ -163,7 +163,7 @@ export class BookmarkListContainer extends LitElement {
         .isLoading=${this.containerState.isLoading}
         .syncState=${syncState}
         .faviconState=${{
-          faviconCache: faviconCache,
+          faviconCache: faviconState.faviconCache,
           bookmarksWithAssets: this.containerState.bookmarksWithAssets,
         }}
         .onBookmarkSelect=${this.handleBookmarkSelect}
