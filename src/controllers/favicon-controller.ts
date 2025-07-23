@@ -100,27 +100,12 @@ export class FaviconController implements ReactiveController {
     });
   }
 
-  private handleInternalVisibilityChanged(visibleBookmarkIds: number[]) {
-    // Load favicons for visible bookmarks that don't have cached favicons
-    // Note: This is for internal intersection observer use only
-    // For external use, call the public handleVisibilityChanged method
-    visibleBookmarkIds.forEach(bookmarkId => {
-      if (!this._faviconState.faviconCache.has(bookmarkId) && 
-          !this._faviconState.isLoading.has(bookmarkId)) {
-        this.requestFaviconLoad(bookmarkId);
-      }
-    });
+  private handleInternalVisibilityChanged(_visibleBookmarkIds: number[]) {
+    // Note: Actual favicon loading is handled through the external
+    // handleVisibilityChanged method which has access to bookmark data.
+    // This internal observer is used for setup/teardown only.
   }
 
-  private requestFaviconLoad(bookmarkId: number) {
-    // This method is called by the internal intersection observer
-    // Since we need the favicon URL, we delegate to the host component
-    // through the onFaviconLoaded callback mechanism
-    
-    // The host component should implement the logic to provide the favicon URL
-    // and call loadFavicon(bookmarkId, faviconUrl) directly
-    console.debug(`Favicon load requested for bookmark ${bookmarkId}`);
-  }
 
   // Public API methods
 
