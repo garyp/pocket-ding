@@ -66,9 +66,9 @@ export class FaviconController implements ReactiveController {
           }
         });
 
-        if (visibleBookmarkIds.length > 0) {
-          this.handleInternalVisibilityChanged(visibleBookmarkIds);
-        }
+        // Note: visibleBookmarkIds are collected but not used internally.
+        // Actual favicon loading is handled through the external
+        // handleVisibilityChanged method which has access to bookmark data.
       },
       {
         root: null,
@@ -99,13 +99,6 @@ export class FaviconController implements ReactiveController {
       this.intersectionObserver!.observe(card);
     });
   }
-
-  private handleInternalVisibilityChanged(_visibleBookmarkIds: number[]) {
-    // Note: Actual favicon loading is handled through the external
-    // handleVisibilityChanged method which has access to bookmark data.
-    // This internal observer is used for setup/teardown only.
-  }
-
 
   // Public API methods
 
