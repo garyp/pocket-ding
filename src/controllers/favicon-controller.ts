@@ -29,6 +29,9 @@ export class FaviconController implements ReactiveController {
     isLoading: new Set<number>(),
   };
 
+  // Store bookmark data for intersection observer to use
+  private bookmarksData: Array<{ id: number; favicon_url?: string }> = [];
+
   constructor(host: ReactiveControllerHost, options: FaviconControllerOptions = {}) {
     this.host = host;
     this.options = {
@@ -66,9 +69,8 @@ export class FaviconController implements ReactiveController {
           }
         });
 
-        // Note: visibleBookmarkIds are collected but not used internally.
-        // Actual favicon loading is handled through the external
-        // handleVisibilityChanged method which has access to bookmark data.
+        // Load favicons for newly visible bookmarks
+        this.handleVisibilityChanged(visibleBookmarkIds, this.bookmarksData);
       },
       {
         root: null,
@@ -190,7 +192,8 @@ export class FaviconController implements ReactiveController {
    * Observe bookmark elements for intersection
    */
   observeBookmarks(bookmarks: Array<{ id: number; favicon_url?: string }>): void {
-    // Store bookmark data for loading favicons when they become visible
+    // Store bookmark data for intersection observer to use
+    this.bookmarksData = bookmarks;
     this.updateObservedElements();
     
     // Preload favicons for visible bookmarks
