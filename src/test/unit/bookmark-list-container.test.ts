@@ -6,7 +6,10 @@ import type { LocalBookmark } from '../../types';
 // Mock the services
 vi.mock('../../services/database', () => ({
   DatabaseService: {
-    getAllBookmarks: vi.fn(),
+    getBookmarksPaginated: vi.fn(),
+    getBookmarkCount: vi.fn(),
+    getPageFromAnchorBookmark: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
     getCompletedAssetsByBookmarkId: vi.fn(),
     getSettings: vi.fn(),
   },
@@ -59,7 +62,10 @@ describe('BookmarkListContainer', () => {
     vi.clearAllMocks();
     
     // Setup default mock implementations
-    vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(mockBookmarks);
+    vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue(mockBookmarks);
+    vi.mocked(DatabaseService.getBookmarkCount).mockResolvedValue(1);
+    vi.mocked(DatabaseService.getPageFromAnchorBookmark).mockResolvedValue(1);
+    vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map([[1, false]]));
     vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
     vi.mocked(SyncService.getInstance).mockReturnValue({
       addEventListener: vi.fn(),
@@ -91,7 +97,13 @@ describe('BookmarkListContainer', () => {
       document.body.appendChild(element);
       
       await element.updateComplete;
-      expect(DatabaseService.getAllBookmarks).toHaveBeenCalled();
+      
+      // Wait for async loading to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      
+      expect(DatabaseService.getPageFromAnchorBookmark).toHaveBeenCalled();
+      expect(DatabaseService.getBookmarksPaginated).toHaveBeenCalled();
+      expect(DatabaseService.getBookmarkCount).toHaveBeenCalled();
     });
 
     it('should setup event listeners on connect', async () => {
