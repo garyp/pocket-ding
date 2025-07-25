@@ -629,9 +629,8 @@ describe('App Integration Tests', () => {
         expect(allText).toBeTruthy();
       });
 
-      // Trigger sync event
-      const syncEvent = new CustomEvent('sync-requested');
-      bookmarkList.dispatchEvent(syncEvent);
+      // Trigger sync through the controller API instead of legacy event
+      await (bookmarkList as any).syncController.requestSync();
 
       await waitFor(() => {
         expect(SyncService.syncBookmarks).toHaveBeenCalled();
@@ -666,9 +665,8 @@ describe('App Integration Tests', () => {
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
 
-      // Trigger sync event
-      const syncEvent = new CustomEvent('sync-requested');
-      bookmarkList.dispatchEvent(syncEvent);
+      // Trigger sync through the controller API instead of legacy event
+      await (bookmarkList as any).syncController.requestSync();
 
       // Should not crash the app
       await waitFor(() => {

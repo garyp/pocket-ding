@@ -64,16 +64,10 @@ export class BookmarkListContainer extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.loadBookmarks();
-    
-    // Add event listener for sync-requested events (needed for tests and legacy compatibility)
-    this.addEventListener('sync-requested', this.handleSyncRequested);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    
-    // Remove event listener
-    this.removeEventListener('sync-requested', this.handleSyncRequested);
   }
 
 
