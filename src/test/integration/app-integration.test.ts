@@ -904,58 +904,74 @@ describe('App Integration Tests', () => {
     });
 
     it('should hide progress bar and clear highlights when sync completes', async () => {
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
-
-      const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
-      container.appendChild(bookmarkList);
-
-      await bookmarkList.updateComplete;
+      vi.useFakeTimers();
       
-      // Wait for the loadBookmarks promise to complete and component to finish loading
-      await waitFor(() => {
-        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
-        expect(presentationComponent).toBeTruthy();
-        // Wait for component to finish loading and have bookmarks
-        expect((presentationComponent as any).isLoading).toBe(false);
-        expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
-      });
-      
-      // Wait for shadow DOM to be fully populated with bookmark content
-      await waitFor(() => {
-        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
-        const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
-        expect(bookmarkCards?.length).toBeGreaterThan(0);
-      }, { timeout: 3000 });
+      try {
+        (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+        (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
-      // Start sync and add highlighted bookmark
-      triggerSyncEvent('sync-started', { total: 1 });
-      triggerSyncEvent('bookmark-synced', { 
-        bookmark: mockBookmarks[0], 
-        current: 1, 
-        total: 1 
-      });
-      await bookmarkList.updateComplete;
+        const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
+        container.appendChild(bookmarkList);
 
-      // Should show progress and highlight
-      await waitFor(() => {
-        const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
-        const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
-        expect(progressBar).toBeTruthy();
-        expect(syncedCard).toBeTruthy();
-      });
+        await bookmarkList.updateComplete;
+        
+        // Wait for the loadBookmarks promise to complete and component to finish loading
+        await waitFor(() => {
+          const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+          expect(presentationComponent).toBeTruthy();
+          // Wait for component to finish loading and have bookmarks
+          expect((presentationComponent as any).isLoading).toBe(false);
+          expect((presentationComponent as any).bookmarks?.length).toBeGreaterThan(0);
+        });
+        
+        // Wait for shadow DOM to be fully populated with bookmark content
+        await waitFor(() => {
+          const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list') as any;
+          const bookmarkCards = presentationComponent?.shadowRoot?.querySelectorAll('.bookmark-card');
+          expect(bookmarkCards?.length).toBeGreaterThan(0);
+        }, { timeout: 3000 });
 
-      // Complete sync
-      triggerSyncEvent('sync-completed', { processed: 1 });
-      await bookmarkList.updateComplete;
+        // Start sync and add highlighted bookmark
+        triggerSyncEvent('sync-started', { total: 1 });
+        triggerSyncEvent('bookmark-synced', { 
+          bookmark: mockBookmarks[0], 
+          current: 1, 
+          total: 1 
+        });
+        await bookmarkList.updateComplete;
 
-      // Progress bar should be hidden and highlights cleared
-      await waitFor(() => {
-        const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
-        const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
-        expect(progressBar).toBeFalsy();
-        expect(syncedCard).toBeFalsy();
-      });
+        // Should show progress and highlight
+        await waitFor(() => {
+          const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
+          const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
+          expect(progressBar).toBeTruthy();
+          expect(syncedCard).toBeTruthy();
+        });
+
+        // Complete sync
+        triggerSyncEvent('sync-completed', { processed: 1 });
+        await bookmarkList.updateComplete;
+
+        // Progress bar should be hidden immediately, but highlights should still be there
+        await waitFor(() => {
+          const progressBar = findTextInShadowDOM(bookmarkList, 'Syncing');
+          const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
+          expect(progressBar).toBeFalsy();
+          expect(syncedCard).toBeTruthy(); // Still highlighted before timeout
+        });
+
+        // Fast-forward time by 3 seconds to trigger highlight clearing
+        vi.advanceTimersByTime(3000);
+        await bookmarkList.updateComplete;
+
+        // Now highlights should be cleared
+        await waitFor(() => {
+          const syncedCard = findElementInShadowDOM(bookmarkList, '.bookmark-card.synced');
+          expect(syncedCard).toBeFalsy(); // Highlights cleared after timeout
+        });
+      } finally {
+        vi.useRealTimers(); // Always restore real timers
+      }
     });
 
     it('should handle sync errors gracefully while maintaining UI state', async () => {

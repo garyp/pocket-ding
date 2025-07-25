@@ -87,8 +87,6 @@ describe('BookmarkListContainer Background Sync', () => {
   ];
 
   beforeEach(async () => {
-    // Mock setTimeout to execute immediately to avoid test timeouts
-    vi.stubGlobal('setTimeout', (fn: Function) => fn());
     
     // Setup mock event listeners tracking
     mockEventListeners = {};
@@ -136,7 +134,6 @@ describe('BookmarkListContainer Background Sync', () => {
     if (element && document.body.contains(element)) {
       document.body.removeChild(element);
     }
-    // Restore original setTimeout
     vi.unstubAllGlobals();
   });
 
@@ -348,32 +345,47 @@ describe('BookmarkListContainer Background Sync', () => {
     });
 
     it('should clear synced bookmark highlights when sync completes', async () => {
-      // First start a sync to enable sync mode
-      triggerSyncEvent('sync-started', { total: 1 });
-      await element.updateComplete;
+      vi.useFakeTimers();
       
-      triggerSyncEvent('bookmark-synced', { 
-        bookmark: mockBookmarks[0], 
-        current: 1, 
-        total: 1 
-      });
-      
-      // Wait for handleBookmarkSynced async operation to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await element.updateComplete;
+      try {
+        // First start a sync to enable sync mode
+        triggerSyncEvent('sync-started', { total: 1 });
+        await element.updateComplete;
+        
+        triggerSyncEvent('bookmark-synced', { 
+          bookmark: mockBookmarks[0], 
+          current: 1, 
+          total: 1 
+        });
+        
+        // Wait for handleBookmarkSynced async operation to complete
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await element.updateComplete;
 
-      const presentationComponent = getPresentationComponent();
-      let syncedCard = presentationComponent?.shadowRoot?.querySelector('.bookmark-card.synced');
-      expect(syncedCard).toBeTruthy();
+        const presentationComponent = getPresentationComponent();
+        let syncedCard = presentationComponent?.shadowRoot?.querySelector('.bookmark-card.synced');
+        expect(syncedCard).toBeTruthy();
 
-      triggerSyncEvent('sync-completed', { processed: 1 });
-      
-      // Wait for handleSyncCompleted's loadBookmarks to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await element.updateComplete;
+        triggerSyncEvent('sync-completed', { processed: 1 });
+        
+        // Wait for handleSyncCompleted's loadBookmarks to complete
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await element.updateComplete;
 
-      syncedCard = presentationComponent?.shadowRoot?.querySelector('.bookmark-card.synced');
-      expect(syncedCard).toBeFalsy();
+        // Highlights should still be there immediately after sync completion
+        syncedCard = presentationComponent?.shadowRoot?.querySelector('.bookmark-card.synced');
+        expect(syncedCard).toBeTruthy();
+
+        // Advance timers by 3 seconds to trigger highlight clearing
+        vi.advanceTimersByTime(3000);
+        await element.updateComplete;
+
+        // Now highlights should be cleared
+        syncedCard = presentationComponent?.shadowRoot?.querySelector('.bookmark-card.synced');
+        expect(syncedCard).toBeFalsy();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

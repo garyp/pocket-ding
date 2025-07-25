@@ -142,6 +142,52 @@ Remember: Tests should be written as part of feature development, not as an afte
 - Tests provide reliable, repeatable validation and prevent regressions
 - Manual testing with the dev server should only be used for exploratory work, not validation
 
+### Fake Timers for Deterministic Testing
+
+**IMPORTANT**: Use vitest fake timers instead of real delays for deterministic tests.
+
+**❌ Bad - Brittle timing with real delays:**
+```typescript
+// Don't do this - brittle and slow
+await new Promise(resolve => setTimeout(resolve, 1000));
+expect(someAsyncBehavior).toHaveOccurred();
+
+// Don't do this - incorrect workaround
+vi.stubGlobal('setTimeout', (fn: Function) => fn());
+```
+
+**✅ Good - Deterministic fake timers:**
+```typescript
+it('should clear highlights after timeout', () => {
+  vi.useFakeTimers();
+  
+  try {
+    // Trigger code that uses setTimeout
+    component.startTimeout();
+    
+    // Fast-forward time deterministically
+    vi.advanceTimersByTime(3000);
+    
+    // Assert expected behavior
+    expect(component.isHighlighted()).toBe(false);
+  } finally {
+    vi.useRealTimers(); // Always restore
+  }
+});
+```
+
+**When to use fake timers:**
+- Any code that uses `setTimeout`, `setInterval`, or other timer functions
+- Debounced operations (like save-after-scroll)
+- Delayed UI state changes (like clearing highlights)
+- Background processes with timing dependencies
+
+**Fake timer patterns:**
+- `vi.useFakeTimers()` - Enable fake timers at start of test
+- `vi.advanceTimersByTime(ms)` - Fast-forward time by specified milliseconds
+- `vi.runAllTimers()` - Execute all pending timers immediately
+- `vi.useRealTimers()` - Always restore in finally block or afterEach
+
 ### Development Best Practices
 
 - Always check that the build works after you've gotten the tests passing

@@ -52,6 +52,7 @@ describe('SyncController', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers(); // Restore real timers after each test
   });
 
   describe('initialization', () => {
@@ -217,6 +218,41 @@ describe('SyncController', () => {
       expect(syncState.syncProgress).toBe(0);
       expect(syncState.syncTotal).toBe(0);
       expect(onSyncCompleted).toHaveBeenCalled();
+    });
+
+    it('should clear synced highlights after 3 second delay on sync completion', () => {
+      vi.useFakeTimers();
+      
+      // Set up controller with synced bookmark
+      controller.hostConnected();
+      
+      // Add a synced bookmark
+      const bookmarkEvent = new CustomEvent('bookmark-synced', { 
+        detail: { bookmark: { id: 123 }, bookmarkId: 123 } 
+      });
+      const bookmarkHandler = vi.mocked(mockSyncService.addEventListener).mock.calls.find(
+        (call: any) => call[0] === 'bookmark-synced'
+      )?.[1];
+      bookmarkHandler?.(bookmarkEvent);
+      
+      // Verify bookmark is highlighted
+      expect(controller.getSyncedBookmarkIds().has(123)).toBe(true);
+      
+      // Trigger sync completion
+      const completedEvent = new CustomEvent('sync-completed');
+      const completedHandler = vi.mocked(mockSyncService.addEventListener).mock.calls.find(
+        (call: any) => call[0] === 'sync-completed'
+      )?.[1];
+      completedHandler?.(completedEvent);
+      
+      // Highlights should still be there immediately
+      expect(controller.getSyncedBookmarkIds().has(123)).toBe(true);
+      
+      // Fast-forward time by 3 seconds
+      vi.advanceTimersByTime(3000);
+      
+      // Now highlights should be cleared
+      expect(controller.getSyncedBookmarkIds().has(123)).toBe(false);
     });
 
     it('should handle sync-error event', () => {

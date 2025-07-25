@@ -409,27 +409,33 @@ describe('Reading Progress Integration Tests', () => {
 
   describe('Progress Persistence', () => {
     it('should save progress after scrolling', async () => {
-      const content = `
-        <div class="content-container">
-          ${Array.from({ length: 20 }, (_, i) => `<p>Paragraph ${i + 1}</p>`).join('')}
-        </div>
-      `;
+      vi.useFakeTimers();
+      
+      try {
+        const content = `
+          <div class="content-container">
+            ${Array.from({ length: 20 }, (_, i) => `<p>Paragraph ${i + 1}</p>`).join('')}
+          </div>
+        `;
 
-      await createElementWithContent(content);
+        await createElementWithContent(content);
 
-      // Scroll to 50%
-      await simulateScroll(300, 1000, 400); // 300/(1000-400) = 50%
+        // Scroll to 50%
+        await simulateScroll(300, 1000, 400); // 300/(1000-400) = 50%
 
-      // Wait for the save timeout to trigger
-      await new Promise(resolve => setTimeout(resolve, 1100)); // saveProgress has 1000ms timeout
+        // Advance timers by 1000ms to trigger saveProgress timeout
+        vi.advanceTimersByTime(1000);
 
-      expect(DatabaseService.saveReadProgress).toHaveBeenCalledWith(
-        expect.objectContaining({
-          bookmark_id: 1,
-          progress: 50,
-          scroll_position: 300
-        })
-      );
+        expect(DatabaseService.saveReadProgress).toHaveBeenCalledWith(
+          expect.objectContaining({
+            bookmark_id: 1,
+            progress: 50,
+            scroll_position: 300
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should restore saved progress when component loads', async () => {
