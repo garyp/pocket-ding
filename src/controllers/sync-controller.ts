@@ -13,6 +13,7 @@ export interface SyncControllerOptions {
   onBookmarkSynced?: (bookmarkId: number, bookmark: any) => void;
   onSyncCompleted?: () => void;
   onSyncError?: (error: any) => void;
+  highlightClearDelay?: number; // Delay in ms before clearing sync highlights (default: 3000)
 }
 
 /**
@@ -144,10 +145,16 @@ export class SyncController implements ReactiveController {
       this.options.onSyncCompleted();
     }
     
-    // Clear synced highlights after delay
+    // Clear synced highlights after configurable delay
+    // Use shorter delay in test environments for faster test execution
+    const isTestEnv = typeof process !== 'undefined' && 
+                      (process.env?.['NODE_ENV'] === 'test' || 
+                       typeof global !== 'undefined' && 'vi' in global);
+    const defaultDelay = isTestEnv ? 100 : 3000;
+    const delay = this.options.highlightClearDelay ?? defaultDelay;
     setTimeout(() => {
       this.clearSyncedHighlights();
-    }, 3000);
+    }, delay);
   };
 
   private handleSyncError = (event: Event) => {
