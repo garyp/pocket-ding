@@ -123,6 +123,12 @@ export interface BookmarkListState {
   scrollPosition: number;
 }
 
+export interface FilterCounts {
+  all: number;
+  unread: number;
+  archived: number;
+}
+
 export interface PaginationState {
   currentPage: number;
   pageSize: number;
@@ -130,6 +136,7 @@ export interface PaginationState {
   totalPages: number;
   anchorBookmarkId?: number;
   filter: BookmarkFilter;
+  filterCounts?: FilterCounts;
 }
 
 export interface BookmarkListContainerState {

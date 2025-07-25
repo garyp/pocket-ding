@@ -3,8 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
-import { StateController } from '../controllers/state-controller';
-import type { LocalBookmark, PaginationState, BookmarkListContainerState } from '../types';
+import type { LocalBookmark, PaginationState } from '../types';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
@@ -76,28 +75,28 @@ export class BookmarkListContainer extends LitElement {
   @state() private persistentFilter: 'all' | 'unread' | 'archived' = 'all';
   @state() private persistentAnchorBookmarkId?: number;
 
-  // State controller for pagination persistence
-  private stateController = new StateController<BookmarkListContainerState>(this, {
-    storageKey: 'bookmark-list-container-state',
-    defaultState: {
-      currentPage: 1,
-      pageSize: 25,
-      filter: 'all'
-    },
-    observedProperties: ['persistentCurrentPage', 'persistentPageSize', 'persistentFilter', 'persistentAnchorBookmarkId'],
-    validator: (state: any): state is BookmarkListContainerState => {
-      return (
-        state &&
-        typeof state === 'object' &&
-        typeof state.currentPage === 'number' &&
-        typeof state.pageSize === 'number' &&
-        typeof state.filter === 'string' &&
-        ['all', 'unread', 'archived'].includes(state.filter) &&
-        state.currentPage >= 1 &&
-        state.pageSize > 0
-      );
-    }
-  });
+  // TODO: State controller for pagination persistence - implement if needed
+  // private stateController = new StateController<BookmarkListContainerState>(this, {
+  //   storageKey: 'bookmark-list-container-state',
+  //   defaultState: {
+  //     currentPage: 1,
+  //     pageSize: 25,
+  //     filter: 'all'
+  //   },
+  //   observedProperties: [],
+  //   validator: (state: any): state is BookmarkListContainerState => {
+  //     return (
+  //       state &&
+  //       typeof state === 'object' &&
+  //       typeof state.currentPage === 'number' &&
+  //       typeof state.pageSize === 'number' &&
+  //       typeof state.filter === 'string' &&
+  //       ['all', 'unread', 'archived'].includes(state.filter) &&
+  //       state.currentPage >= 1 &&
+  //       state.pageSize > 0
+  //     );
+  //   }
+  // });
 
   override connectedCallback() {
     super.connectedCallback();
@@ -115,7 +114,7 @@ export class BookmarkListContainer extends LitElement {
         totalCount: 0,
         totalPages: 1,
         filter: this.persistentFilter,
-        anchorBookmarkId: this.persistentAnchorBookmarkId
+        ...(this.persistentAnchorBookmarkId ? { anchorBookmarkId: this.persistentAnchorBookmarkId } : {})
       }
     };
   }
@@ -141,9 +140,6 @@ export class BookmarkListContainer extends LitElement {
       );
 
       await this.loadBookmarksPage(this.containerState.pagination.filter, targetPage);
-      
-      // Initialize favicon controller with bookmark data
-      this.faviconController.observeBookmarks(this.containerState.bookmarks);
     } catch (error) {
       console.error('Failed to load bookmarks:', error);
       this.containerState = {
@@ -157,10 +153,13 @@ export class BookmarkListContainer extends LitElement {
     try {
       const pageSize = this.containerState.pagination.pageSize;
       
-      // Get paginated bookmarks and total count
-      const [bookmarks, totalCount] = await Promise.all([
+      // Get paginated bookmarks, total count for current filter, and counts for all filters
+      const [bookmarks, totalCount, allCount, unreadCount, archivedCount] = await Promise.all([
         DatabaseService.getBookmarksPaginated(filter, page, pageSize),
-        DatabaseService.getBookmarkCount(filter)
+        DatabaseService.getBookmarkCount(filter),
+        DatabaseService.getBookmarkCount('all'),
+        DatabaseService.getBookmarkCount('unread'),
+        DatabaseService.getBookmarkCount('archived')
       ]);
       
       // Get asset information for current page bookmarks
@@ -187,7 +186,12 @@ export class BookmarkListContainer extends LitElement {
           currentPage: page,
           totalCount,
           totalPages,
-          filter
+          filter,
+          filterCounts: {
+            all: allCount,
+            unread: unreadCount,
+            archived: archivedCount
+          }
         }
       };
 

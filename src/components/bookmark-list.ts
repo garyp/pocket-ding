@@ -497,7 +497,7 @@ export class BookmarkList extends LitElement {
           <md-text-button
             @click=${() => this.handleFilterChange('all')}
           >
-            All (0)
+            All (${this.paginationState.filterCounts?.all ?? 0})
           </md-text-button>
         `}
         ${this.paginationState.filter === 'unread' ? html`
@@ -510,7 +510,7 @@ export class BookmarkList extends LitElement {
           <md-text-button
             @click=${() => this.handleFilterChange('unread')}
           >
-            Unread (0)
+            Unread (${this.paginationState.filterCounts?.unread ?? 0})
           </md-text-button>
         `}
         ${this.paginationState.filter === 'archived' ? html`
@@ -523,7 +523,7 @@ export class BookmarkList extends LitElement {
           <md-text-button
             @click=${() => this.handleFilterChange('archived')}
           >
-            Archived (0)
+            Archived (${this.paginationState.filterCounts?.archived ?? 0})
           </md-text-button>
         `}
       </div>
