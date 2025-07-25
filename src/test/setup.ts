@@ -10,7 +10,9 @@ const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 global.fetch = vi.fn();
 
 // Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+global.IntersectionObserver = vi.fn().mockImplementation((callback, options) => ({
+  callback, // Store the callback so tests can access it
+  options,  // Store the options for completeness
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
