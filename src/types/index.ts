@@ -131,3 +131,10 @@ export interface PaginationState {
   anchorBookmarkId?: number;
   filter: BookmarkFilter;
 }
+
+export interface BookmarkListContainerState {
+  currentPage: number;
+  pageSize: number;
+  filter: BookmarkFilter;
+  anchorBookmarkId?: number;
+}

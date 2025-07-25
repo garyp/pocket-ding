@@ -247,6 +247,11 @@ describe('BookmarkListContainer Background Sync', () => {
         shared: false,
       };
 
+      // Update the database mock to include the new bookmark when queried
+      const updatedBookmarks = [newBookmark, ...mockBookmarks]; // New bookmark first (most recent)
+      (DatabaseService.getBookmarksPaginated as any).mockResolvedValue(updatedBookmarks);
+      (DatabaseService.getBookmarkCount as any).mockResolvedValue(updatedBookmarks.length);
+
       triggerSyncEvent('bookmark-synced', { 
         bookmark: newBookmark, 
         current: 1, 

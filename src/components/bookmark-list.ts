@@ -547,7 +547,7 @@ export class BookmarkList extends LitElement {
         <pagination-controls
           .currentPage=${this.paginationState.currentPage}
           .totalPages=${this.paginationState.totalPages}
-          .disabled=${this.isLoading || this.syncState.isSyncing}
+          .disabled=${this.isLoading}
           .onPageChange=${this.handlePageChange}
         ></pagination-controls>
         
@@ -558,7 +558,7 @@ export class BookmarkList extends LitElement {
         <pagination-controls
           .currentPage=${this.paginationState.currentPage}
           .totalPages=${this.paginationState.totalPages}
-          .disabled=${this.isLoading || this.syncState.isSyncing}
+          .disabled=${this.isLoading}
           .onPageChange=${this.handlePageChange}
         ></pagination-controls>
       `}

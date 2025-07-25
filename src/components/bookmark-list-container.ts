@@ -3,7 +3,8 @@ import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
-import type { LocalBookmark, PaginationState } from '../types';
+import { StateController } from '../controllers/state-controller';
+import type { LocalBookmark, PaginationState, BookmarkListContainerState } from '../types';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
@@ -69,9 +70,54 @@ export class BookmarkListContainer extends LitElement {
 
   private faviconController = new FaviconController(this);
 
+  // Persistent state properties
+  @state() private persistentCurrentPage: number = 1;
+  @state() private persistentPageSize: number = 25;
+  @state() private persistentFilter: 'all' | 'unread' | 'archived' = 'all';
+  @state() private persistentAnchorBookmarkId?: number;
+
+  // State controller for pagination persistence
+  private stateController = new StateController<BookmarkListContainerState>(this, {
+    storageKey: 'bookmark-list-container-state',
+    defaultState: {
+      currentPage: 1,
+      pageSize: 25,
+      filter: 'all'
+    },
+    observedProperties: ['persistentCurrentPage', 'persistentPageSize', 'persistentFilter', 'persistentAnchorBookmarkId'],
+    validator: (state: any): state is BookmarkListContainerState => {
+      return (
+        state &&
+        typeof state === 'object' &&
+        typeof state.currentPage === 'number' &&
+        typeof state.pageSize === 'number' &&
+        typeof state.filter === 'string' &&
+        ['all', 'unread', 'archived'].includes(state.filter) &&
+        state.currentPage >= 1 &&
+        state.pageSize > 0
+      );
+    }
+  });
+
   override connectedCallback() {
     super.connectedCallback();
+    this.initializeFromPersistedState();
     this.loadBookmarks();
+  }
+
+  private initializeFromPersistedState() {
+    // Initialize containerState from persisted values
+    this.containerState = {
+      ...this.containerState,
+      pagination: {
+        currentPage: this.persistentCurrentPage,
+        pageSize: this.persistentPageSize,
+        totalCount: 0,
+        totalPages: 1,
+        filter: this.persistentFilter,
+        anchorBookmarkId: this.persistentAnchorBookmarkId
+      }
+    };
   }
 
   override disconnectedCallback() {
@@ -97,7 +143,7 @@ export class BookmarkListContainer extends LitElement {
       await this.loadBookmarksPage(this.containerState.pagination.filter, targetPage);
       
       // Initialize favicon controller with bookmark data
-      this.faviconController.observeBookmarks(bookmarks);
+      this.faviconController.observeBookmarks(this.containerState.bookmarks);
     } catch (error) {
       console.error('Failed to load bookmarks:', error);
       this.containerState = {
@@ -169,9 +215,11 @@ export class BookmarkListContainer extends LitElement {
     const assets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmarkId);
     const hasAssets = assets.length > 0;
     
-    // Update the bookmark in the list
+    // Check if the bookmark is already on the current page
     const bookmarkIndex = this.containerState.bookmarks.findIndex(b => b.id === bookmarkId);
+    
     if (bookmarkIndex !== -1) {
+      // Update existing bookmark in place
       const updatedBookmarks = [...this.containerState.bookmarks];
       updatedBookmarks[bookmarkIndex] = updatedBookmark;
       
@@ -188,24 +236,45 @@ export class BookmarkListContainer extends LitElement {
         bookmarksWithAssets: updatedBookmarksWithAssets,
       };
     } else {
-      // If bookmark doesn't exist, add it to the list
-      const updatedBookmarksWithAssets = new Set(this.containerState.bookmarksWithAssets);
-      if (hasAssets) {
-        updatedBookmarksWithAssets.add(bookmarkId);
-      }
+      // For new bookmarks, check if they should be visible on current page
+      // by checking if they would appear in a fresh load of this page
+      const currentPageBookmarks = await DatabaseService.getBookmarksPaginated(
+        this.containerState.pagination.filter,
+        this.containerState.pagination.currentPage,
+        this.containerState.pagination.pageSize
+      );
       
-      const newBookmarks = [...this.containerState.bookmarks, updatedBookmark];
-      this.containerState = {
-        ...this.containerState,
-        bookmarks: newBookmarks,
-        bookmarksWithAssets: updatedBookmarksWithAssets,
-      };
+      // If the new bookmark should be visible on current page, reload the page
+      if (currentPageBookmarks.some(b => b.id === bookmarkId)) {
+        await this.loadBookmarksPage(
+          this.containerState.pagination.filter, 
+          this.containerState.pagination.currentPage
+        );
+        return; // Early return since loadBookmarksPage handles everything
+      }
+    }
+    
+    // If this is the anchor bookmark, ensure we're on the correct page to show it
+    if (bookmarkId === this.containerState.pagination.anchorBookmarkId) {
+      const targetPage = await DatabaseService.getPageFromAnchorBookmark(
+        bookmarkId,
+        this.containerState.pagination.filter,
+        this.containerState.pagination.pageSize,
+        this.containerState.pagination.currentPage
+      );
+      
+      // If the anchor bookmark is now on a different page, navigate to that page
+      if (targetPage !== this.containerState.pagination.currentPage) {
+        this.persistentCurrentPage = targetPage;
+        await this.loadBookmarksPage(this.containerState.pagination.filter, targetPage);
+      }
     }
   }
 
   // Callback handlers
   private handleBookmarkSelect = (bookmarkId: number) => {
     // Set the selected bookmark as the anchor for position memory
+    this.persistentAnchorBookmarkId = bookmarkId;
     this.containerState = {
       ...this.containerState,
       pagination: {
@@ -234,12 +303,15 @@ export class BookmarkListContainer extends LitElement {
 
   private handlePageChange = async (page: number) => {
     if (page !== this.containerState.pagination.currentPage) {
+      this.persistentCurrentPage = page;
       await this.loadBookmarksPage(this.containerState.pagination.filter, page);
     }
   };
 
   private handleFilterChange = async (filter: 'all' | 'unread' | 'archived') => {
     if (filter !== this.containerState.pagination.filter) {
+      this.persistentFilter = filter;
+      
       // Use anchor bookmark ID to find the correct page in the new filter
       const anchorBookmarkId = this.containerState.pagination.anchorBookmarkId;
       const targetPage = await DatabaseService.getPageFromAnchorBookmark(
@@ -249,6 +321,7 @@ export class BookmarkListContainer extends LitElement {
         1 // fallback to page 1
       );
       
+      this.persistentCurrentPage = targetPage;
       await this.loadBookmarksPage(filter, targetPage);
     }
   };
