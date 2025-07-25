@@ -83,6 +83,10 @@ export class DatabaseService {
     return results.sort((a, b) => new Date(b.last_read_at).getTime() - new Date(a.last_read_at).getTime())[0];
   }
 
+  static async getAllReadProgress(): Promise<ReadProgress[]> {
+    return await db.readProgress.toArray();
+  }
+
   static async saveSettings(settings: AppSettings): Promise<void> {
     await db.settings.clear();
     await db.settings.add(settings);

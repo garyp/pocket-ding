@@ -4,6 +4,7 @@ import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
+import { DataManagementController } from '../controllers/data-management-controller';
 import type { AppSettings } from '../types';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/button/filled-button.js';
@@ -25,6 +26,8 @@ export class SettingsPanel extends LitElement {
   @state() private isFullSyncing = false;
   @state() private fullSyncProgress = 0;
   @state() private fullSyncTotal = 0;
+
+  private dataManagementController = new DataManagementController(this);
 
   static override styles = css`
     :host {
@@ -148,6 +151,58 @@ export class SettingsPanel extends LitElement {
     .error-button {
       --md-filled-button-container-color: var(--md-sys-color-error);
       --md-filled-button-label-text-color: var(--md-sys-color-on-error);
+    }
+
+    .data-management {
+      border: 1px solid var(--md-sys-color-outline-variant);
+      background: var(--md-sys-color-surface-variant);
+      padding: 1rem;
+      border-radius: 12px;
+      margin-top: 2rem;
+    }
+
+    .data-management h3 {
+      color: var(--md-sys-color-on-surface-variant);
+      margin-bottom: 1rem;
+    }
+
+    .data-management p {
+      color: var(--md-sys-color-on-surface-variant);
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .data-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .import-result {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .import-result-success {
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+    }
+
+    .import-result-error {
+      background: var(--md-sys-color-error-container);
+      color: var(--md-sys-color-on-error-container);
+    }
+
+    .import-details {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
+
+    .hidden-file-input {
+      display: none;
     }
   `;
 
@@ -291,6 +346,14 @@ export class SettingsPanel extends LitElement {
     }
   }
 
+  private async handleExportData() {
+    await this.dataManagementController.exportData();
+  }
+
+  private handleImportClick() {
+    this.dataManagementController.startImport();
+  }
+
   override render() {
     return html`
       <md-outlined-card class="settings-card">
@@ -426,6 +489,46 @@ export class SettingsPanel extends LitElement {
           </md-filled-button>
         </div>
       </md-outlined-card>
+      
+      <div class="data-management">
+        <h3>Data Management</h3>
+        <p>Export and import your reading progress and app settings. This does not include your bookmarks (which are stored on the Linkding server) or cached website content.</p>
+        
+        <div class="data-actions">
+          <md-text-button
+            @click=${this.handleExportData}
+            ?disabled=${this.dataManagementController.state.isExporting || this.dataManagementController.state.isImporting}
+          >
+            ${this.dataManagementController.state.isExporting ? html`
+              <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
+              Exporting...
+            ` : 'Export Data'}
+          </md-text-button>
+          
+          <md-text-button
+            @click=${this.handleImportClick}
+            ?disabled=${this.dataManagementController.state.isExporting || this.dataManagementController.state.isImporting}
+          >
+            ${this.dataManagementController.state.isImporting ? html`
+              <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
+              Importing...
+            ` : 'Import Data'}
+          </md-text-button>
+        </div>
+        
+        ${this.dataManagementController.state.importResult ? html`
+          <div class="import-result ${this.dataManagementController.state.importResult.success ? 'import-result-success' : 'import-result-error'}">
+            <div>Import ${this.dataManagementController.state.importResult.success ? 'completed' : 'failed'}</div>
+            <div class="import-details">
+              Reading progress: ${this.dataManagementController.state.importResult.imported_progress_count} imported, ${this.dataManagementController.state.importResult.skipped_progress_count} skipped<br>
+              ${this.dataManagementController.state.importResult.orphaned_progress_count > 0 ? html`Orphaned progress: ${this.dataManagementController.state.importResult.orphaned_progress_count} bookmarks not found<br>` : ''}
+              Settings: ${this.dataManagementController.state.importResult.imported_settings ? 'updated' : 'not updated'}<br>
+              Sync metadata: ${this.dataManagementController.state.importResult.imported_sync_metadata ? 'updated' : 'not updated'}
+              ${this.dataManagementController.state.importResult.errors.length > 0 ? html`<br>Errors: ${this.dataManagementController.state.importResult.errors.join(', ')}` : ''}
+            </div>
+          </div>
+        ` : ''}
+      </div>
       
       <div class="danger-zone">
         <h3>Danger Zone</h3>
