@@ -87,6 +87,87 @@ For testing and demonstration purposes, you can use the app without setting up a
 - New bookmarks and updates from Linkding are downloaded automatically
 - Article content is fetched and cached for offline reading
 
+## Data Export/Import
+
+Pocket Ding supports exporting and importing your local reading progress and app settings. This allows you to backup your data, migrate between devices, or reset your local data without losing reading progress.
+
+### What Gets Exported
+
+The export includes your **local-only data** that is not stored on the Linkding server:
+
+- **Reading Progress**: Reading percentage, scroll position, last read timestamps, reading mode preferences, and dark mode overrides for each bookmark
+- **App Settings**: Sync interval, auto-sync preferences, default reading mode, and theme preferences (excludes server credentials)
+- **Sync Metadata**: Last sync timestamp for maintaining sync consistency
+
+**Note**: The export does not include your bookmarks (which are stored on your Linkding server) or cached website content (which can be re-downloaded).
+
+### Using Export/Import
+
+1. Go to **Settings** in the app
+2. Scroll to the **Data Management** section
+3. Click **Export Data** to download a JSON file with your local data
+4. Click **Import Data** to upload and import a previously exported JSON file
+
+### Export File Format
+
+The export file is a JSON document with the following structure:
+
+```json
+{
+  "version": "1.0",
+  "export_timestamp": "2025-01-15T10:30:00.000Z",
+  "reading_progress": [
+    {
+      "bookmark_id": 123,
+      "progress": 0.75,
+      "last_read_at": "2025-01-15T09:45:00.000Z",
+      "reading_mode": "readability",
+      "scroll_position": 1500,
+      "dark_mode_override": "dark"
+    }
+  ],
+  "app_settings": {
+    "sync_interval": 60,
+    "auto_sync": true,
+    "reading_mode": "readability",
+    "theme_mode": "system"
+  },
+  "sync_metadata": {
+    "last_sync_timestamp": "2025-01-15T10:00:00.000Z"
+  }
+}
+```
+
+#### Field Descriptions
+
+- **version**: Schema version for compatibility checking
+- **export_timestamp**: When the export was created (ISO 8601 format)
+- **reading_progress**: Array of reading progress records
+  - **bookmark_id**: ID of the bookmark from Linkding server
+  - **progress**: Reading progress as a decimal (0.0 to 1.0)
+  - **last_read_at**: Timestamp when reading progress was last updated
+  - **reading_mode**: "original" or "readability"
+  - **scroll_position**: Vertical scroll position in pixels
+  - **dark_mode_override**: "light", "dark", or null for per-bookmark theme override
+- **app_settings**: Application preferences (server credentials excluded)
+  - **sync_interval**: Sync frequency in minutes
+  - **auto_sync**: Boolean for automatic sync
+  - **reading_mode**: Default reading mode ("original" or "readability")
+  - **theme_mode**: Global theme preference ("light", "dark", or "system")
+- **sync_metadata**: Synchronization state
+  - **last_sync_timestamp**: Last successful sync with Linkding server
+
+### Import Behavior
+
+When importing data:
+
+- **Reading Progress**: Only imported if the import timestamp is newer than existing data for that bookmark
+- **Orphaned Progress**: Reading progress for non-existent bookmarks is skipped
+- **App Settings**: Merged with existing settings (server credentials are preserved)
+- **Sync Metadata**: Updated if present in import
+
+This ensures that importing old data won't overwrite newer reading progress and that your server configuration remains intact.
+
 ## Development
 
 ### Available Scripts

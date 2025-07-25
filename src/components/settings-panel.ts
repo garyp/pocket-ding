@@ -4,6 +4,8 @@ import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
+import { ExportService } from '../services/export-service';
+import { ImportService, type ImportResult } from '../services/import-service';
 import type { AppSettings } from '../types';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/button/filled-button.js';
@@ -25,6 +27,10 @@ export class SettingsPanel extends LitElement {
   @state() private isFullSyncing = false;
   @state() private fullSyncProgress = 0;
   @state() private fullSyncTotal = 0;
+  @state() private isExporting = false;
+  @state() private isImporting = false;
+  @state() private importResult: ImportResult | null = null;
+  @state() private importFileInput: HTMLInputElement | null = null;
 
   static override styles = css`
     :host {
@@ -148,6 +154,58 @@ export class SettingsPanel extends LitElement {
     .error-button {
       --md-filled-button-container-color: var(--md-sys-color-error);
       --md-filled-button-label-text-color: var(--md-sys-color-on-error);
+    }
+
+    .data-management {
+      border: 1px solid var(--md-sys-color-outline-variant);
+      background: var(--md-sys-color-surface-variant);
+      padding: 1rem;
+      border-radius: 12px;
+      margin-top: 2rem;
+    }
+
+    .data-management h3 {
+      color: var(--md-sys-color-on-surface-variant);
+      margin-bottom: 1rem;
+    }
+
+    .data-management p {
+      color: var(--md-sys-color-on-surface-variant);
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .data-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .import-result {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .import-result-success {
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+    }
+
+    .import-result-error {
+      background: var(--md-sys-color-error-container);
+      color: var(--md-sys-color-on-error-container);
+    }
+
+    .import-details {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
+
+    .hidden-file-input {
+      display: none;
     }
   `;
 
@@ -291,6 +349,94 @@ export class SettingsPanel extends LitElement {
     }
   }
 
+  private async handleExportData() {
+    this.isExporting = true;
+    this.testStatus = 'idle';
+    this.importResult = null;
+
+    try {
+      await ExportService.exportToFile();
+      this.testStatus = 'success';
+      this.testMessage = 'Data exported successfully!';
+    } catch (error) {
+      console.error('Export failed:', error);
+      this.testStatus = 'error';
+      this.testMessage = `Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    } finally {
+      this.isExporting = false;
+    }
+  }
+
+  private handleImportClick() {
+    // Create a hidden file input if it doesn't exist
+    if (!this.importFileInput) {
+      this.importFileInput = document.createElement('input');
+      this.importFileInput.type = 'file';
+      this.importFileInput.accept = '.json,application/json';
+      this.importFileInput.className = 'hidden-file-input';
+      this.importFileInput.addEventListener('change', this.handleFileSelected.bind(this));
+      this.shadowRoot?.appendChild(this.importFileInput);
+    }
+    
+    this.importFileInput.click();
+  }
+
+  private async handleFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    
+    if (!file) return;
+
+    this.isImporting = true;
+    this.testStatus = 'idle';
+    this.importResult = null;
+
+    try {
+      // Validate file first
+      const validation = await ImportService.validateImportFile(file);
+      if (!validation.valid) {
+        this.testStatus = 'error';
+        this.testMessage = validation.error || 'Invalid file';
+        return;
+      }
+
+      // Perform import
+      const result = await ImportService.importFromFile(file);
+      this.importResult = result;
+
+      if (result.success) {
+        this.testStatus = 'success';
+        this.testMessage = 'Data imported successfully!';
+        
+        // Trigger settings refresh if settings were imported
+        if (result.imported_settings) {
+          this.dispatchEvent(new CustomEvent('settings-updated'));
+        }
+      } else {
+        this.testStatus = 'error';
+        this.testMessage = 'Import completed with errors';
+      }
+    } catch (error) {
+      console.error('Import failed:', error);
+      this.testStatus = 'error';
+      this.testMessage = `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      this.importResult = {
+        success: false,
+        imported_progress_count: 0,
+        skipped_progress_count: 0,
+        imported_settings: false,
+        imported_sync_metadata: false,
+        errors: [error instanceof Error ? error.message : 'Unknown error']
+      };
+    } finally {
+      this.isImporting = false;
+      // Clear the input value so the same file can be selected again
+      if (input) {
+        input.value = '';
+      }
+    }
+  }
+
   override render() {
     return html`
       <md-outlined-card class="settings-card">
@@ -426,6 +572,45 @@ export class SettingsPanel extends LitElement {
           </md-filled-button>
         </div>
       </md-outlined-card>
+      
+      <div class="data-management">
+        <h3>Data Management</h3>
+        <p>Export and import your reading progress and app settings. This does not include your bookmarks (which are stored on the Linkding server) or cached website content.</p>
+        
+        <div class="data-actions">
+          <md-text-button
+            @click=${this.handleExportData}
+            ?disabled=${this.isExporting || this.isImporting}
+          >
+            ${this.isExporting ? html`
+              <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
+              Exporting...
+            ` : 'Export Data'}
+          </md-text-button>
+          
+          <md-text-button
+            @click=${this.handleImportClick}
+            ?disabled=${this.isExporting || this.isImporting}
+          >
+            ${this.isImporting ? html`
+              <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
+              Importing...
+            ` : 'Import Data'}
+          </md-text-button>
+        </div>
+        
+        ${this.importResult ? html`
+          <div class="import-result ${this.importResult.success ? 'import-result-success' : 'import-result-error'}">
+            <div>Import ${this.importResult.success ? 'completed' : 'failed'}</div>
+            <div class="import-details">
+              Reading progress: ${this.importResult.imported_progress_count} imported, ${this.importResult.skipped_progress_count} skipped<br>
+              Settings: ${this.importResult.imported_settings ? 'updated' : 'not updated'}<br>
+              Sync metadata: ${this.importResult.imported_sync_metadata ? 'updated' : 'not updated'}
+              ${this.importResult.errors.length > 0 ? html`<br>Errors: ${this.importResult.errors.join(', ')}` : ''}
+            </div>
+          </div>
+        ` : ''}
+      </div>
       
       <div class="danger-zone">
         <h3>Danger Zone</h3>
