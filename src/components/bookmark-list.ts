@@ -34,6 +34,7 @@ export class BookmarkList extends LitElement {
   @state() private scrollPosition: number = 0;
   
   private scrollContainer: Element | null = null;
+  private intersectionObserver: IntersectionObserver | null = null;
   
   // State controller for persistence with automatic observation
   private stateController = new StateController<BookmarkListState>(this, {
@@ -236,6 +237,7 @@ export class BookmarkList extends LitElement {
     super.connectedCallback();
     this.initializeState();
     this.setupScrollTracking();
+    this.setupIntersectionObserver();
   }
 
   override disconnectedCallback() {
@@ -246,6 +248,9 @@ export class BookmarkList extends LitElement {
     if (this.scrollContainer && (this as any)._scrollHandler) {
       this.scrollContainer.removeEventListener('scroll', (this as any)._scrollHandler);
     }
+    
+    // Clean up intersection observer
+    this.cleanupIntersectionObserver();
   }
 
   private initializeState() {
@@ -285,6 +290,58 @@ export class BookmarkList extends LitElement {
     }
   }
 
+  private setupIntersectionObserver() {
+    this.intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        const visibleBookmarkIds: number[] = [];
+        
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const bookmarkId = parseInt(entry.target.getAttribute('data-bookmark-id') || '0');
+            if (bookmarkId > 0) {
+              visibleBookmarkIds.push(bookmarkId);
+              
+              // Find the bookmark and request favicon loading if needed
+              const bookmark = this.bookmarks.find(b => b.id === bookmarkId);
+              if (bookmark?.favicon_url && !this.faviconCache.has(bookmarkId)) {
+                this.onFaviconLoadRequested(bookmarkId, bookmark.favicon_url);
+              }
+            }
+          }
+        });
+        
+        // Notify parent of visibility changes
+        if (visibleBookmarkIds.length > 0) {
+          this.onVisibilityChanged(visibleBookmarkIds);
+        }
+      },
+      {
+        root: null,
+        rootMargin: '100px',
+        threshold: 0.1,
+      }
+    );
+  }
+
+  private cleanupIntersectionObserver() {
+    if (this.intersectionObserver) {
+      this.intersectionObserver.disconnect();
+      this.intersectionObserver = null;
+    }
+  }
+
+  private updateObservedElements() {
+    if (!this.intersectionObserver) return;
+
+    // Disconnect and re-observe all bookmark elements
+    this.intersectionObserver.disconnect();
+    
+    const bookmarkCards = this.renderRoot.querySelectorAll('[data-bookmark-id]');
+    bookmarkCards.forEach((card) => {
+      this.intersectionObserver!.observe(card);
+    });
+  }
+
 
   override updated(changedProperties: Map<string, any>) {
     super.updated(changedProperties);
@@ -294,6 +351,7 @@ export class BookmarkList extends LitElement {
       // Use requestAnimationFrame to ensure the DOM is fully rendered
       requestAnimationFrame(() => {
         this.restoreScrollPosition();
+        this.updateObservedElements();
       });
     }
   }
