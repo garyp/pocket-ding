@@ -190,8 +190,10 @@ describe('ExportService', () => {
       vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue([]);
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
 
-      // Should not throw
-      await expect(ExportService.exportToFile()).resolves.toBeUndefined();
+      // Should not throw and return success
+      const result = await ExportService.exportToFile();
+      expect(result.success).toBe(true);
+      expect(result.warnings).toEqual([]);
     });
 
     it('should warn when export file exceeds 100MB', async () => {
@@ -213,19 +215,15 @@ describe('ExportService', () => {
       });
       global.Blob = mockBlob as any;
 
-      // Mock console.warn to capture the warning
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = await ExportService.exportToFile();
 
-      await ExportService.exportToFile();
+      // Verify warning was returned in result
+      expect(result.success).toBe(true);
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toMatch(/Export file size is \d+\.\d+MB, which exceeds the recommended 100MB limit/);
 
-      // Verify warning was logged
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Export file size is \d+\.\d+MB, which exceeds the recommended 100MB limit/)
-      );
-
-      // Restore original Blob and console.warn
+      // Restore original Blob
       global.Blob = originalBlob;
-      consoleWarnSpy.mockRestore();
     });
   });
 

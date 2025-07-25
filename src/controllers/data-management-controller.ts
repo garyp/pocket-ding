@@ -1,5 +1,5 @@
 import { type ReactiveController, type ReactiveControllerHost } from 'lit';
-import { ExportService } from '../services/export-service';
+import { ExportService, type ExportResult } from '../services/export-service';
 import { ImportService, type ImportResult } from '../services/import-service';
 
 export interface DataManagementState {
@@ -53,11 +53,23 @@ export class DataManagementController implements ReactiveController {
     });
 
     try {
-      await ExportService.exportToFile();
-      this.updateState({
-        testStatus: 'success',
-        testMessage: 'Data exported successfully!'
-      });
+      const result: ExportResult = await ExportService.exportToFile();
+      
+      if (result.success) {
+        let message = 'Data exported successfully!';
+        if (result.warnings.length > 0) {
+          message += ' Warning: ' + result.warnings.join(' ');
+        }
+        this.updateState({
+          testStatus: 'success',
+          testMessage: message
+        });
+      } else {
+        this.updateState({
+          testStatus: 'error',
+          testMessage: `Export failed: ${result.warnings.join(' ')}`
+        });
+      }
     } catch (error) {
       console.error('Export failed:', error);
       this.updateState({

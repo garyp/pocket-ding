@@ -13,6 +13,11 @@ export interface ExportData {
   };
 }
 
+export interface ExportResult {
+  success: boolean;
+  warnings: string[];
+}
+
 export class ExportService {
   private static readonly EXPORT_VERSION = '1.0';
 
@@ -57,7 +62,9 @@ export class ExportService {
     }
   }
 
-  static async exportToFile(): Promise<void> {
+  static async exportToFile(): Promise<ExportResult> {
+    const warnings: string[] = [];
+    
     try {
       const data = await this.exportData();
       const jsonString = JSON.stringify(data, null, 2);
@@ -67,7 +74,7 @@ export class ExportService {
       const maxSize = 100 * 1024 * 1024; // 100MB
       if (blob.size > maxSize) {
         const fileSizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-        console.warn(`Export file size is ${fileSizeMB}MB, which exceeds the recommended 100MB limit for imports. The file will still be exported but may be difficult to import.`);
+        warnings.push(`Export file size is ${fileSizeMB}MB, which exceeds the recommended 100MB limit for imports. The file may be difficult to import.`);
       }
       
       // Generate filename with timestamp
@@ -99,10 +106,12 @@ export class ExportService {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }
+      
+      return { success: true, warnings };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        // User cancelled the save dialog
-        return;
+        // User cancelled the save dialog - treat as successful no-op
+        return { success: true, warnings: [] };
       }
       throw new Error(`Failed to export to file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
