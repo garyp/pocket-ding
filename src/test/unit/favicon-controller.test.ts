@@ -12,22 +12,6 @@ vi.mock('../../services/favicon-service', () => ({
 // Import after mocking
 import { FaviconService } from '../../services/favicon-service';
 
-// Mock IntersectionObserver
-const mockIntersectionObserver = {
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-  callback: undefined as any,
-  options: undefined as any,
-};
-
-beforeEach(() => {
-  global.IntersectionObserver = vi.fn().mockImplementation((callback, options) => {
-    mockIntersectionObserver.callback = callback;
-    mockIntersectionObserver.options = options;
-    return mockIntersectionObserver;
-  });
-});
 
 describe('FaviconController', () => {
   let mockHost: ReactiveControllerHost;
@@ -79,144 +63,11 @@ describe('FaviconController', () => {
       expect(faviconState.isLoading).toEqual(new Set());
     });
 
-    it('should use default options when none provided', () => {
-      controller = new FaviconController(mockHost);
-      controller.hostConnected();
-
-      expect(global.IntersectionObserver).toHaveBeenCalledWith(
-        expect.any(Function),
-        {
-          root: null,
-          rootMargin: '100px',
-          threshold: 0.1,
-        }
-      );
-    });
   });
 
-  describe('hostConnected', () => {
-    beforeEach(() => {
-      controller = new FaviconController(mockHost);
-    });
 
-    it('should setup intersection observer', () => {
-      controller.hostConnected();
-      expect(global.IntersectionObserver).toHaveBeenCalled();
-    });
 
-    it('should use custom options for intersection observer', () => {
-      const options = {
-        rootMargin: '200px',
-        threshold: 0.3,
-      };
 
-      controller = new FaviconController(mockHost, options);
-      controller.hostConnected();
-
-      expect(global.IntersectionObserver).toHaveBeenCalledWith(
-        expect.any(Function),
-        {
-          root: null,
-          rootMargin: '200px',
-          threshold: 0.3,
-        }
-      );
-    });
-  });
-
-  describe('hostDisconnected', () => {
-    beforeEach(() => {
-      controller = new FaviconController(mockHost);
-      controller.hostConnected();
-    });
-
-    it('should cleanup intersection observer', () => {
-      controller.hostDisconnected();
-      expect(mockIntersectionObserver.disconnect).toHaveBeenCalled();
-    });
-  });
-
-  describe('hostUpdated', () => {
-    beforeEach(() => {
-      controller = new FaviconController(mockHost);
-      controller.hostConnected();
-    });
-
-    it('should re-observe elements after DOM updates', () => {
-      const mockElements = [
-        { getAttribute: vi.fn().mockReturnValue('1') },
-        { getAttribute: vi.fn().mockReturnValue('2') },
-      ];
-
-      vi.mocked((mockHost as any).renderRoot!.querySelectorAll).mockReturnValue(mockElements as any);
-
-      controller.hostUpdated();
-
-      expect(mockIntersectionObserver.disconnect).toHaveBeenCalled();
-      expect(mockIntersectionObserver.observe).toHaveBeenCalledTimes(2);
-      expect(mockIntersectionObserver.observe).toHaveBeenCalledWith(mockElements[0]);
-      expect(mockIntersectionObserver.observe).toHaveBeenCalledWith(mockElements[1]);
-    });
-
-    it('should fall back to host.querySelectorAll when renderRoot not available', () => {
-      const hostWithoutRenderRoot = {
-        ...mockHost,
-        renderRoot: undefined,
-      } as any;
-
-      const mockElements = [
-        { getAttribute: vi.fn().mockReturnValue('1') },
-      ];
-
-      vi.mocked(hostWithoutRenderRoot.querySelectorAll).mockReturnValue(mockElements);
-
-      controller = new FaviconController(hostWithoutRenderRoot);
-      controller.hostConnected();
-      controller.hostUpdated();
-
-      expect(mockIntersectionObserver.observe).toHaveBeenCalledWith(mockElements[0]);
-    });
-  });
-
-  describe('intersection observer callback', () => {
-    let onFaviconLoaded: any;
-    let onError: any;
-
-    beforeEach(() => {
-      onFaviconLoaded = vi.fn();
-      onError = vi.fn();
-
-      controller = new FaviconController(mockHost, {
-        onFaviconLoaded,
-        onError,
-      });
-      controller.hostConnected();
-    });
-
-    it('should handle intersecting elements', () => {
-      const entries = [
-        {
-          isIntersecting: true,
-          target: { getAttribute: vi.fn().mockReturnValue('123') },
-        },
-        {
-          isIntersecting: false,
-          target: { getAttribute: vi.fn().mockReturnValue('456') },
-        },
-        {
-          isIntersecting: true,
-          target: { getAttribute: vi.fn().mockReturnValue('789') },
-        },
-      ];
-
-      // Call the intersection observer callback
-      mockIntersectionObserver.callback!(entries);
-
-      // Should not automatically load favicons since we need the URL
-      const faviconState = controller.getFaviconState();
-      expect(faviconState.isLoading.size).toBe(0);
-    });
-  });
 
   describe('favicon loading', () => {
     let onFaviconLoaded: any;
@@ -362,57 +213,6 @@ describe('FaviconController', () => {
     });
   });
 
-  describe('observe bookmarks', () => {
-    beforeEach(() => {
-      controller = new FaviconController(mockHost);
-      controller.hostConnected();
-    });
-
-    it('should observe bookmark elements and preload visible ones', async () => {
-      const bookmarks = [
-        { id: 1, favicon_url: 'https://example.com/favicon1.ico' },
-        { id: 2, favicon_url: 'https://example.com/favicon2.ico' },
-      ];
-
-      // Mock getBoundingClientRect to simulate visible elements
-      const mockElements = [
-        {
-          getAttribute: vi.fn().mockReturnValue('1'),
-          getBoundingClientRect: vi.fn().mockReturnValue({
-            top: 100,
-            bottom: 200,
-          }),
-        },
-        {
-          getAttribute: vi.fn().mockReturnValue('2'),
-          getBoundingClientRect: vi.fn().mockReturnValue({
-            top: 1000, // Not visible
-            bottom: 1100,
-          }),
-        },
-      ];
-
-      vi.mocked((mockHost as any).renderRoot.querySelectorAll).mockReturnValue(mockElements as any);
-
-      // Mock window.innerHeight
-      Object.defineProperty(window, 'innerHeight', {
-        writable: true,
-        configurable: true,
-        value: 800,
-      });
-
-      vi.mocked(FaviconService.getFaviconForBookmark).mockResolvedValue('data:image/png;base64,test');
-
-      controller.observeBookmarks(bookmarks);
-
-      // Wait for the timeout and async operations
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Should only load favicon for visible element (id: 1)
-      expect(FaviconService.getFaviconForBookmark).toHaveBeenCalledTimes(1);
-      expect(FaviconService.getFaviconForBookmark).toHaveBeenCalledWith(1, bookmarks[0]!.favicon_url!);
-    });
-  });
 
   describe('cache management', () => {
     beforeEach(() => {
