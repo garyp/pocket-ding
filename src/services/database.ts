@@ -69,18 +69,25 @@ export class DatabaseService {
   }
 
   static async saveReadProgress(progress: ReadProgress): Promise<void> {
-    await db.readProgress.put(progress);
+    // Check if a record already exists for this bookmark
+    const existing = await db.readProgress
+      .where('bookmark_id').equals(progress.bookmark_id)
+      .first();
+    
+    if (existing) {
+      // Update existing record by preserving the id
+      const existingWithId = existing as any;
+      await db.readProgress.put({ ...progress, id: existingWithId.id } as any);
+    } else {
+      // Create new record
+      await db.readProgress.put(progress);
+    }
   }
 
   static async getReadProgress(bookmarkId: number): Promise<ReadProgress | undefined> {
-    const results = await db.readProgress
+    return await db.readProgress
       .where('bookmark_id').equals(bookmarkId)
-      .toArray();
-    
-    if (results.length === 0) return undefined;
-    
-    // Sort by last_read_at descending to get the most recent
-    return results.sort((a, b) => new Date(b.last_read_at).getTime() - new Date(a.last_read_at).getTime())[0];
+      .first();
   }
 
   static async getAllReadProgress(): Promise<ReadProgress[]> {
