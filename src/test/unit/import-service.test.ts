@@ -58,9 +58,6 @@ describe('ImportService', () => {
       reading_mode: 'original' as const,
       theme_mode: 'light' as const
     },
-    sync_metadata: {
-      last_sync_timestamp: '2023-01-01T10:00:00Z'
-    },
     ...overrides
   });
 
@@ -95,8 +92,9 @@ describe('ImportService', () => {
         success: true,
         imported_progress_count: 2,
         skipped_progress_count: 0,
+        orphaned_progress_count: 0,
         imported_settings: true,
-        imported_sync_metadata: true,
+        imported_sync_metadata: false,
         errors: []
       });
 
@@ -115,8 +113,8 @@ describe('ImportService', () => {
         theme_mode: 'light' // From import
       });
 
-      // Verify sync metadata was saved
-      expect(DatabaseService.setLastSyncTimestamp).toHaveBeenCalledWith('2023-01-01T10:00:00Z');
+      // Verify sync metadata was not set (new export format doesn't include it)
+      expect(DatabaseService.setLastSyncTimestamp).not.toHaveBeenCalled();
     });
 
     it('should skip orphaned reading progress (bookmark does not exist)', async () => {
@@ -141,7 +139,8 @@ describe('ImportService', () => {
       const result = await ImportService.importData(mockData);
 
       expect(result.imported_progress_count).toBe(1);
-      expect(result.skipped_progress_count).toBe(1);
+      expect(result.skipped_progress_count).toBe(0);
+      expect(result.orphaned_progress_count).toBe(1); // Bookmark 2 doesn't exist
       expect(result.success).toBe(true);
       expect(DatabaseService.saveReadProgress).toHaveBeenCalledTimes(1);
       expect(DatabaseService.saveReadProgress).toHaveBeenCalledWith(mockData.reading_progress[0]);
@@ -182,6 +181,7 @@ describe('ImportService', () => {
 
       expect(result.imported_progress_count).toBe(1); // Only bookmark 2
       expect(result.skipped_progress_count).toBe(1); // Bookmark 1 skipped (existing newer)
+      expect(result.orphaned_progress_count).toBe(0);
       expect(result.success).toBe(true);
       expect(DatabaseService.saveReadProgress).toHaveBeenCalledTimes(1);
       expect(DatabaseService.saveReadProgress).toHaveBeenCalledWith(mockData.reading_progress[1]);
@@ -224,6 +224,7 @@ describe('ImportService', () => {
 
       expect(result.imported_progress_count).toBe(1);
       expect(result.skipped_progress_count).toBe(0);
+      expect(result.orphaned_progress_count).toBe(0);
       expect(result.success).toBe(true);
       expect(DatabaseService.saveReadProgress).toHaveBeenCalledWith(mockData.reading_progress[0]);
     });
@@ -239,6 +240,7 @@ describe('ImportService', () => {
         success: false,
         imported_progress_count: 0,
         skipped_progress_count: 0,
+        orphaned_progress_count: 0,
         imported_settings: false,
         imported_sync_metadata: false,
         errors: ['Invalid export data format']
@@ -255,6 +257,9 @@ describe('ImportService', () => {
 
       const result = await ImportService.importData(mockData);
 
+      expect(result.imported_progress_count).toBe(2);
+      expect(result.skipped_progress_count).toBe(0);
+      expect(result.orphaned_progress_count).toBe(0);
       expect(result.imported_settings).toBe(false);
       expect(result.errors).toContain('Failed to import settings: No existing settings found. Please configure Linkding server settings first.');
     });
@@ -270,8 +275,69 @@ describe('ImportService', () => {
       expect(result.success).toBe(false);
       expect(result.imported_progress_count).toBe(0);
       expect(result.skipped_progress_count).toBe(2); // Both failed
+      expect(result.orphaned_progress_count).toBe(0);
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0]).toContain('Database connection failed');
+    });
+
+    it('should import only provided optional settings', async () => {
+      const mockData = createMockExportData({
+        app_settings: {
+          sync_interval: 45
+          // Only sync_interval provided, others should be ignored
+        }
+      });
+      
+      vi.mocked(ExportService.validateExportData).mockReturnValue(true);
+      vi.mocked(DatabaseService.getBookmark).mockResolvedValue({ id: 1 } as any);
+      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'existing-token',
+        sync_interval: 60,
+        auto_sync: true,
+        reading_mode: 'readability',
+        theme_mode: 'system'
+      });
+
+      const result = await ImportService.importData(mockData);
+
+      expect(result.imported_settings).toBe(true);
+      
+      // Verify only sync_interval was updated
+      expect(DatabaseService.saveSettings).toHaveBeenCalledWith({
+        linkding_url: 'https://linkding.example.com', // Preserved
+        linkding_token: 'existing-token', // Preserved
+        sync_interval: 45, // Updated from import
+        auto_sync: true, // Preserved
+        reading_mode: 'readability', // Preserved
+        theme_mode: 'system' // Preserved
+      });
+    });
+
+    it('should support legacy imports with sync_metadata', async () => {
+      const legacyData = {
+        ...createMockExportData(),
+        sync_metadata: {
+          last_sync_timestamp: '2023-01-01T10:00:00Z'
+        }
+      };
+      
+      vi.mocked(ExportService.validateExportData).mockReturnValue(true);
+      vi.mocked(DatabaseService.getBookmark).mockResolvedValue({ id: 1 } as any);
+      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'existing-token',
+        sync_interval: 60,
+        auto_sync: true,
+        reading_mode: 'readability'
+      });
+
+      const result = await ImportService.importData(legacyData);
+
+      expect(result.imported_sync_metadata).toBe(true);
+      expect(DatabaseService.setLastSyncTimestamp).toHaveBeenCalledWith('2023-01-01T10:00:00Z');
     });
   });
 

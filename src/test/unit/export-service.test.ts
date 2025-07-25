@@ -6,12 +6,8 @@ import { DatabaseService } from '../../services/database';
 vi.mock('../../services/database', () => ({
   DatabaseService: {
     getSettings: vi.fn(),
+    getAllReadProgress: vi.fn(),
     getLastSyncTimestamp: vi.fn()
-  },
-  db: {
-    readProgress: {
-      toArray: vi.fn()
-    }
   }
 }));
 
@@ -93,13 +89,8 @@ describe('ExportService', () => {
         theme_mode: 'dark' as const
       };
 
-      const mockSyncTimestamp = '2023-01-01T10:00:00Z';
-
-      // Mock database module import
-      const mockDb = await import('../../services/database');
-      vi.mocked(mockDb.db.readProgress.toArray).mockResolvedValue(mockReadProgress);
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue(mockReadProgress);
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
-      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(mockSyncTimestamp);
 
       const result = await ExportService.exportData();
 
@@ -109,15 +100,15 @@ describe('ExportService', () => {
         export_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
         reading_progress: mockReadProgress,
         app_settings: {
-          sync_interval: 30,
-          auto_sync: false,
-          reading_mode: 'original',
-          theme_mode: 'dark'
-        },
-        sync_metadata: {
-          last_sync_timestamp: mockSyncTimestamp
+          sync_interval: 30,  // Different from default (60)
+          auto_sync: false,   // Different from default (true)
+          reading_mode: 'original',  // Different from default ('readability')
+          theme_mode: 'dark'  // Different from default ('system')
         }
       });
+      
+      // Verify sync_metadata is not present
+      expect(result).not.toHaveProperty('sync_metadata');
 
       // Verify sensitive data is excluded
       expect((result.app_settings as any).linkding_url).toBeUndefined();
@@ -125,25 +116,20 @@ describe('ExportService', () => {
     });
 
     it('should handle missing settings gracefully', async () => {
-      const mockDb = await import('../../services/database');
-      vi.mocked(mockDb.db.readProgress.toArray).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue([]);
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
-      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
 
       const result = await ExportService.exportData();
 
-      expect(result.app_settings).toEqual({
-        sync_interval: 60,
-        auto_sync: true,
-        reading_mode: 'readability',
-        theme_mode: undefined
-      });
-      expect(result.sync_metadata.last_sync_timestamp).toBeNull();
+      // When no settings exist, app_settings should be empty (no defaults exported)
+      expect(result.app_settings).toEqual({});
+      
+      // Verify sync_metadata is not present
+      expect(result).not.toHaveProperty('sync_metadata');
     });
 
     it('should throw error on database failure', async () => {
-      const mockDb = await import('../../services/database');
-      vi.mocked(mockDb.db.readProgress.toArray).mockRejectedValue(new Error('Database error'));
+      vi.mocked(DatabaseService.getAllReadProgress).mockRejectedValue(new Error('Database error'));
 
       await expect(ExportService.exportData()).rejects.toThrow('Failed to export data: Database error');
     });
@@ -154,10 +140,8 @@ describe('ExportService', () => {
       // Mock window.showSaveFilePicker
       (global as any).window = { showSaveFilePicker: mockShowSaveFilePicker };
 
-      const mockDb = await import('../../services/database');
-      vi.mocked(mockDb.db.readProgress.toArray).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue([]);
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
-      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
 
       await ExportService.exportToFile();
 
@@ -176,10 +160,8 @@ describe('ExportService', () => {
       // No showSaveFilePicker available
       (global as any).window = {};
 
-      const mockDb = await import('../../services/database');
-      vi.mocked(mockDb.db.readProgress.toArray).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue([]);
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
-      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
 
       const mockAnchor = {
         href: '',
@@ -205,13 +187,45 @@ describe('ExportService', () => {
       abortError.name = 'AbortError';
       mockShowSaveFilePicker.mockRejectedValue(abortError);
 
-      const mockDb = await import('../../services/database');
-      vi.mocked(mockDb.db.readProgress.toArray).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue([]);
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
-      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
 
       // Should not throw
       await expect(ExportService.exportToFile()).resolves.toBeUndefined();
+    });
+
+    it('should warn when export file exceeds 100MB', async () => {
+      (global as any).window = { showSaveFilePicker: mockShowSaveFilePicker };
+      
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
+
+      // Mock Blob constructor to simulate large file
+      const originalBlob = global.Blob;
+      const mockBlob = vi.fn().mockImplementation((array, options) => {
+        const blob = new originalBlob(array, options);
+        // Override the size property to simulate a large file
+        Object.defineProperty(blob, 'size', {
+          value: 110 * 1024 * 1024, // 110MB
+          writable: false
+        });
+        return blob;
+      });
+      global.Blob = mockBlob as any;
+
+      // Mock console.warn to capture the warning
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await ExportService.exportToFile();
+
+      // Verify warning was logged
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/Export file size is \d+\.\d+MB, which exceeds the recommended 100MB limit/)
+      );
+
+      // Restore original Blob and console.warn
+      global.Blob = originalBlob;
+      consoleWarnSpy.mockRestore();
     });
   });
 
@@ -231,9 +245,6 @@ describe('ExportService', () => {
         sync_interval: 60,
         auto_sync: true,
         reading_mode: 'readability'
-      },
-      sync_metadata: {
-        last_sync_timestamp: '2023-01-01T10:00:00Z'
       }
     };
 
@@ -303,6 +314,62 @@ describe('ExportService', () => {
         }]
       };
       expect(ExportService.validateExportData(invalidData)).toBe(false);
+    });
+
+    it('should validate data with optional app_settings fields', () => {
+      const dataWithOptionalFields = {
+        ...validExportData,
+        app_settings: {
+          sync_interval: 30
+          // Only sync_interval provided, others optional
+        }
+      };
+      expect(ExportService.validateExportData(dataWithOptionalFields)).toBe(true);
+    });
+
+    it('should validate data with empty app_settings', () => {
+      const dataWithEmptySettings = {
+        ...validExportData,
+        app_settings: {}
+      };
+      expect(ExportService.validateExportData(dataWithEmptySettings)).toBe(true);
+    });
+
+    it('should reject invalid optional theme_mode values', () => {
+      const invalidData = {
+        ...validExportData,
+        app_settings: {
+          theme_mode: 'invalid-theme'
+        }
+      };
+      expect(ExportService.validateExportData(invalidData)).toBe(false);
+    });
+    
+    it('should only export non-default settings values', async () => {
+      // Test with settings that have mix of default and non-default values
+      const mixedSettings = {
+        linkding_url: 'https://example.com',
+        linkding_token: 'secret-token',
+        sync_interval: 60,        // Default value
+        auto_sync: false,         // Non-default value
+        reading_mode: 'readability' as const, // Default value
+        theme_mode: 'dark' as const          // Non-default value
+      };
+
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue(mixedSettings);
+
+      const result = await ExportService.exportData();
+
+      // Should only export non-default values
+      expect(result.app_settings).toEqual({
+        auto_sync: false,    // Different from default (true)
+        theme_mode: 'dark'   // Different from default ('system')
+      });
+      
+      // Should not include default values
+      expect(result.app_settings).not.toHaveProperty('sync_interval');
+      expect(result.app_settings).not.toHaveProperty('reading_mode');
     });
   });
 });

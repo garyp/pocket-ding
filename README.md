@@ -97,7 +97,6 @@ The export includes your **local-only data** that is not stored on the Linkding 
 
 - **Reading Progress**: Reading percentage, scroll position, last read timestamps, reading mode preferences, and dark mode overrides for each bookmark
 - **App Settings**: Sync interval, auto-sync preferences, default reading mode, and theme preferences (excludes server credentials)
-- **Sync Metadata**: Last sync timestamp for maintaining sync consistency
 
 **Note**: The export does not include your bookmarks (which are stored on your Linkding server) or cached website content (which can be re-downloaded).
 
@@ -131,9 +130,6 @@ The export file is a JSON document with the following structure:
     "auto_sync": true,
     "reading_mode": "readability",
     "theme_mode": "system"
-  },
-  "sync_metadata": {
-    "last_sync_timestamp": "2025-01-15T10:00:00.000Z"
   }
 }
 ```
@@ -154,8 +150,6 @@ The export file is a JSON document with the following structure:
   - **auto_sync**: Boolean for automatic sync
   - **reading_mode**: Default reading mode ("original" or "readability")
   - **theme_mode**: Global theme preference ("light", "dark", or "system")
-- **sync_metadata**: Synchronization state
-  - **last_sync_timestamp**: Last successful sync with Linkding server
 
 ### Import Behavior
 
@@ -164,9 +158,8 @@ When importing data:
 - **Reading Progress**: Only imported if the import timestamp is newer than existing data for that bookmark
 - **Orphaned Progress**: Reading progress for non-existent bookmarks is skipped
 - **App Settings**: Merged with existing settings (server credentials are preserved)
-- **Sync Metadata**: Updated if present in import
 
-This ensures that importing old data won't overwrite newer reading progress and that your server configuration remains intact.
+This ensures that importing old data won't overwrite newer reading progress and that your server configuration remains intact. After importing, a full sync will be performed to ensure your data is up to date.
 
 ## Development
 

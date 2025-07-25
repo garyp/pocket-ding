@@ -6,13 +6,10 @@ export interface ExportData {
   export_timestamp: string;
   reading_progress: ReadProgress[];
   app_settings: {
-    sync_interval: number;
-    auto_sync: boolean;
-    reading_mode: 'original' | 'readability';
+    sync_interval?: number;
+    auto_sync?: boolean;
+    reading_mode?: 'original' | 'readability';
     theme_mode?: 'light' | 'dark' | 'system';
-  };
-  sync_metadata: {
-    last_sync_timestamp: string | null;
   };
 }
 
@@ -21,37 +18,37 @@ export class ExportService {
 
   static async exportData(): Promise<ExportData> {
     try {
-      // Get all reading progress records
-      const readingProgress = await this.getAllReadingProgress();
+      // Get all reading progress records using the data abstraction
+      const readingProgress = await DatabaseService.getAllReadProgress();
       
-      // Get app settings (excluding sensitive server data)
+      // Get app settings (excluding sensitive server data and default values)
       const settings = await DatabaseService.getSettings();
       const appSettings: {
-        sync_interval: number;
-        auto_sync: boolean;
-        reading_mode: 'original' | 'readability';
+        sync_interval?: number;
+        auto_sync?: boolean;
+        reading_mode?: 'original' | 'readability';
         theme_mode?: 'light' | 'dark' | 'system';
-      } = {
-        sync_interval: settings?.sync_interval || 60,
-        auto_sync: settings?.auto_sync ?? true,
-        reading_mode: settings?.reading_mode || 'readability' as const
-      };
+      } = {};
       
-      if (settings?.theme_mode) {
+      // Only export settings that are explicitly set (not defaults)
+      if (settings?.sync_interval !== undefined && settings.sync_interval !== 60) {
+        appSettings.sync_interval = settings.sync_interval;
+      }
+      if (settings?.auto_sync !== undefined && settings.auto_sync !== true) {
+        appSettings.auto_sync = settings.auto_sync;
+      }
+      if (settings?.reading_mode !== undefined && settings.reading_mode !== 'readability') {
+        appSettings.reading_mode = settings.reading_mode;
+      }
+      if (settings?.theme_mode !== undefined && settings.theme_mode !== 'system') {
         appSettings.theme_mode = settings.theme_mode;
       }
-
-      // Get sync metadata
-      const lastSyncTimestamp = await DatabaseService.getLastSyncTimestamp();
 
       const exportData: ExportData = {
         version: this.EXPORT_VERSION,
         export_timestamp: new Date().toISOString(),
         reading_progress: readingProgress,
-        app_settings: appSettings,
-        sync_metadata: {
-          last_sync_timestamp: lastSyncTimestamp
-        }
+        app_settings: appSettings
       };
 
       return exportData;
@@ -65,6 +62,13 @@ export class ExportService {
       const data = await this.exportData();
       const jsonString = JSON.stringify(data, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
+      
+      // Check file size and warn if over 100MB
+      const maxSize = 100 * 1024 * 1024; // 100MB
+      if (blob.size > maxSize) {
+        const fileSizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+        console.warn(`Export file size is ${fileSizeMB}MB, which exceeds the recommended 100MB limit for imports. The file will still be exported but may be difficult to import.`);
+      }
       
       // Generate filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -104,12 +108,6 @@ export class ExportService {
     }
   }
 
-  private static async getAllReadingProgress(): Promise<ReadProgress[]> {
-    // Since there's no direct method to get all reading progress,
-    // we need to query the database directly
-    const { db } = await import('./database');
-    return await db.readProgress.toArray();
-  }
 
   static validateExportData(data: any): data is ExportData {
     if (!data || typeof data !== 'object') {
@@ -120,8 +118,7 @@ export class ExportService {
     if (typeof data.version !== 'string' ||
         typeof data.export_timestamp !== 'string' ||
         !Array.isArray(data.reading_progress) ||
-        typeof data.app_settings !== 'object' ||
-        typeof data.sync_metadata !== 'object') {
+        typeof data.app_settings !== 'object') {
       return false;
     }
 
@@ -132,11 +129,18 @@ export class ExportService {
       }
     }
 
-    // Validate app settings
+    // Validate app settings (all fields are optional)
     const settings = data.app_settings;
-    if (typeof settings.sync_interval !== 'number' ||
-        typeof settings.auto_sync !== 'boolean' ||
-        !['original', 'readability'].includes(settings.reading_mode)) {
+    if (settings.sync_interval !== undefined && typeof settings.sync_interval !== 'number') {
+      return false;
+    }
+    if (settings.auto_sync !== undefined && typeof settings.auto_sync !== 'boolean') {
+      return false;
+    }
+    if (settings.reading_mode !== undefined && !['original', 'readability'].includes(settings.reading_mode)) {
+      return false;
+    }
+    if (settings.theme_mode !== undefined && !['light', 'dark', 'system'].includes(settings.theme_mode)) {
       return false;
     }
 

@@ -4,8 +4,7 @@ import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
-import { ExportService } from '../services/export-service';
-import { ImportService, type ImportResult } from '../services/import-service';
+import { DataManagementController } from '../controllers/data-management-controller';
 import type { AppSettings } from '../types';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/button/filled-button.js';
@@ -27,10 +26,8 @@ export class SettingsPanel extends LitElement {
   @state() private isFullSyncing = false;
   @state() private fullSyncProgress = 0;
   @state() private fullSyncTotal = 0;
-  @state() private isExporting = false;
-  @state() private isImporting = false;
-  @state() private importResult: ImportResult | null = null;
-  @state() private importFileInput: HTMLInputElement | null = null;
+
+  private dataManagementController = new DataManagementController(this);
 
   static override styles = css`
     :host {
@@ -350,91 +347,11 @@ export class SettingsPanel extends LitElement {
   }
 
   private async handleExportData() {
-    this.isExporting = true;
-    this.testStatus = 'idle';
-    this.importResult = null;
-
-    try {
-      await ExportService.exportToFile();
-      this.testStatus = 'success';
-      this.testMessage = 'Data exported successfully!';
-    } catch (error) {
-      console.error('Export failed:', error);
-      this.testStatus = 'error';
-      this.testMessage = `Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    } finally {
-      this.isExporting = false;
-    }
+    await this.dataManagementController.exportData();
   }
 
   private handleImportClick() {
-    // Create a hidden file input if it doesn't exist
-    if (!this.importFileInput) {
-      this.importFileInput = document.createElement('input');
-      this.importFileInput.type = 'file';
-      this.importFileInput.accept = '.json,application/json';
-      this.importFileInput.className = 'hidden-file-input';
-      this.importFileInput.addEventListener('change', this.handleFileSelected.bind(this));
-      this.shadowRoot?.appendChild(this.importFileInput);
-    }
-    
-    this.importFileInput.click();
-  }
-
-  private async handleFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    
-    if (!file) return;
-
-    this.isImporting = true;
-    this.testStatus = 'idle';
-    this.importResult = null;
-
-    try {
-      // Validate file first
-      const validation = await ImportService.validateImportFile(file);
-      if (!validation.valid) {
-        this.testStatus = 'error';
-        this.testMessage = validation.error || 'Invalid file';
-        return;
-      }
-
-      // Perform import
-      const result = await ImportService.importFromFile(file);
-      this.importResult = result;
-
-      if (result.success) {
-        this.testStatus = 'success';
-        this.testMessage = 'Data imported successfully!';
-        
-        // Trigger settings refresh if settings were imported
-        if (result.imported_settings) {
-          this.dispatchEvent(new CustomEvent('settings-updated'));
-        }
-      } else {
-        this.testStatus = 'error';
-        this.testMessage = 'Import completed with errors';
-      }
-    } catch (error) {
-      console.error('Import failed:', error);
-      this.testStatus = 'error';
-      this.testMessage = `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      this.importResult = {
-        success: false,
-        imported_progress_count: 0,
-        skipped_progress_count: 0,
-        imported_settings: false,
-        imported_sync_metadata: false,
-        errors: [error instanceof Error ? error.message : 'Unknown error']
-      };
-    } finally {
-      this.isImporting = false;
-      // Clear the input value so the same file can be selected again
-      if (input) {
-        input.value = '';
-      }
-    }
+    this.dataManagementController.startImport();
   }
 
   override render() {
@@ -580,9 +497,9 @@ export class SettingsPanel extends LitElement {
         <div class="data-actions">
           <md-text-button
             @click=${this.handleExportData}
-            ?disabled=${this.isExporting || this.isImporting}
+            ?disabled=${this.dataManagementController.state.isExporting || this.dataManagementController.state.isImporting}
           >
-            ${this.isExporting ? html`
+            ${this.dataManagementController.state.isExporting ? html`
               <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
               Exporting...
             ` : 'Export Data'}
@@ -590,23 +507,24 @@ export class SettingsPanel extends LitElement {
           
           <md-text-button
             @click=${this.handleImportClick}
-            ?disabled=${this.isExporting || this.isImporting}
+            ?disabled=${this.dataManagementController.state.isExporting || this.dataManagementController.state.isImporting}
           >
-            ${this.isImporting ? html`
+            ${this.dataManagementController.state.isImporting ? html`
               <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
               Importing...
             ` : 'Import Data'}
           </md-text-button>
         </div>
         
-        ${this.importResult ? html`
-          <div class="import-result ${this.importResult.success ? 'import-result-success' : 'import-result-error'}">
-            <div>Import ${this.importResult.success ? 'completed' : 'failed'}</div>
+        ${this.dataManagementController.state.importResult ? html`
+          <div class="import-result ${this.dataManagementController.state.importResult.success ? 'import-result-success' : 'import-result-error'}">
+            <div>Import ${this.dataManagementController.state.importResult.success ? 'completed' : 'failed'}</div>
             <div class="import-details">
-              Reading progress: ${this.importResult.imported_progress_count} imported, ${this.importResult.skipped_progress_count} skipped<br>
-              Settings: ${this.importResult.imported_settings ? 'updated' : 'not updated'}<br>
-              Sync metadata: ${this.importResult.imported_sync_metadata ? 'updated' : 'not updated'}
-              ${this.importResult.errors.length > 0 ? html`<br>Errors: ${this.importResult.errors.join(', ')}` : ''}
+              Reading progress: ${this.dataManagementController.state.importResult.imported_progress_count} imported, ${this.dataManagementController.state.importResult.skipped_progress_count} skipped<br>
+              ${this.dataManagementController.state.importResult.orphaned_progress_count > 0 ? html`Orphaned progress: ${this.dataManagementController.state.importResult.orphaned_progress_count} bookmarks not found<br>` : ''}
+              Settings: ${this.dataManagementController.state.importResult.imported_settings ? 'updated' : 'not updated'}<br>
+              Sync metadata: ${this.dataManagementController.state.importResult.imported_sync_metadata ? 'updated' : 'not updated'}
+              ${this.dataManagementController.state.importResult.errors.length > 0 ? html`<br>Errors: ${this.dataManagementController.state.importResult.errors.join(', ')}` : ''}
             </div>
           </div>
         ` : ''}

@@ -6,6 +6,7 @@ export interface ImportResult {
   success: boolean;
   imported_progress_count: number;
   skipped_progress_count: number;
+  orphaned_progress_count: number;
   imported_settings: boolean;
   imported_sync_metadata: boolean;
   errors: string[];
@@ -22,6 +23,7 @@ export class ImportService {
         success: false,
         imported_progress_count: 0,
         skipped_progress_count: 0,
+        orphaned_progress_count: 0,
         imported_settings: false,
         imported_sync_metadata: false,
         errors: [`Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`]
@@ -34,6 +36,7 @@ export class ImportService {
       success: false,
       imported_progress_count: 0,
       skipped_progress_count: 0,
+      orphaned_progress_count: 0,
       imported_settings: false,
       imported_sync_metadata: false,
       errors: []
@@ -52,6 +55,7 @@ export class ImportService {
       const progressResult = await this.importReadingProgress(exportData.reading_progress);
       result.imported_progress_count = progressResult.imported;
       result.skipped_progress_count = progressResult.skipped;
+      result.orphaned_progress_count = progressResult.orphaned;
       result.errors.push(...progressResult.errors);
 
       // Import app settings (excluding server configuration)
@@ -62,10 +66,11 @@ export class ImportService {
         result.errors.push(`Failed to import settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
 
-      // Import sync metadata
+      // Import sync metadata (if present in legacy exports)
       try {
-        if (exportData.sync_metadata.last_sync_timestamp) {
-          await DatabaseService.setLastSyncTimestamp(exportData.sync_metadata.last_sync_timestamp);
+        const legacyData = data as any;
+        if (legacyData.sync_metadata?.last_sync_timestamp) {
+          await DatabaseService.setLastSyncTimestamp(legacyData.sync_metadata.last_sync_timestamp);
           result.imported_sync_metadata = true;
         }
       } catch (error) {
@@ -83,10 +88,12 @@ export class ImportService {
   private static async importReadingProgress(progressList: ReadProgress[]): Promise<{
     imported: number;
     skipped: number;
+    orphaned: number;
     errors: string[];
   }> {
     let imported = 0;
     let skipped = 0;
+    let orphaned = 0;
     const errors: string[] = [];
 
     for (const importProgress of progressList) {
@@ -94,8 +101,8 @@ export class ImportService {
         // Check if bookmark exists in the database
         const bookmark = await DatabaseService.getBookmark(importProgress.bookmark_id);
         if (!bookmark) {
-          // Skip orphaned progress (bookmark doesn't exist)
-          skipped++;
+          // Track orphaned progress separately (bookmark doesn't exist)
+          orphaned++;
           continue;
         }
 
@@ -123,7 +130,7 @@ export class ImportService {
       }
     }
 
-    return { imported, skipped, errors };
+    return { imported, skipped, orphaned, errors };
   }
 
   private static async importAppSettings(importSettings: ExportData['app_settings']): Promise<void> {
@@ -136,14 +143,20 @@ export class ImportService {
 
     // Merge import settings with existing server configuration
     const mergedSettings: AppSettings = {
-      ...currentSettings, // Preserve linkding_url and linkding_token
-      sync_interval: importSettings.sync_interval,
-      auto_sync: importSettings.auto_sync,
-      reading_mode: importSettings.reading_mode
+      ...currentSettings // Preserve linkding_url and linkding_token
     };
 
-    // Only set theme_mode if it's provided in the import
-    if (importSettings.theme_mode) {
+    // Only update settings that are present in the import
+    if (importSettings.sync_interval !== undefined) {
+      mergedSettings.sync_interval = importSettings.sync_interval;
+    }
+    if (importSettings.auto_sync !== undefined) {
+      mergedSettings.auto_sync = importSettings.auto_sync;
+    }
+    if (importSettings.reading_mode !== undefined) {
+      mergedSettings.reading_mode = importSettings.reading_mode;
+    }
+    if (importSettings.theme_mode !== undefined) {
       mergedSettings.theme_mode = importSettings.theme_mode;
     }
 
@@ -151,40 +164,18 @@ export class ImportService {
   }
 
   private static async readFileAsText(file: File): Promise<string> {
-    // Check if the browser supports streaming
-    if (file.stream && typeof file.stream === 'function') {
-      // Use streaming for large files if supported
-      const stream = file.stream();
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let result = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          result += decoder.decode(value, { stream: true });
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result && typeof e.target.result === 'string') {
+          resolve(e.target.result);
+        } else {
+          reject(new Error('Failed to read file as text'));
         }
-        result += decoder.decode(); // Final decode without stream flag
-        return result;
-      } finally {
-        reader.releaseLock();
-      }
-    } else {
-      // Fallback to reading entire file into memory
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (e.target?.result && typeof e.target.result === 'string') {
-            resolve(e.target.result);
-          } else {
-            reject(new Error('Failed to read file as text'));
-          }
-        };
-        reader.onerror = () => reject(new Error('File reading error'));
-        reader.readAsText(file);
-      });
-    }
+      };
+      reader.onerror = () => reject(new Error('File reading error'));
+      reader.readAsText(file);
+    });
   }
 
   static async validateImportFile(file: File): Promise<{ valid: boolean; error?: string }> {
