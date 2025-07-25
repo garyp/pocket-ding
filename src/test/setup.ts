@@ -135,4 +135,11 @@ if (!HTMLElement.prototype.attachInternals) {
 beforeEach(() => {
   vi.clearAllMocks();
   consoleErrorSpy.mockClear();
+  
+  // Re-establish IntersectionObserver mock after clearAllMocks
+  global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+    observe: vi.fn(),
+    unobserve: vi.fn(),
+    disconnect: vi.fn(),
+  }));
 });

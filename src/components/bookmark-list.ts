@@ -339,15 +339,11 @@ export class BookmarkList extends LitElement {
     if (!this.intersectionObserver) return;
 
     // Disconnect and re-observe all bookmark elements
-    if (typeof this.intersectionObserver.disconnect === 'function') {
-      this.intersectionObserver.disconnect();
-    }
+    this.intersectionObserver.disconnect();
     
     const bookmarkCards = this.renderRoot.querySelectorAll('[data-bookmark-id]');
     bookmarkCards.forEach((card) => {
-      if (this.intersectionObserver && typeof this.intersectionObserver.observe === 'function') {
-        this.intersectionObserver.observe(card);
-      }
+      this.intersectionObserver!.observe(card);
     });
   }
 
