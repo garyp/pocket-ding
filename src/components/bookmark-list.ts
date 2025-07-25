@@ -331,6 +331,11 @@ export class BookmarkList extends LitElement {
   }
 
   private updateObservedElements() {
+    if (!this.intersectionObserver) {
+      // Lazy initialization if observer doesn't exist
+      this.setupIntersectionObserver();
+    }
+    
     if (!this.intersectionObserver) return;
 
     // Disconnect and re-observe all bookmark elements
@@ -351,9 +356,13 @@ export class BookmarkList extends LitElement {
       // Use requestAnimationFrame to ensure the DOM is fully rendered
       requestAnimationFrame(() => {
         this.restoreScrollPosition();
-        this.updateObservedElements();
       });
     }
+    
+    // Always update observed elements after DOM changes to ensure intersection observer works
+    requestAnimationFrame(() => {
+      this.updateObservedElements();
+    });
   }
 
   private get filteredBookmarks() {
