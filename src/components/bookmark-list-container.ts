@@ -97,9 +97,6 @@ export class BookmarkListContainer extends LitElement {
       };
 
       console.log(`Local bookmarks loaded: ${bookmarks.length} total, ${bookmarks.filter(b => b.is_archived).length} archived`);
-      
-      // Initialize favicon controller with bookmark data
-      this.faviconController.observeBookmarks(bookmarks);
     } catch (error) {
       console.error('Failed to load bookmarks:', error);
       this.containerState = {

@@ -21,7 +21,6 @@ export interface FaviconControllerOptions {
 export class FaviconController implements ReactiveController {
   private host: ReactiveControllerHost;
   private options: FaviconControllerOptions;
-  private intersectionObserver: IntersectionObserver | null = null;
   
   // Reactive favicon state
   private _faviconState: FaviconState = {
@@ -29,8 +28,6 @@ export class FaviconController implements ReactiveController {
     isLoading: new Set<number>(),
   };
 
-  // Store bookmark data for intersection observer to use
-  private bookmarksData: Array<{ id: number; favicon_url?: string }> = [];
 
   constructor(host: ReactiveControllerHost, options: FaviconControllerOptions = {}) {
     this.host = host;
@@ -43,64 +40,17 @@ export class FaviconController implements ReactiveController {
   }
 
   hostConnected(): void {
-    this.setupIntersectionObserver();
+    // No intersection observer setup needed - handled by BookmarkList component
   }
 
   hostDisconnected(): void {
-    this.cleanupObserver();
+    // No cleanup needed - intersection observer is in BookmarkList component
   }
 
   hostUpdated(): void {
-    // Re-observe elements after DOM updates
-    this.updateObservedElements();
+    // No element re-observation needed - handled by BookmarkList component
   }
 
-  private setupIntersectionObserver() {
-    this.intersectionObserver = new IntersectionObserver(
-      (entries) => {
-        const visibleBookmarkIds: number[] = [];
-        
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const bookmarkId = parseInt(entry.target.getAttribute('data-bookmark-id') || '0');
-            if (bookmarkId > 0) {
-              visibleBookmarkIds.push(bookmarkId);
-            }
-          }
-        });
-
-        // Load favicons for newly visible bookmarks
-        this.handleVisibilityChanged(visibleBookmarkIds, this.bookmarksData);
-      },
-      {
-        root: null,
-        rootMargin: this.options.rootMargin!,
-        threshold: this.options.threshold!,
-      }
-    );
-  }
-
-  private cleanupObserver() {
-    if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect();
-      this.intersectionObserver = null;
-    }
-  }
-
-  private updateObservedElements() {
-    if (!this.intersectionObserver) return;
-
-    // Disconnect and re-observe all bookmark elements
-    this.intersectionObserver.disconnect();
-    
-    const hostElement = this.host as any;
-    const bookmarkCards = hostElement.renderRoot?.querySelectorAll?.('[data-bookmark-id]') || 
-                         hostElement.querySelectorAll?.('[data-bookmark-id]') || [];
-    
-    bookmarkCards.forEach((card: Element) => {
-      this.intersectionObserver!.observe(card);
-    });
-  }
 
   // Public API methods
 
@@ -188,34 +138,6 @@ export class FaviconController implements ReactiveController {
     this.host.requestUpdate();
   }
 
-  /**
-   * Observe bookmark elements for intersection
-   */
-  observeBookmarks(bookmarks: Array<{ id: number; favicon_url?: string }>): void {
-    // Store bookmark data for intersection observer to use
-    this.bookmarksData = bookmarks;
-    this.updateObservedElements();
-    
-    // Preload favicons for visible bookmarks
-    setTimeout(() => {
-      const elements = (this.host as any).renderRoot?.querySelectorAll?.('[data-bookmark-id]') || [];
-      const visibleElements = Array.from(elements as NodeListOf<Element>).filter((el: Element) => {
-        const rect = el.getBoundingClientRect();
-        return rect.top >= 0 && rect.bottom <= window.innerHeight;
-      });
-
-      const visibleIds = visibleElements.map((el: Element) => 
-        parseInt(el.getAttribute('data-bookmark-id') || '0')
-      ).filter(id => id > 0);
-
-      visibleIds.forEach(bookmarkId => {
-        const bookmark = bookmarks.find(b => b.id === bookmarkId);
-        if (bookmark?.favicon_url) {
-          this.loadFavicon(bookmarkId, bookmark.favicon_url);
-        }
-      });
-    }, 100);
-  }
 
 
   /**
