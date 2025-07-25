@@ -962,7 +962,16 @@ describe('App Integration Tests', () => {
 
         // Fast-forward time by 3 seconds to trigger highlight clearing
         vi.advanceTimersByTime(3000);
+        
+        // Allow any micro-tasks and component updates to complete
+        await new Promise(resolve => resolve());
         await bookmarkList.updateComplete;
+        
+        // Also ensure the nested BookmarkList component updates
+        const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
+        if (presentationComponent) {
+          await (presentationComponent as any).updateComplete;
+        }
 
         // Now highlights should be cleared
         await waitFor(() => {
