@@ -23,6 +23,11 @@ vi.mock('../../services/database', () => ({
     saveReadProgress: vi.fn(),
     clearAll: vi.fn(),
     getCompletedAssetsByBookmarkId: vi.fn(),
+    // Pagination methods required by BookmarkListContainer
+    getBookmarksPaginated: vi.fn(),
+    getBookmarkCount: vi.fn(),
+    getPageFromAnchorBookmark: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
   },
 }));
 
@@ -193,6 +198,16 @@ function findElementInShadowDOM(element: Element, selector: string): Element | n
   return searchInElement(element);
 }
 
+// Helper function to set up BookmarkListContainer mocks consistently
+function setupBookmarkListMocks(bookmarks: LocalBookmark[]) {
+  (DatabaseService.getAllBookmarks as any).mockResolvedValue(bookmarks);
+  (DatabaseService.getBookmarksPaginated as any).mockResolvedValue(bookmarks);
+  (DatabaseService.getBookmarkCount as any).mockResolvedValue(bookmarks.length);
+  (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(
+    new Map(bookmarks.map(b => [b.id, false]))
+  );
+}
+
 describe('App Integration Tests', () => {
   let container: HTMLElement;
   let user: ReturnType<typeof userEvent.setup>;
@@ -230,6 +245,11 @@ describe('App Integration Tests', () => {
     (DatabaseService.getReadProgress as any).mockResolvedValue(null);
     (DatabaseService.saveReadProgress as any).mockResolvedValue(undefined);
     (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+    // Pagination method mocks required by BookmarkListContainer
+    (DatabaseService.getBookmarksPaginated as any).mockResolvedValue([]);
+    (DatabaseService.getBookmarkCount as any).mockResolvedValue(0);
+    (DatabaseService.getPageFromAnchorBookmark as any).mockResolvedValue(1);
+    (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(new Map());
     (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
     (SyncService.getInstance as any).mockReturnValue({
       addEventListener: vi.fn(),
@@ -475,6 +495,10 @@ describe('App Integration Tests', () => {
 
     it('should emit bookmark-selected event when bookmark is clicked', async () => {
       (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      // Setup pagination mocks required by BookmarkListContainer
+      (DatabaseService.getBookmarksPaginated as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getBookmarkCount as any).mockResolvedValue(mockBookmarks.length);
+      (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(new Map([[1, false], [2, false]]));
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
