@@ -51,30 +51,15 @@ export class BookmarkList extends LitElement {
   private stateController = new StateController<BookmarkListState>(this, {
     storageKey: 'bookmark-list-state',
     defaultState: { 
-      selectedFilter: 'all', 
-      scrollPosition: 0,
-      pagination: {
-        all: { currentPage: 1 },
-        unread: { currentPage: 1 },
-        archived: { currentPage: 1 }
-      }
+      scrollPosition: 0
     },
     observedProperties: ['scrollPosition'],
     validator: (state: any): state is BookmarkListState => {
       return (
         state &&
         typeof state === 'object' &&
-        ['all', 'unread', 'archived'].includes(state.selectedFilter) &&
         typeof state.scrollPosition === 'number' &&
-        state.scrollPosition >= 0 &&
-        state.pagination &&
-        typeof state.pagination === 'object' &&
-        typeof state.pagination.all === 'object' &&
-        typeof state.pagination.unread === 'object' &&
-        typeof state.pagination.archived === 'object' &&
-        typeof state.pagination.all.currentPage === 'number' &&
-        typeof state.pagination.unread.currentPage === 'number' &&
-        typeof state.pagination.archived.currentPage === 'number'
+        state.scrollPosition >= 0
       );
     }
   });

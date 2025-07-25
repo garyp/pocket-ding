@@ -120,14 +120,7 @@ export interface BookmarkListCallbacks {
 export type BookmarkFilter = 'all' | 'unread' | 'archived';
 
 export interface BookmarkListState {
-  selectedFilter: BookmarkFilter;
   scrollPosition: number;
-  pagination: {
-    [key in BookmarkFilter]: {
-      currentPage: number;
-      anchorBookmarkId?: number;
-    }
-  };
 }
 
 export interface PaginationState {

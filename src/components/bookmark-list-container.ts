@@ -86,7 +86,15 @@ export class BookmarkListContainer extends LitElement {
         isLoading: true,
       };
 
-      await this.loadBookmarksPage(this.containerState.pagination.filter, this.containerState.pagination.currentPage);
+      // Use anchor bookmark ID to determine the correct page
+      const targetPage = await DatabaseService.getPageFromAnchorBookmark(
+        this.containerState.pagination.anchorBookmarkId,
+        this.containerState.pagination.filter,
+        this.containerState.pagination.pageSize,
+        this.containerState.pagination.currentPage
+      );
+
+      await this.loadBookmarksPage(this.containerState.pagination.filter, targetPage);
       
       // Initialize favicon controller with bookmark data
       this.faviconController.observeBookmarks(bookmarks);
@@ -153,7 +161,7 @@ export class BookmarkListContainer extends LitElement {
     // No need to reload bookmarks - they're updated incrementally via handleBookmarkSynced
     console.log('Sync completed');
   }
-
+ 
   private async handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
     if (!updatedBookmark || !bookmarkId) return;
     
@@ -197,6 +205,15 @@ export class BookmarkListContainer extends LitElement {
 
   // Callback handlers
   private handleBookmarkSelect = (bookmarkId: number) => {
+    // Set the selected bookmark as the anchor for position memory
+    this.containerState = {
+      ...this.containerState,
+      pagination: {
+        ...this.containerState.pagination,
+        anchorBookmarkId: bookmarkId
+      }
+    };
+
     this.dispatchEvent(new CustomEvent('bookmark-selected', {
       detail: { bookmarkId },
       bubbles: true,
@@ -223,8 +240,16 @@ export class BookmarkListContainer extends LitElement {
 
   private handleFilterChange = async (filter: 'all' | 'unread' | 'archived') => {
     if (filter !== this.containerState.pagination.filter) {
-      // Reset to page 1 when changing filters
-      await this.loadBookmarksPage(filter, 1);
+      // Use anchor bookmark ID to find the correct page in the new filter
+      const anchorBookmarkId = this.containerState.pagination.anchorBookmarkId;
+      const targetPage = await DatabaseService.getPageFromAnchorBookmark(
+        anchorBookmarkId,
+        filter,
+        this.containerState.pagination.pageSize,
+        1 // fallback to page 1
+      );
+      
+      await this.loadBookmarksPage(filter, targetPage);
     }
   };
 

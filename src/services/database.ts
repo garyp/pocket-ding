@@ -70,63 +70,22 @@ export class DatabaseService {
 
   static async getBookmarksPaginated(filter: 'all' | 'unread' | 'archived', page: number, pageSize: number): Promise<LocalBookmark[]> {
     const offset = (page - 1) * pageSize;
+    const query = this.buildFilteredQuery(filter);
     
-    if (filter === 'unread') {
-      return await db.bookmarks
-        .where('unread').equals(1)
-        .and(bookmark => !bookmark.is_archived)
-        .offset(offset)
-        .limit(pageSize)
-        .toArray();
-    } else if (filter === 'archived') {
-      return await db.bookmarks
-        .where('is_archived').equals(1)
-        .offset(offset)
-        .limit(pageSize)
-        .toArray();
-    } else {
-      // 'all' filter shows only unarchived bookmarks
-      return await db.bookmarks
-        .orderBy('date_added')
-        .reverse()
-        .filter(bookmark => !bookmark.is_archived)
-        .offset(offset)
-        .limit(pageSize)
-        .toArray();
-    }
+    return await query
+      .offset(offset)
+      .limit(pageSize)
+      .toArray();
   }
 
   static async getBookmarkCount(filter: 'all' | 'unread' | 'archived'): Promise<number> {
-    if (filter === 'unread') {
-      return await db.bookmarks.where('unread').equals(1).and(bookmark => !bookmark.is_archived).count();
-    } else if (filter === 'archived') {
-      return await db.bookmarks.where('is_archived').equals(1).count();
-    } else {
-      // 'all' filter shows only unarchived bookmarks
-      return await db.bookmarks.filter(bookmark => !bookmark.is_archived).count();
-    }
+    const query = this.buildFilteredQuery(filter);
+    return await query.count();
   }
 
   static async findBookmarkPage(bookmarkId: number, filter: 'all' | 'unread' | 'archived', pageSize: number): Promise<number> {
-    let bookmarks: LocalBookmark[] = [];
-    
-    if (filter === 'unread') {
-      bookmarks = await db.bookmarks
-        .where('unread').equals(1)
-        .and(bookmark => !bookmark.is_archived)
-        .toArray();
-    } else if (filter === 'archived') {
-      bookmarks = await db.bookmarks
-        .where('is_archived').equals(1)
-        .toArray();
-    } else {
-      // 'all' filter shows only unarchived bookmarks
-      bookmarks = await db.bookmarks
-        .orderBy('date_added')
-        .reverse()
-        .filter(bookmark => !bookmark.is_archived)
-        .toArray();
-    }
+    const query = this.buildFilteredQuery(filter);
+    const bookmarks = await query.toArray();
     
     const index = bookmarks.findIndex(bookmark => bookmark.id === bookmarkId);
     
@@ -135,6 +94,39 @@ export class DatabaseService {
     }
     
     return Math.floor(index / pageSize) + 1;
+  }
+
+  static async getPageFromAnchorBookmark(anchorBookmarkId: number | undefined, filter: 'all' | 'unread' | 'archived', pageSize: number, fallbackPage: number = 1): Promise<number> {
+    if (!anchorBookmarkId) {
+      return fallbackPage;
+    }
+    
+    try {
+      return await this.findBookmarkPage(anchorBookmarkId, filter, pageSize);
+    } catch (error) {
+      console.warn('Failed to find anchor bookmark page, falling back to page', fallbackPage);
+      return fallbackPage;
+    }
+  }
+
+  private static buildFilteredQuery(filter: 'all' | 'unread' | 'archived') {
+    if (filter === 'unread') {
+      return db.bookmarks
+        .orderBy('date_added')
+        .reverse()
+        .filter((bookmark: any) => bookmark.unread && !bookmark.is_archived);
+    } else if (filter === 'archived') {
+      return db.bookmarks
+        .orderBy('date_added')
+        .reverse()
+        .filter((bookmark: any) => bookmark.is_archived);
+    } else {
+      // 'all' filter shows only unarchived bookmarks
+      return db.bookmarks
+        .orderBy('date_added')
+        .reverse()
+        .filter((bookmark: any) => !bookmark.is_archived);
+    }
   }
 
   static async getBookmarksWithAssetCounts(bookmarkIds: number[]): Promise<Map<number, boolean>> {
