@@ -87,8 +87,6 @@ describe('BookmarkListContainer Background Sync', () => {
   ];
 
   beforeEach(async () => {
-    // Mock setTimeout to execute immediately to avoid test timeouts
-    vi.stubGlobal('setTimeout', (fn: Function) => fn());
     
     // Setup mock event listeners tracking
     mockEventListeners = {};
@@ -125,18 +123,16 @@ describe('BookmarkListContainer Background Sync', () => {
     // Create and connect component
     element = new BookmarkListContainer();
     document.body.appendChild(element);
-    await element.updateComplete;
     
-    // Wait for loadBookmarks to complete
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await element.updateComplete;
+    // Simple async wait for component initialization
+    await new Promise<void>(resolve => resolve());
+    await new Promise<void>(resolve => resolve());
   });
 
   afterEach(() => {
     if (element && document.body.contains(element)) {
       document.body.removeChild(element);
     }
-    // Restore original setTimeout
     vi.unstubAllGlobals();
   });
 
@@ -176,10 +172,8 @@ describe('BookmarkListContainer Background Sync', () => {
       triggerSyncEvent('sync-started', { total: 5 });
       await element.updateComplete;
 
-      const presentationComponent = getPresentationComponent();
-      expect(presentationComponent).toBeTruthy();
-      
-      const progressContainer = presentationComponent.shadowRoot?.querySelector('.sync-progress');
+      // Sync progress bar is now in the container, not the presentation component
+      const progressContainer = element.shadowRoot?.querySelector('.sync-progress');
       expect(progressContainer).toBeTruthy();
     });
 
@@ -212,11 +206,11 @@ describe('BookmarkListContainer Background Sync', () => {
       triggerSyncEvent('sync-progress', { current: 3, total: 10 });
       await element.updateComplete;
 
-      const presentationComponent = getPresentationComponent();
-      const progressText = presentationComponent?.shadowRoot?.querySelector('.sync-progress-text span');
+      // Sync progress bar is now in the container, not the presentation component
+      const progressText = element.shadowRoot?.querySelector('.sync-progress-text span');
       expect(progressText?.textContent).toContain('3/10');
 
-      const progressBar = presentationComponent?.shadowRoot?.querySelector('md-linear-progress');
+      const progressBar = element.shadowRoot?.querySelector('md-linear-progress');
       expect((progressBar as any)?.value).toBe(0.3);
     });
   });
@@ -335,47 +329,56 @@ describe('BookmarkListContainer Background Sync', () => {
       triggerSyncEvent('sync-started', { total: 2 });
       await element.updateComplete;
 
-      const presentationComponent = getPresentationComponent();
-      let progressContainer = presentationComponent?.shadowRoot?.querySelector('.sync-progress');
+      // Sync progress bar is now in the container, not the presentation component
+      let progressContainer = element.shadowRoot?.querySelector('.sync-progress');
       expect(progressContainer).toBeTruthy();
 
       triggerSyncEvent('sync-completed', { processed: 2 });
       
-      // Wait for handleSyncCompleted's loadBookmarks to complete
+      // Wait for sync completion
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      progressContainer = presentationComponent?.shadowRoot?.querySelector('.sync-progress');
+      progressContainer = element.shadowRoot?.querySelector('.sync-progress');
       expect(progressContainer).toBeFalsy();
     });
 
     it('should clear synced bookmark highlights when sync completes', async () => {
-      // First start a sync to enable sync mode
-      triggerSyncEvent('sync-started', { total: 1 });
-      await element.updateComplete;
+      vi.useFakeTimers();
       
-      triggerSyncEvent('bookmark-synced', { 
-        bookmark: mockBookmarks[0], 
-        current: 1, 
-        total: 1 
-      });
-      
-      // Wait for handleBookmarkSynced async operation to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await element.updateComplete;
+      try {
+        // Test controller directly for highlight clearing functionality
+        const syncController = (element as any).syncController;
+        expect(syncController).toBeTruthy();
+        
+        // Start sync and add bookmark to synced set
+        triggerSyncEvent('sync-started', { total: 1 });
+        triggerSyncEvent('bookmark-synced', { 
+          bookmark: mockBookmarks[0], 
+          current: 1, 
+          total: 1 
+        });
+        
+        // Verify bookmark is in synced set
+        let syncState = syncController.getSyncState();
+        expect(syncState.syncedBookmarkIds.has(1)).toBe(true);
 
-      const presentationComponent = getPresentationComponent();
-      let syncedCard = presentationComponent?.shadowRoot?.querySelector('.bookmark-card.synced');
-      expect(syncedCard).toBeTruthy();
+        // Complete sync
+        triggerSyncEvent('sync-completed', { processed: 1 });
+        
+        // Verify sync state is updated
+        syncState = syncController.getSyncState();
+        expect(syncState.isSyncing).toBe(false);
 
-      triggerSyncEvent('sync-completed', { processed: 1 });
-      
-      // Wait for handleSyncCompleted's loadBookmarks to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await element.updateComplete;
+        // Advance timers by 3 seconds to trigger highlight clearing
+        vi.advanceTimersByTime(3000);
 
-      syncedCard = presentationComponent?.shadowRoot?.querySelector('.bookmark-card.synced');
-      expect(syncedCard).toBeFalsy();
+        // Verify highlights are cleared
+        syncState = syncController.getSyncState();
+        expect(syncState.syncedBookmarkIds.size).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -384,28 +387,21 @@ describe('BookmarkListContainer Background Sync', () => {
       triggerSyncEvent('sync-started', { total: 2 });
       await element.updateComplete;
 
-      const presentationComponent = getPresentationComponent();
-      let progressContainer = presentationComponent?.shadowRoot?.querySelector('.sync-progress');
+      // Sync progress bar is now in the container, not the presentation component
+      let progressContainer = element.shadowRoot?.querySelector('.sync-progress');
       expect(progressContainer).toBeTruthy();
 
       triggerSyncEvent('sync-error', { error: new Error('Sync failed') });
       await element.updateComplete;
 
-      progressContainer = presentationComponent?.shadowRoot?.querySelector('.sync-progress');
+      progressContainer = element.shadowRoot?.querySelector('.sync-progress');
       expect(progressContainer).toBeFalsy();
     });
   });
 
   describe('Sync Request Handling', () => {
-    it('should trigger sync when sync-requested event is dispatched', async () => {
-      const syncRequestEvent = new CustomEvent('sync-requested');
-      element.dispatchEvent(syncRequestEvent);
-
-      // Wait for async sync to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      
-      expect(SyncService.syncBookmarks).toHaveBeenCalledWith(mockSettings);
-    });
+    // Note: Backwards compatibility for 'sync-requested' events was removed
+    // Sync is now handled through the SyncController API
 
     it('should not trigger multiple syncs if already syncing', async () => {
       // Start first sync
@@ -450,8 +446,8 @@ describe('BookmarkListContainer Background Sync', () => {
       triggerSyncEvent('sync-started', { total: 3 });
       await element.updateComplete;
 
-      const presentationComponent = getPresentationComponent();
-      const progressContainer = presentationComponent?.shadowRoot?.querySelector('.sync-progress');
+      // Sync progress bar is now in the container, not the presentation component
+      const progressContainer = element.shadowRoot?.querySelector('.sync-progress');
       expect(progressContainer).toBeTruthy();
       
       // Check that the progress container has the right CSS classes for styling
@@ -473,12 +469,11 @@ describe('BookmarkListContainer Background Sync', () => {
       triggerSyncEvent('sync-progress', { current: 3, total: 7 });
       await element.updateComplete;
 
-      // Should show sync progress
-      const presentationComponent = getPresentationComponent();
-      const progressContainer = presentationComponent?.shadowRoot?.querySelector('.sync-progress');
+      // Should show sync progress - now in the container
+      const progressContainer = element.shadowRoot?.querySelector('.sync-progress');
       expect(progressContainer).toBeTruthy();
 
-      const progressText = presentationComponent?.shadowRoot?.querySelector('.sync-progress-text span');
+      const progressText = element.shadowRoot?.querySelector('.sync-progress-text span');
       expect(progressText?.textContent).toContain('3/7');
     });
 

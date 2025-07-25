@@ -80,8 +80,9 @@ describe('BookmarkList', () => {
       element = new BookmarkList();
       element.bookmarks = mockBookmarks;
       element.isLoading = false;
-      element.syncState = { isSyncing: false, syncProgress: 0, syncTotal: 0, syncedBookmarkIds: new Set() };
-      element.faviconState = { faviconCache: new Map(), bookmarksWithAssets: new Set() };
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
       
       document.body.appendChild(element);
       await element.updateComplete;
@@ -96,30 +97,29 @@ describe('BookmarkList', () => {
       expect(titles?.[1]?.textContent).toBe('Test Bookmark 2');
     });
 
-    it('should render sync progress when syncing', async () => {
+    it('should not render sync progress in presentation component', async () => {
       element = new BookmarkList();
       element.bookmarks = mockBookmarks;
       element.isLoading = false;
-      element.syncState = { isSyncing: true, syncProgress: 5, syncTotal: 10, syncedBookmarkIds: new Set() };
-      element.faviconState = { faviconCache: new Map(), bookmarksWithAssets: new Set() };
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
       
       document.body.appendChild(element);
       await element.updateComplete;
       
+      // Sync progress bar should not be in BookmarkList anymore
       const syncProgress = element.shadowRoot?.querySelector('.sync-progress');
-      expect(syncProgress).toBeTruthy();
-      
-      const progressBar = element.shadowRoot?.querySelector('md-linear-progress');
-      expect(progressBar).toBeTruthy();
-      expect((progressBar as any)?.value).toBe(0.5);
+      expect(syncProgress).toBeFalsy();
     });
 
     it('should show empty state when no bookmarks', async () => {
       element = new BookmarkList();
       element.bookmarks = [];
       element.isLoading = false;
-      element.syncState = { isSyncing: false, syncProgress: 0, syncTotal: 0, syncedBookmarkIds: new Set() };
-      element.faviconState = { faviconCache: new Map(), bookmarksWithAssets: new Set() };
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
       
       document.body.appendChild(element);
       await element.updateComplete;
@@ -139,8 +139,9 @@ describe('BookmarkList', () => {
       element = new BookmarkList();
       element.bookmarks = mockBookmarks;
       element.isLoading = false;
-      element.syncState = { isSyncing: false, syncProgress: 0, syncTotal: 0, syncedBookmarkIds: new Set() };
-      element.faviconState = { faviconCache: new Map(), bookmarksWithAssets: new Set() };
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
       element.onBookmarkSelect = onBookmarkSelect;
       
       document.body.appendChild(element);
@@ -158,8 +159,9 @@ describe('BookmarkList', () => {
       element = new BookmarkList();
       element.bookmarks = [];
       element.isLoading = false;
-      element.syncState = { isSyncing: false, syncProgress: 0, syncTotal: 0, syncedBookmarkIds: new Set() };
-      element.faviconState = { faviconCache: new Map(), bookmarksWithAssets: new Set() };
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
       element.onSyncRequested = onSyncRequested;
       
       document.body.appendChild(element);
@@ -177,8 +179,9 @@ describe('BookmarkList', () => {
       element = new BookmarkList();
       element.bookmarks = mockBookmarks;
       element.isLoading = false;
-      element.syncState = { isSyncing: false, syncProgress: 0, syncTotal: 0, syncedBookmarkIds: new Set() };
-      element.faviconState = { faviconCache: new Map(), bookmarksWithAssets: new Set() };
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
       
       document.body.appendChild(element);
       await element.updateComplete;
@@ -206,8 +209,9 @@ describe('BookmarkList', () => {
       element = new BookmarkList();
       element.bookmarks = mockBookmarks;
       element.isLoading = false;
-      element.syncState = { isSyncing: false, syncProgress: 0, syncTotal: 0, syncedBookmarkIds: new Set() };
-      element.faviconState = { faviconCache: new Map(), bookmarksWithAssets: new Set() };
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
       
       document.body.appendChild(element);
       await element.updateComplete;

@@ -85,35 +85,17 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 // BookmarkList Container/Presentation Component Types
 
-export interface BookmarkListContainerState {
-  bookmarks: LocalBookmark[];
-  isLoading: boolean;
-  isSyncing: boolean;
-  syncProgress: number;
-  syncTotal: number;
-  syncedBookmarkIds: Set<number>;
-  faviconCache: Map<number, string>;
-  bookmarksWithAssets: Set<number>;
-}
-
 export interface BookmarkListProps {
   // Data props (reactive)
   bookmarks: LocalBookmark[];
   isLoading: boolean;
+  bookmarksWithAssets: Set<number>;
   
-  // Sync state
-  syncState: {
-    isSyncing: boolean;
-    syncProgress: number;
-    syncTotal: number;
-    syncedBookmarkIds: Set<number>;
-  };
+  // Favicon props
+  faviconCache: Map<number, string>;
   
-  // Favicon state  
-  faviconState: {
-    faviconCache: Map<number, string>;
-    bookmarksWithAssets: Set<number>;
-  };
+  // Sync props
+  syncedBookmarkIds: Set<number>;
   
   // Callback props (actions)
   onBookmarkSelect: (bookmarkId: number) => void;

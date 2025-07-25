@@ -76,6 +76,7 @@ All tests should pass before considering features complete. The CI expects zero 
 ### Code Style
 
 - **Interface Naming**: Do NOT use "I" prefix for interfaces. Name interfaces directly (e.g., `LinkdingAPI` not `ILinkdingAPI`)
+- **Event Handlers**: Use arrow functions instead of `bind()` for configuring event handlers. Arrow functions maintain lexical scope and are more readable than `.bind(this)` calls.
 
 ### Build Process
 
@@ -140,6 +141,52 @@ Remember: Tests should be written as part of feature development, not as an afte
 - Do NOT use `npm run dev` or manual testing to verify changes work correctly  
 - Tests provide reliable, repeatable validation and prevent regressions
 - Manual testing with the dev server should only be used for exploratory work, not validation
+
+### Fake Timers for Deterministic Testing
+
+**IMPORTANT**: Use vitest fake timers instead of real delays for deterministic tests.
+
+**❌ Bad - Brittle timing with real delays:**
+```typescript
+// Don't do this - brittle and slow
+await new Promise(resolve => setTimeout(resolve, 1000));
+expect(someAsyncBehavior).toHaveOccurred();
+
+// Don't do this - incorrect workaround
+vi.stubGlobal('setTimeout', (fn: Function) => fn());
+```
+
+**✅ Good - Deterministic fake timers:**
+```typescript
+it('should clear highlights after timeout', () => {
+  vi.useFakeTimers();
+  
+  try {
+    // Trigger code that uses setTimeout
+    component.startTimeout();
+    
+    // Fast-forward time deterministically
+    vi.advanceTimersByTime(3000);
+    
+    // Assert expected behavior
+    expect(component.isHighlighted()).toBe(false);
+  } finally {
+    vi.useRealTimers(); // Always restore
+  }
+});
+```
+
+**When to use fake timers:**
+- Any code that uses `setTimeout`, `setInterval`, or other timer functions
+- Debounced operations (like save-after-scroll)
+- Delayed UI state changes (like clearing highlights)
+- Background processes with timing dependencies
+
+**Fake timer patterns:**
+- `vi.useFakeTimers()` - Enable fake timers at start of test
+- `vi.advanceTimersByTime(ms)` - Fast-forward time by specified milliseconds
+- `vi.runAllTimers()` - Execute all pending timers immediately
+- `vi.useRealTimers()` - Always restore in finally block or afterEach
 
 ### Development Best Practices
 

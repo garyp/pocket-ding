@@ -1,105 +1,75 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
-import { SyncService } from '../services/sync-service';
-import { FaviconService } from '../services/favicon-service';
-import type { BookmarkListContainerState } from '../types';
+import { SyncController } from '../controllers/sync-controller';
+import { FaviconController } from '../controllers/favicon-controller';
+import type { LocalBookmark } from '../types';
+import '@material/web/labs/badge/badge.js';
+import '@material/web/icon/icon.js';
+import '@material/web/progress/linear-progress.js';
 import './bookmark-list';
 
 @customElement('bookmark-list-container')
 export class BookmarkListContainer extends LitElement {
-  @state() private containerState: BookmarkListContainerState = {
+  static override styles = css`
+    :host {
+      display: block;
+    }
+
+    .sync-progress {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      margin-bottom: 1rem;
+      padding: 0.75rem;
+      border-radius: 12px;
+      background: var(--md-sys-color-primary-container);
+      border: 1px solid var(--md-sys-color-outline-variant);
+    }
+
+    .sync-progress-text {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .sync-badge {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  `;
+  @state() private containerState: {
+    bookmarks: LocalBookmark[];
+    isLoading: boolean;
+    bookmarksWithAssets: Set<number>;
+  } = {
     bookmarks: [],
     isLoading: true,
-    isSyncing: false,
-    syncProgress: 0,
-    syncTotal: 0,
-    syncedBookmarkIds: new Set<number>(),
-    faviconCache: new Map<number, string>(),
     bookmarksWithAssets: new Set<number>(),
   };
 
-  private syncService: SyncService | null = null;
-  private faviconObserver: IntersectionObserver | null = null;
+  // Reactive controllers
+  private syncController = new SyncController(this, {
+    onBookmarkSynced: (bookmarkId: number, updatedBookmark: LocalBookmark) => this.handleBookmarkSynced(bookmarkId, updatedBookmark),
+    onSyncCompleted: () => this.handleSyncCompleted(),
+  });
+
+  private faviconController = new FaviconController(this);
 
   override connectedCallback() {
     super.connectedCallback();
-    this.initializeServices();
     this.loadBookmarks();
-    
-    // Listen for external sync-requested events for backward compatibility
-    this.addEventListener('sync-requested', this.handleExternalSyncRequest);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    this.cleanupServices();
-    
-    // Remove external event listeners
-    this.removeEventListener('sync-requested', this.handleExternalSyncRequest);
   }
 
-  private initializeServices() {
-    // Initialize services
-    this.syncService = SyncService.getInstance();
-    
-    // Setup event listeners
-    this.setupSyncEventListeners();
-    this.setupFaviconObserver();
-  }
-
-  private cleanupServices() {
-    // Clean up event listeners
-    if (this.syncService) {
-      this.syncService.removeEventListener('sync-initiated', this.handleSyncInitiated);
-      this.syncService.removeEventListener('sync-started', this.handleSyncStarted);
-      this.syncService.removeEventListener('sync-progress', this.handleSyncProgress);
-      this.syncService.removeEventListener('sync-completed', this.handleSyncCompleted);
-      this.syncService.removeEventListener('sync-error', this.handleSyncError);
-      this.syncService.removeEventListener('bookmark-synced', this.handleBookmarkSynced);
-    }
-
-    // Clean up intersection observer
-    if (this.faviconObserver) {
-      this.faviconObserver.disconnect();
-      this.faviconObserver = null;
-    }
-  }
-
-  private setupSyncEventListeners() {
-    if (!this.syncService) return;
-
-    this.syncService.addEventListener('sync-initiated', this.handleSyncInitiated);
-    this.syncService.addEventListener('sync-started', this.handleSyncStarted);
-    this.syncService.addEventListener('sync-progress', this.handleSyncProgress);
-    this.syncService.addEventListener('sync-completed', this.handleSyncCompleted);
-    this.syncService.addEventListener('sync-error', this.handleSyncError);
-    this.syncService.addEventListener('bookmark-synced', this.handleBookmarkSynced);
-  }
-
-  private setupFaviconObserver() {
-    this.faviconObserver = new IntersectionObserver(
-      (entries) => {
-        const visibleBookmarkIds: number[] = [];
-        
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const bookmarkId = parseInt(entry.target.getAttribute('data-bookmark-id') || '0');
-            if (bookmarkId > 0) {
-              visibleBookmarkIds.push(bookmarkId);
-            }
-          }
-        });
-
-        this.handleVisibilityChanged(visibleBookmarkIds);
-      },
-      {
-        root: null,
-        rootMargin: '100px',
-        threshold: 0.1,
-      }
-    );
-  }
 
   private async loadBookmarks() {
     try {
@@ -128,11 +98,8 @@ export class BookmarkListContainer extends LitElement {
 
       console.log(`Local bookmarks loaded: ${bookmarks.length} total, ${bookmarks.filter(b => b.is_archived).length} archived`);
       
-      // Check for ongoing sync
-      this.checkOngoingSync();
-      
-      // Initialize favicons
-      this.initializeFavicons();
+      // Initialize favicon controller with bookmark data
+      this.faviconController.observeBookmarks(bookmarks);
     } catch (error) {
       console.error('Failed to load bookmarks:', error);
       this.containerState = {
@@ -142,95 +109,13 @@ export class BookmarkListContainer extends LitElement {
     }
   }
 
-  private checkOngoingSync() {
-    if (SyncService.isSyncInProgress()) {
-      const progress = SyncService.getCurrentSyncProgress();
-      this.containerState = {
-        ...this.containerState,
-        isSyncing: true,
-        syncProgress: progress.current,
-        syncTotal: progress.total,
-        syncedBookmarkIds: new Set<number>(),
-      };
-    }
+  // Controller event handlers
+  private async handleSyncCompleted() {
+    // No need to reload bookmarks - they're updated incrementally via handleBookmarkSynced
+    console.log('Sync completed');
   }
 
-  private initializeFavicons() {
-    // Initialize empty favicon cache - will be populated on demand
-    this.containerState = {
-      ...this.containerState,
-      faviconCache: new Map<number, string>(),
-    };
-  }
-
-  // Event handlers
-  private handleSyncInitiated = () => {
-    // Show immediate feedback with indeterminate progress
-    this.containerState = {
-      ...this.containerState,
-      isSyncing: true,
-      syncProgress: 0,
-      syncTotal: 0,
-      syncedBookmarkIds: new Set<number>(),
-    };
-  };
-
-  private handleSyncStarted = (event: Event) => {
-    const customEvent = event as CustomEvent;
-    this.containerState = {
-      ...this.containerState,
-      isSyncing: true,
-      syncProgress: 0,
-      syncTotal: customEvent.detail.total || 0,
-      syncedBookmarkIds: new Set<number>(),
-    };
-  };
-
-  private handleSyncProgress = (event: Event) => {
-    const customEvent = event as CustomEvent;
-    this.containerState = {
-      ...this.containerState,
-      syncProgress: customEvent.detail.current || customEvent.detail.progress || 0,
-      syncTotal: customEvent.detail.total || 0,
-    };
-  };
-
-  private handleSyncCompleted = async () => {
-    this.containerState = {
-      ...this.containerState,
-      isSyncing: false,
-      syncProgress: 0,
-      syncTotal: 0,
-    };
-
-    // Reload bookmarks after sync
-    await this.loadBookmarks();
-    
-    // Clear synced highlights after delay
-    setTimeout(() => {
-      this.containerState = {
-        ...this.containerState,
-        syncedBookmarkIds: new Set<number>(),
-      };
-    }, 3000);
-  };
-
-  private handleSyncError = (event: Event) => {
-    const customEvent = event as CustomEvent;
-    console.error('Sync error:', customEvent.detail);
-    this.containerState = {
-      ...this.containerState,
-      isSyncing: false,
-      syncProgress: 0,
-      syncTotal: 0,
-    };
-  };
-
-  private handleBookmarkSynced = async (event: Event) => {
-    const customEvent = event as CustomEvent;
-    const updatedBookmark = customEvent.detail.bookmark;
-    const bookmarkId = updatedBookmark?.id || customEvent.detail.bookmarkId;
-    
+  private async handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
     if (!updatedBookmark || !bookmarkId) return;
     
     // Check if bookmark has assets
@@ -253,7 +138,6 @@ export class BookmarkListContainer extends LitElement {
       this.containerState = {
         ...this.containerState,
         bookmarks: updatedBookmarks,
-        syncedBookmarkIds: new Set([...this.containerState.syncedBookmarkIds, bookmarkId]),
         bookmarksWithAssets: updatedBookmarksWithAssets,
       };
     } else {
@@ -267,11 +151,10 @@ export class BookmarkListContainer extends LitElement {
       this.containerState = {
         ...this.containerState,
         bookmarks: newBookmarks,
-        syncedBookmarkIds: new Set([...this.containerState.syncedBookmarkIds, bookmarkId]),
         bookmarksWithAssets: updatedBookmarksWithAssets,
       };
     }
-  };
+  }
 
   // Callback handlers
   private handleBookmarkSelect = (bookmarkId: number) => {
@@ -281,69 +164,50 @@ export class BookmarkListContainer extends LitElement {
     }));
   };
 
-  // External event handler for backward compatibility
-  private handleExternalSyncRequest = (event: Event) => {
-    event.preventDefault();
-    this.handleSyncRequested();
-  };
-
   private handleSyncRequested = async () => {
-    if (this.containerState.isSyncing) return;
-
-    try {
-      const settings = await DatabaseService.getSettings();
-      if (settings) {
-        await SyncService.syncBookmarks(settings);
-        // Don't dispatch sync-requested event to avoid infinite loop
-        // The sync service itself will dispatch the necessary events
-      }
-    } catch (error) {
-      console.error('Failed to sync bookmarks:', error);
-    }
+    await this.syncController.requestSync();
   };
 
   private handleFaviconLoadRequested = async (bookmarkId: number, faviconUrl: string) => {
-    try {
-      const faviconDataUrl = await FaviconService.getFaviconForBookmark(bookmarkId, faviconUrl);
-      
-      // Update cache
-      const updatedCache = new Map(this.containerState.faviconCache);
-      updatedCache.set(bookmarkId, faviconDataUrl);
-      
-      this.containerState = {
-        ...this.containerState,
-        faviconCache: updatedCache,
-      };
-    } catch (error) {
-      console.error('Failed to load favicon:', error);
-    }
+    await this.faviconController.loadFavicon(bookmarkId, faviconUrl);
   };
 
   private handleVisibilityChanged = (visibleBookmarkIds: number[]) => {
-    // Load favicons for visible bookmarks
-    visibleBookmarkIds.forEach(bookmarkId => {
-      const bookmark = this.containerState.bookmarks.find(b => b.id === bookmarkId);
-      if (bookmark && bookmark.favicon_url && !this.containerState.faviconCache.has(bookmarkId)) {
-        this.handleFaviconLoadRequested(bookmarkId, bookmark.favicon_url);
-      }
-    });
+    this.faviconController.handleVisibilityChanged(visibleBookmarkIds, this.containerState.bookmarks);
   };
 
   override render() {
+    const syncState = this.syncController.getSyncState();
+    const faviconState = this.faviconController.getFaviconState();
+    
     return html`
+      ${syncState.isSyncing ? html`
+        <div class="sync-progress">
+          <div class="sync-progress-text">
+            <span>
+              ${syncState.syncTotal > 0 
+                ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
+                : 'Starting sync...'
+              }
+            </span>
+            <md-badge class="sync-badge">
+              <md-icon slot="icon">sync</md-icon>
+              Syncing
+            </md-badge>
+          </div>
+          <md-linear-progress 
+            .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
+            ?indeterminate=${syncState.syncTotal === 0}
+          ></md-linear-progress>
+        </div>
+      ` : ''}
+      
       <bookmark-list
         .bookmarks=${this.containerState.bookmarks}
         .isLoading=${this.containerState.isLoading}
-        .syncState=${{
-          isSyncing: this.containerState.isSyncing,
-          syncProgress: this.containerState.syncProgress,
-          syncTotal: this.containerState.syncTotal,
-          syncedBookmarkIds: this.containerState.syncedBookmarkIds,
-        }}
-        .faviconState=${{
-          faviconCache: this.containerState.faviconCache,
-          bookmarksWithAssets: this.containerState.bookmarksWithAssets,
-        }}
+        .bookmarksWithAssets=${this.containerState.bookmarksWithAssets}
+        .faviconCache=${faviconState.faviconCache}
+        .syncedBookmarkIds=${syncState.syncedBookmarkIds}
         .onBookmarkSelect=${this.handleBookmarkSelect}
         .onSyncRequested=${this.handleSyncRequested}
         .onFaviconLoadRequested=${this.handleFaviconLoadRequested}

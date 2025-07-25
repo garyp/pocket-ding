@@ -68,16 +68,9 @@ describe('BookmarkList Controller Integration', () => {
     const el = new BookmarkList();
     el.bookmarks = mockBookmarks;
     el.isLoading = false;
-    el.syncState = {
-      isSyncing: false,
-      syncProgress: 0,
-      syncTotal: 0,
-      syncedBookmarkIds: new Set()
-    };
-    el.faviconState = {
-      faviconCache: new Map(),
-      bookmarksWithAssets: new Set()
-    };
+    el.syncedBookmarkIds = new Set();
+    el.faviconCache = new Map();
+    el.bookmarksWithAssets = new Set();
     return el;
   }
 
