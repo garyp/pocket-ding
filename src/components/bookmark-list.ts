@@ -15,20 +15,13 @@ export class BookmarkList extends LitElement {
   // Data props
   @property({ type: Array }) bookmarks: LocalBookmark[] = [];
   @property({ type: Boolean }) isLoading = false;
+  @property({ type: Set }) bookmarksWithAssets: Set<number> = new Set<number>();
   
-  // Sync state props
-  @property({ type: Object }) syncState = {
-    isSyncing: false,
-    syncProgress: 0,
-    syncTotal: 0,
-    syncedBookmarkIds: new Set<number>(),
-  };
+  // Favicon props
+  @property({ type: Map }) faviconCache: Map<number, string> = new Map<number, string>();
   
-  // Favicon state props
-  @property({ type: Object }) faviconState = {
-    faviconCache: new Map<number, string>(),
-    bookmarksWithAssets: new Set<number>(),
-  };
+  // Sync props
+  @property({ type: Set }) syncedBookmarkIds: Set<number> = new Set<number>();
   
   // Callback props
   @property({ type: Function }) onBookmarkSelect: (bookmarkId: number) => void = () => {};
@@ -71,33 +64,6 @@ export class BookmarkList extends LitElement {
       gap: 0.5rem;
       margin-bottom: 1rem;
       padding: 0 0.5rem;
-    }
-
-    .sync-progress {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      margin-bottom: 1rem;
-      padding: 0.75rem;
-      border-radius: 12px;
-      background: var(--md-sys-color-primary-container);
-      border: 1px solid var(--md-sys-color-outline-variant);
-    }
-
-    .sync-progress-text {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.5rem;
-    }
-
-    .sync-badge {
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
     }
 
     .bookmark-list {
@@ -366,7 +332,7 @@ export class BookmarkList extends LitElement {
 
   private renderBookmark(bookmark: LocalBookmark) {
     const hasProgress = bookmark.read_progress && bookmark.read_progress > 0;
-    const isRecentlySynced = this.syncState.syncedBookmarkIds.has(bookmark.id);
+    const isRecentlySynced = this.syncedBookmarkIds.has(bookmark.id);
     
     return html`
       <md-outlined-card 
@@ -386,7 +352,7 @@ export class BookmarkList extends LitElement {
               ${bookmark.is_archived ? html`
                 <md-badge>Archived</md-badge>
               ` : ''}
-              ${this.faviconState.bookmarksWithAssets.has(bookmark.id) ? html`
+              ${this.bookmarksWithAssets.has(bookmark.id) ? html`
                 <md-badge>
                   <md-icon slot="icon">download</md-icon>
                   Cached
@@ -402,7 +368,7 @@ export class BookmarkList extends LitElement {
           <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
             <img 
               class="favicon" 
-              src=${this.faviconState.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
+              src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
               alt="Favicon"
               loading="lazy"
             />
@@ -447,27 +413,6 @@ export class BookmarkList extends LitElement {
     const bookmarks = this.filteredBookmarks;
 
     return html`
-      ${this.syncState.isSyncing ? html`
-        <div class="sync-progress">
-          <div class="sync-progress-text">
-            <span>
-              ${this.syncState.syncTotal > 0 
-                ? `Syncing bookmarks... ${this.syncState.syncProgress}/${this.syncState.syncTotal}`
-                : 'Starting sync...'
-              }
-            </span>
-            <md-badge class="sync-badge">
-              <md-icon slot="icon">sync</md-icon>
-              Syncing
-            </md-badge>
-          </div>
-          <md-linear-progress 
-            .value=${this.syncState.syncTotal > 0 ? (this.syncState.syncProgress / this.syncState.syncTotal) : 0}
-            ?indeterminate=${this.syncState.syncTotal === 0}
-          ></md-linear-progress>
-        </div>
-      ` : ''}
-      
       <div class="filters">
         ${this.selectedFilter === 'all' ? html`
           <md-filled-button

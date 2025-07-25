@@ -1,13 +1,48 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
 import type { LocalBookmark } from '../types';
+import '@material/web/labs/badge/badge.js';
+import '@material/web/icon/icon.js';
+import '@material/web/progress/linear-progress.js';
 import './bookmark-list';
 
 @customElement('bookmark-list-container')
 export class BookmarkListContainer extends LitElement {
+  static override styles = css`
+    :host {
+      display: block;
+    }
+
+    .sync-progress {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      margin-bottom: 1rem;
+      padding: 0.75rem;
+      border-radius: 12px;
+      background: var(--md-sys-color-primary-container);
+      border: 1px solid var(--md-sys-color-outline-variant);
+    }
+
+    .sync-progress-text {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .sync-badge {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  `;
   @state() private containerState: {
     bookmarks: LocalBookmark[];
     isLoading: boolean;
@@ -20,8 +55,8 @@ export class BookmarkListContainer extends LitElement {
 
   // Reactive controllers
   private syncController = new SyncController(this, {
-    onBookmarkSynced: this.handleBookmarkSynced.bind(this),
-    onSyncCompleted: this.handleSyncCompleted.bind(this),
+    onBookmarkSynced: (bookmarkId: number, updatedBookmark: LocalBookmark) => this.handleBookmarkSynced(bookmarkId, updatedBookmark),
+    onSyncCompleted: () => this.handleSyncCompleted(),
   });
 
   private faviconController = new FaviconController(this);
@@ -29,16 +64,10 @@ export class BookmarkListContainer extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.loadBookmarks();
-    
-    // Listen for external sync-requested events for backward compatibility
-    this.addEventListener('sync-requested', this.handleExternalSyncRequest);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    
-    // Remove external event listeners
-    this.removeEventListener('sync-requested', this.handleExternalSyncRequest);
   }
 
 
@@ -82,11 +111,11 @@ export class BookmarkListContainer extends LitElement {
 
   // Controller event handlers
   private async handleSyncCompleted() {
-    // Reload bookmarks after sync
-    await this.loadBookmarks();
+    // No need to reload bookmarks - they're updated incrementally via handleBookmarkSynced
+    console.log('Sync completed');
   }
 
-  private async handleBookmarkSynced(bookmarkId: number, updatedBookmark: any) {
+  private async handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
     if (!updatedBookmark || !bookmarkId) return;
     
     // Check if bookmark has assets
@@ -135,12 +164,6 @@ export class BookmarkListContainer extends LitElement {
     }));
   };
 
-  // External event handler for backward compatibility
-  private handleExternalSyncRequest = (event: Event) => {
-    event.preventDefault();
-    this.handleSyncRequested();
-  };
-
   private handleSyncRequested = async () => {
     await this.syncController.requestSync();
   };
@@ -158,14 +181,33 @@ export class BookmarkListContainer extends LitElement {
     const faviconState = this.faviconController.getFaviconState();
     
     return html`
+      ${syncState.isSyncing ? html`
+        <div class="sync-progress">
+          <div class="sync-progress-text">
+            <span>
+              ${syncState.syncTotal > 0 
+                ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
+                : 'Starting sync...'
+              }
+            </span>
+            <md-badge class="sync-badge">
+              <md-icon slot="icon">sync</md-icon>
+              Syncing
+            </md-badge>
+          </div>
+          <md-linear-progress 
+            .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
+            ?indeterminate=${syncState.syncTotal === 0}
+          ></md-linear-progress>
+        </div>
+      ` : ''}
+      
       <bookmark-list
         .bookmarks=${this.containerState.bookmarks}
         .isLoading=${this.containerState.isLoading}
-        .syncState=${syncState}
-        .faviconState=${{
-          faviconCache: faviconState.faviconCache,
-          bookmarksWithAssets: this.containerState.bookmarksWithAssets,
-        }}
+        .bookmarksWithAssets=${this.containerState.bookmarksWithAssets}
+        .faviconCache=${faviconState.faviconCache}
+        .syncedBookmarkIds=${syncState.syncedBookmarkIds}
         .onBookmarkSelect=${this.handleBookmarkSelect}
         .onSyncRequested=${this.handleSyncRequested}
         .onFaviconLoadRequested=${this.handleFaviconLoadRequested}

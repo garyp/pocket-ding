@@ -76,6 +76,7 @@ All tests should pass before considering features complete. The CI expects zero 
 ### Code Style
 
 - **Interface Naming**: Do NOT use "I" prefix for interfaces. Name interfaces directly (e.g., `LinkdingAPI` not `ILinkdingAPI`)
+- **Event Handlers**: Use arrow functions instead of `bind()` for configuring event handlers. Arrow functions maintain lexical scope and are more readable than `.bind(this)` calls.
 
 ### Build Process
 
