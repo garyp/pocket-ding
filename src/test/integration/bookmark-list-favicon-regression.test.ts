@@ -50,7 +50,6 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
   ];
 
   beforeEach(() => {
-    vi.clearAllMocks();
     observedElements = [];
     allIntersectionObservers = [];
 
@@ -92,7 +91,8 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
     if (element && element.parentNode) {
       element.remove();
     }
-    vi.restoreAllMocks();
+    // Note: NOT calling vi.restoreAllMocks() to avoid clearing IntersectionObserver implementations
+    // that might still be used by async requestAnimationFrame callbacks
   });
 
   describe('REGRESSION: Favicon loading intersection observer timing', () => {

@@ -9,17 +9,21 @@ const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 // Mock fetch
 global.fetch = vi.fn();
 
-// Create persistent mock functions that are immune to vi.clearAllMocks()
+// Create truly persistent mock functions that are NOT vi.fn() spies
+// These are regular functions that won't be affected by vi.clearAllMocks()
 const persistentObserve = () => {};
 const persistentUnobserve = () => {};
 const persistentDisconnect = () => {};
 
 // Mock IntersectionObserver with persistent implementations
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-  observe: persistentObserve,
-  unobserve: persistentUnobserve,
-  disconnect: persistentDisconnect,
-}));
+// Use a regular function, not vi.fn(), for the constructor itself
+global.IntersectionObserver = function(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {
+  return {
+    observe: persistentObserve,
+    unobserve: persistentUnobserve,
+    disconnect: persistentDisconnect,
+  };
+} as any;
 
 // Mock IndexedDB
 const mockIDBKeyRange = {
