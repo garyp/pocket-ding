@@ -325,7 +325,10 @@ export class BookmarkList extends LitElement {
 
   private cleanupIntersectionObserver() {
     if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect();
+      // Defensive check for test environments where mock methods might be undefined
+      if (typeof this.intersectionObserver.disconnect === 'function') {
+        this.intersectionObserver.disconnect();
+      }
       this.intersectionObserver = null;
     }
   }
@@ -339,11 +342,16 @@ export class BookmarkList extends LitElement {
     if (!this.intersectionObserver) return;
 
     // Disconnect and re-observe all bookmark elements
-    this.intersectionObserver.disconnect();
+    // Defensive check for test environments where mock methods might be undefined
+    if (typeof this.intersectionObserver.disconnect === 'function') {
+      this.intersectionObserver.disconnect();
+    }
     
     const bookmarkCards = this.renderRoot.querySelectorAll('[data-bookmark-id]');
     bookmarkCards.forEach((card) => {
-      this.intersectionObserver!.observe(card);
+      if (this.intersectionObserver && typeof this.intersectionObserver.observe === 'function') {
+        this.intersectionObserver.observe(card);
+      }
     });
   }
 
