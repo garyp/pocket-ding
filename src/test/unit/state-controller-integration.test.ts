@@ -64,73 +64,80 @@ describe('BookmarkList Controller Integration', () => {
     }
   });
 
-  function createTestElement(): BookmarkList {
+  function createTestElement(filter: 'all' | 'unread' | 'archived' = 'all'): BookmarkList {
     const el = new BookmarkList();
     el.bookmarks = mockBookmarks;
     el.isLoading = false;
     el.syncedBookmarkIds = new Set();
     el.faviconCache = new Map();
     el.bookmarksWithAssets = new Set();
+    el.paginationState = {
+      currentPage: 1,
+      pageSize: 25,
+      totalCount: filter === 'all' ? 1 : filter === 'unread' ? 1 : 1,
+      totalPages: 1,
+      filter
+    };
     return el;
   }
 
   describe('State Controller Integration', () => {
-    it('should initialize with default state when no saved state exists', async () => {
+    it('should initialize with default scroll position when no saved state exists', async () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Should default to 'all' filter
+      // Should show the filter passed via props
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       
       expect(allBtn?.tagName.toLowerCase()).toBe('md-filled-button');
     });
 
-    it('should restore previously saved filter state', async () => {
+    it('should restore previously saved scroll position', async () => {
       // Save state before creating component
       localStorage.setItem('bookmark-list-state', JSON.stringify({
-        selectedFilter: 'unread',
-        scrollPosition: 0
+        scrollPosition: 150
       }));
 
-      element = createTestElement();
+      element = createTestElement('unread');
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Should restore 'unread' filter
+      // Should show the unread filter (passed via props)
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       
       expect(unreadBtn?.tagName.toLowerCase()).toBe('md-filled-button');
       expect(allBtn?.tagName.toLowerCase()).toBe('md-text-button');
+      
+      // Check that scroll position was restored from state controller
+      expect((element as any).scrollPosition).toBe(150);
     });
 
-    it('should persist filter changes through the controller', async () => {
+    it('should call filter change callback when filter button is clicked', async () => {
+      const onFilterChange = vi.fn();
       element = createTestElement();
+      element.onFilterChange = onFilterChange;
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Click archived filter
+      // Click unread filter
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
-      const archivedBtn = buttons.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
+      const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       
-      expect(archivedBtn).toBeTruthy();
-      archivedBtn.click();
+      expect(unreadBtn).toBeTruthy();
+      unreadBtn.click();
       await element.updateComplete;
 
-      // Check localStorage was updated
-      const savedData = localStorage.getItem('bookmark-list-state');
-      expect(savedData).toBeTruthy();
-      const savedState = JSON.parse(savedData!);
-      expect(savedState.selectedFilter).toBe('archived');
+      // Should have called the callback instead of managing state internally
+      expect(onFilterChange).toHaveBeenCalledWith('unread');
     });
 
-    it('should validate saved state and reject invalid data', async () => {
+    it('should validate saved state and reject invalid scroll position', async () => {
       // Save invalid state
       localStorage.setItem('bookmark-list-state', JSON.stringify({
-        selectedFilter: 'invalid-filter',
         scrollPosition: -100
       }));
 
@@ -138,11 +145,8 @@ describe('BookmarkList Controller Integration', () => {
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Should fall back to default 'all' filter
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
-      const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
-      
-      expect(allBtn?.tagName.toLowerCase()).toBe('md-filled-button');
+      // Should fall back to default scroll position of 0
+      expect((element as any).scrollPosition).toBe(0);
     });
 
     it('should handle storage errors gracefully', async () => {
@@ -162,10 +166,16 @@ describe('BookmarkList Controller Integration', () => {
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Try to change filter (this should trigger save)
-      const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
-      const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
-      unreadBtn?.click();
+      // Mock scroll container and trigger scroll position save
+      const mockScrollContainer = { 
+        scrollTop: 100,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
+      (element as any).scrollContainer = mockScrollContainer;
+      
+      // Try to save scroll position (this should trigger storage error)
+      (element as any).saveCurrentScrollPosition();
       await element.updateComplete;
 
       // Should have logged warning but not crashed
@@ -252,19 +262,18 @@ describe('BookmarkList Controller Integration', () => {
   });
 
   describe('Component Lifecycle Integration', () => {
-    it('should maintain state across component recreation', async () => {
-      // Create first instance
-      let element1 = createTestElement();
+    it('should maintain scroll position across component recreation', async () => {
+      // Create first instance with archived filter
+      let element1 = createTestElement('archived');
       document.body.appendChild(element1);
       await element1.updateComplete;
 
-      // Change filter
+      // Verify it shows archived filter (from props)
       const buttons1 = Array.from(element1.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const archivedBtn1 = buttons1.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
-      archivedBtn1?.click();
-      await element1.updateComplete;
+      expect(archivedBtn1?.tagName.toLowerCase()).toBe('md-filled-button');
 
-      // Set scroll position with event methods
+      // Set scroll position
       (element1 as any).scrollContainer = { 
         scrollTop: 400,
         addEventListener: vi.fn(),
@@ -275,20 +284,21 @@ describe('BookmarkList Controller Integration', () => {
       // Remove first instance
       element1.remove();
 
-      // Create second instance
-      let element2 = createTestElement();
+      // Create second instance with same filter (simulating container maintaining filter state)
+      let element2 = createTestElement('archived');
       document.body.appendChild(element2);
       await element2.updateComplete;
 
-      // Verify state was restored
+      // Verify filter state is maintained (via props, not localStorage)
       const buttons2 = Array.from(element2.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const archivedBtn2 = buttons2.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
       expect(archivedBtn2?.tagName.toLowerCase()).toBe('md-filled-button');
 
-      // Verify scroll position in localStorage
+      // Verify scroll position was restored from localStorage
       const savedData = localStorage.getItem('bookmark-list-state');
       const savedState = JSON.parse(savedData!);
       expect(savedState.scrollPosition).toBe(400);
+      expect((element2 as any).scrollPosition).toBe(400);
 
       element2.remove();
     });
@@ -316,15 +326,9 @@ describe('BookmarkList Controller Integration', () => {
     });
   });
 
-  describe('Filter Functionality with Controller', () => {
-    it('should filter bookmarks correctly based on controller state', async () => {
-      // Set filter to unread through localStorage
-      localStorage.setItem('bookmark-list-state', JSON.stringify({
-        selectedFilter: 'unread',
-        scrollPosition: 0
-      }));
-
-      element = createTestElement();
+  describe('Filter Functionality with Props', () => {
+    it('should filter bookmarks correctly based on paginationState prop', async () => {
+      element = createTestElement('unread');
       document.body.appendChild(element);
       await element.updateComplete;
 
@@ -336,14 +340,8 @@ describe('BookmarkList Controller Integration', () => {
       expect(displayedTitle).toBe('Test Bookmark 1');
     });
 
-    it('should show archived bookmarks when archived filter is selected', async () => {
-      // Set filter to archived
-      localStorage.setItem('bookmark-list-state', JSON.stringify({
-        selectedFilter: 'archived',
-        scrollPosition: 0
-      }));
-
-      element = createTestElement();
+    it('should show archived bookmarks when archived filter is set via props', async () => {
+      element = createTestElement('archived');
       document.body.appendChild(element);
       await element.updateComplete;
 
@@ -355,20 +353,20 @@ describe('BookmarkList Controller Integration', () => {
       expect(displayedTitle).toBe('Test Bookmark 2');
     });
 
-    it('should update filter counts based on controller state', async () => {
-      element = createTestElement();
+    it('should update filter counts based on paginationState prop', async () => {
+      element = createTestElement('all');
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Check filter button counts
+      // Check filter button counts - only the active filter shows the count
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       const archivedBtn = buttons.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
 
-      expect(allBtn?.textContent).toContain('All (1)'); // Only non-archived count
-      expect(unreadBtn?.textContent).toContain('Unread (1)'); // Only unread, non-archived
-      expect(archivedBtn?.textContent).toContain('Archived (1)'); // Only archived
+      expect(allBtn?.textContent).toContain('All (1)'); // Active filter shows count
+      expect(unreadBtn?.textContent).toContain('Unread (0)'); // Inactive filters show 0
+      expect(archivedBtn?.textContent).toContain('Archived (0)'); // Inactive filters show 0
     });
   });
 });

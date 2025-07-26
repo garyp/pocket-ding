@@ -97,11 +97,16 @@ export interface BookmarkListProps {
   // Sync props
   syncedBookmarkIds: Set<number>;
   
+  // Pagination state
+  paginationState: PaginationState;
+  
   // Callback props (actions)
   onBookmarkSelect: (bookmarkId: number) => void;
   onSyncRequested: () => void;
   onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void;
   onVisibilityChanged: (visibleBookmarkIds: number[]) => void;
+  onPageChange: (page: number) => void;
+  onFilterChange: (filter: BookmarkFilter) => void;
 }
 
 export interface BookmarkListCallbacks {
@@ -115,6 +120,28 @@ export interface BookmarkListCallbacks {
 export type BookmarkFilter = 'all' | 'unread' | 'archived';
 
 export interface BookmarkListState {
-  selectedFilter: BookmarkFilter;
   scrollPosition: number;
+}
+
+export interface FilterCounts {
+  all: number;
+  unread: number;
+  archived: number;
+}
+
+export interface PaginationState {
+  currentPage: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  anchorBookmarkId?: number;
+  filter: BookmarkFilter;
+  filterCounts?: FilterCounts;
+}
+
+export interface BookmarkListContainerState {
+  currentPage: number;
+  pageSize: number;
+  filter: BookmarkFilter;
+  anchorBookmarkId?: number;
 }

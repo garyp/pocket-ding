@@ -5,7 +5,10 @@ import '../setup';
 vi.mock('../../services/database', () => ({
   DatabaseService: {
     getSettings: vi.fn(),
-    getAllBookmarks: vi.fn(),
+    getBookmarksPaginated: vi.fn(),
+    getBookmarkCount: vi.fn(),
+    getPageFromAnchorBookmark: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
     getCompletedAssetsByBookmarkId: vi.fn(),
   },
 }));
@@ -116,7 +119,10 @@ describe('BookmarkListContainer Background Sync', () => {
     (SyncService.getCurrentSyncProgress as any).mockReturnValue({ current: 0, total: 0 });
 
     // Setup database mocks
-    (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+    (DatabaseService.getBookmarksPaginated as any).mockResolvedValue(mockBookmarks);
+    (DatabaseService.getBookmarkCount as any).mockResolvedValue(mockBookmarks.length);
+    (DatabaseService.getPageFromAnchorBookmark as any).mockResolvedValue(1);
+    (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(new Map([[1, false], [2, false]]));
     (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
     (DatabaseService.getSettings as any).mockResolvedValue(mockSettings);
 
@@ -240,6 +246,11 @@ describe('BookmarkListContainer Background Sync', () => {
         needs_read_sync: false,
         shared: false,
       };
+
+      // Update the database mock to include the new bookmark when queried
+      const updatedBookmarks = [newBookmark, ...mockBookmarks]; // New bookmark first (most recent)
+      (DatabaseService.getBookmarksPaginated as any).mockResolvedValue(updatedBookmarks);
+      (DatabaseService.getBookmarkCount as any).mockResolvedValue(updatedBookmarks.length);
 
       triggerSyncEvent('bookmark-synced', { 
         bookmark: newBookmark, 
