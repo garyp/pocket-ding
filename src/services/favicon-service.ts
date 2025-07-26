@@ -141,6 +141,11 @@ export class FaviconService extends EventTarget {
       return this.DEFAULT_FAVICON_DATA_URL;
     }
 
+    // Check if we're in demo mode - provide mock favicons for example.com URLs
+    if (faviconUrl.startsWith('https://example.com/')) {
+      return this.getMockFavicon(bookmarkId);
+    }
+
     // Try to fetch and cache the favicon
     try {
       const dataUrl = await this.fetchAndCacheFavicon(bookmarkId, faviconUrl);
@@ -274,6 +279,27 @@ export class FaviconService extends EventTarget {
     const uint8Array = new Uint8Array(buffer);
     const base64String = btoa(String.fromCharCode(...uint8Array));
     return `data:${contentType};base64,${base64String}`;
+  }
+
+  /**
+   * Generate mock favicon for demo mode
+   */
+  private static getMockFavicon(bookmarkId: number): string {
+    // Create a simple colored circle favicon based on bookmark ID
+    const colors = [
+      '#e74c3c', '#3498db', '#2ecc71', '#f39c12', 
+      '#9b59b6', '#1abc9c', '#e67e22', '#34495e'
+    ];
+    const color = colors[bookmarkId % colors.length];
+    
+    // Simple SVG circle favicon
+    const svg = `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="8" cy="8" r="6" fill="${color}"/>
+      <text x="8" y="12" text-anchor="middle" fill="white" font-family="Arial" font-size="10" font-weight="bold">${bookmarkId}</text>
+    </svg>`;
+    
+    const base64 = btoa(svg);
+    return `data:image/svg+xml;base64,${base64}`;
   }
 
   static async preloadFavicon(bookmarkId: number, faviconUrl?: string): Promise<void> {

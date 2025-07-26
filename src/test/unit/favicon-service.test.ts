@@ -65,7 +65,7 @@ describe('FaviconService', () => {
 
     it('should fetch and cache favicon when not cached', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://example.com/favicon.ico';
+      const faviconUrl = 'https://real-website.com/favicon.ico';
       const mockArrayBuffer = new ArrayBuffer(16);
       const mockUint8Array = new Uint8Array(16);
       mockUint8Array.fill(255); // Fill with data for base64 encoding
@@ -104,7 +104,7 @@ describe('FaviconService', () => {
 
     it('should return default favicon and cache failure when fetch fails', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://example.com/favicon.ico';
+      const faviconUrl = 'https://real-website.com/favicon.ico';
 
       vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
 
@@ -136,6 +136,21 @@ describe('FaviconService', () => {
       const result = await FaviconService.getFaviconForBookmark(bookmarkId, faviconUrl);
       
       expect(result).toMatch(/^data:image\/svg\+xml;base64,/);
+    });
+
+    it('should return mock favicon for example.com URLs in demo mode', async () => {
+      const bookmarkId = 5;
+      const faviconUrl = 'https://example.com/favicon.ico';
+
+      vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
+
+      const result = await FaviconService.getFaviconForBookmark(bookmarkId, faviconUrl);
+      
+      // Should return mock favicon (SVG with colored circle)
+      expect(result).toMatch(/^data:image\/svg\+xml;base64,/);
+      // Should not attempt to fetch or save to database for mock favicons
+      expect(appFetch).not.toHaveBeenCalled();
+      expect(DatabaseService.saveAsset).not.toHaveBeenCalled();
     });
   });
 
@@ -271,7 +286,7 @@ describe('FaviconService', () => {
   describe('arrayBufferToDataUrl', () => {
     it('should convert ArrayBuffer to data URL', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://example.com/favicon.ico';
+      const faviconUrl = 'https://real-website.com/favicon.ico';
       
       // Create a known ArrayBuffer
       const buffer = new ArrayBuffer(4);
