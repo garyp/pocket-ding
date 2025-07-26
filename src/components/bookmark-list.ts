@@ -338,8 +338,6 @@ export class BookmarkList extends LitElement {
       // Lazy initialization if observer doesn't exist
       this.setupIntersectionObserver();
     }
-    
-    if (!this.intersectionObserver) return;
 
     // Disconnect and re-observe all bookmark elements
     // Defensive check for test environments where mock methods might be undefined
