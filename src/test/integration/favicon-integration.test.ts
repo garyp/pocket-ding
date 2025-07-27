@@ -3,7 +3,7 @@ import { FaviconService } from '../../services/favicon-service';
 import { DatabaseService } from '../../services/database';
 import type { LocalBookmark, LocalAsset } from '../../types';
 
-// Mock fetch for favicon requests
+// Mock fetch for favicon requests (CI trigger)
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
