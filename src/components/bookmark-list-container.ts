@@ -4,7 +4,7 @@ import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
 import { StateController } from '../controllers/state-controller';
-import type { LocalBookmark, PaginationState, BookmarkListContainerState } from '../types';
+import type { LocalBookmark, PaginationState, BookmarkListContainerState, FilterCounts } from '../types';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
@@ -55,19 +55,16 @@ export class BookmarkListContainer extends LitElement {
     bookmarks: LocalBookmark[];
     isLoading: boolean;
     bookmarksWithAssets: Set<number>;
-    pagination: PaginationState;
   } = {
     bookmarks: [],
     isLoading: true,
-    bookmarksWithAssets: new Set<number>(),
-    pagination: {
-      currentPage: 1,
-      pageSize: 25,
-      totalCount: 0,
-      totalPages: 1,
-      filter: 'all'
-    }
+    bookmarksWithAssets: new Set<number>()
   };
+
+  // Non-persistent pagination data (computed with persistent @state properties)
+  @state() private totalCount: number = 0;
+  @state() private totalPages: number = 1;
+  @state() private filterCounts?: FilterCounts;
 
   // Reactive controllers
   private syncController = new SyncController(this, {
@@ -102,28 +99,24 @@ export class BookmarkListContainer extends LitElement {
     }
   });
 
+  // Computed pagination state combining persistent and non-persistent properties
+  private get paginationState(): PaginationState {
+    return {
+      currentPage: this.currentPage,
+      pageSize: this.pageSize,
+      totalCount: this.totalCount,
+      totalPages: this.totalPages,
+      filter: this.filter,
+      ...(this.anchorBookmarkId ? { anchorBookmarkId: this.anchorBookmarkId } : {}),
+      ...(this.filterCounts ? { filterCounts: this.filterCounts } : {})
+    };
+  }
+
   override connectedCallback() {
     super.connectedCallback();
     // StateController automatically handles persistence via observedProperties
     void this.stateController; // Suppress TS6133: declared but never read warning
-    this.syncPaginationState();
     this.loadBookmarks();
-  }
-
-  private syncPaginationState() {
-    // Sync the individual state properties to containerState.pagination
-    this.containerState = {
-      ...this.containerState,
-      pagination: {
-        currentPage: this.currentPage,
-        pageSize: this.pageSize,
-        totalCount: this.containerState.pagination.totalCount,
-        totalPages: this.containerState.pagination.totalPages,
-        filter: this.filter,
-        ...(this.anchorBookmarkId ? { anchorBookmarkId: this.anchorBookmarkId } : {}),
-        ...(this.containerState.pagination.filterCounts ? { filterCounts: this.containerState.pagination.filterCounts } : {})
-      }
-    };
   }
 
   override disconnectedCallback() {
@@ -181,29 +174,24 @@ export class BookmarkListContainer extends LitElement {
 
       const totalPages = Math.ceil(totalCount / this.pageSize);
 
-      // Update individual properties (StateController will automatically persist)
+      // Update persistent properties (StateController will automatically persist)
       this.currentPage = page;
       this.filter = filter;
 
       // Update non-persistent state
+      this.totalCount = totalCount;
+      this.totalPages = totalPages;
+      this.filterCounts = {
+        all: allCount,
+        unread: unreadCount,
+        archived: archivedCount
+      };
+
       this.containerState = {
         ...this.containerState,
         bookmarks,
         isLoading: false,
-        bookmarksWithAssets,
-        pagination: {
-          currentPage: this.currentPage,
-          pageSize: this.pageSize,
-          totalCount,
-          totalPages,
-          filter: this.filter,
-          ...(this.anchorBookmarkId ? { anchorBookmarkId: this.anchorBookmarkId } : {}),
-          filterCounts: {
-            all: allCount,
-            unread: unreadCount,
-            archived: archivedCount
-          }
-        }
+        bookmarksWithAssets
       };
 
       console.log(`Loaded page ${page} of ${totalPages} (${bookmarks.length} bookmarks, ${totalCount} total for filter '${filter}')`);
@@ -292,7 +280,6 @@ export class BookmarkListContainer extends LitElement {
     // Set the selected bookmark as the anchor for position memory
     // StateController will automatically persist this change
     this.anchorBookmarkId = bookmarkId;
-    this.syncPaginationState();
 
     this.dispatchEvent(new CustomEvent('bookmark-selected', {
       detail: { bookmarkId },
@@ -369,7 +356,7 @@ export class BookmarkListContainer extends LitElement {
         .bookmarksWithAssets=${this.containerState.bookmarksWithAssets}
         .faviconCache=${faviconState.faviconCache}
         .syncedBookmarkIds=${syncState.syncedBookmarkIds}
-        .paginationState=${this.containerState.pagination}
+        .paginationState=${this.paginationState}
         .onBookmarkSelect=${this.handleBookmarkSelect}
         .onSyncRequested=${this.handleSyncRequested}
         .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
