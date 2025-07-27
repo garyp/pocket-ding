@@ -9,7 +9,8 @@ vi.mock('../../services/database', () => ({
   DatabaseService: {
     getAssetsByBookmarkId: vi.fn(),
     saveAsset: vi.fn(),
-    deleteAssetsByBookmarkId: vi.fn()
+    deleteAssetsByBookmarkId: vi.fn(),
+    getSettings: vi.fn()
   }
 }));
 
@@ -63,14 +64,22 @@ describe('FaviconService', () => {
       expect(result).toMatch(/^data:image\/svg\+xml;base64,/);
     });
 
-    it('should fetch and cache favicon when not cached', async () => {
+    it('should fetch and cache favicon when not cached for Linkding-served URL', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://real-website.com/favicon.ico';
+      const faviconUrl = 'https://linkding.example.com/static/favicon.ico';
       const mockArrayBuffer = new ArrayBuffer(16);
       const mockUint8Array = new Uint8Array(16);
       mockUint8Array.fill(255); // Fill with data for base64 encoding
 
       vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
+      // Mock settings to make it appear as Linkding-served
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'test-token',
+        sync_interval: 5,
+        auto_sync: true,
+        reading_mode: 'original'
+      });
 
       // Mock successful fetch
       vi.mocked(appFetch).mockResolvedValue({
@@ -102,11 +111,43 @@ describe('FaviconService', () => {
       );
     });
 
-    it('should return default favicon and cache failure when fetch fails', async () => {
+    it('should generate fallback favicon for external URLs', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://real-website.com/favicon.ico';
+      const faviconUrl = 'https://external-website.com/favicon.ico';
 
       vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
+      // Mock settings to make it appear as external (not Linkding-served)
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'test-token',
+        sync_interval: 5,
+        auto_sync: true,
+        reading_mode: 'original'
+      });
+
+      const result = await FaviconService.getFaviconForBookmark(bookmarkId, faviconUrl);
+      
+      // External favicons should return generated SVG fallback
+      expect(result).toMatch(/^data:image\/svg\+xml;base64,/);
+      // Should not attempt to fetch external favicons
+      expect(appFetch).not.toHaveBeenCalled();
+      // Should not save failure to database for external favicons (they use fallback)
+      expect(DatabaseService.saveAsset).not.toHaveBeenCalled();
+    });
+
+    it('should return default favicon and cache failure when Linkding-served fetch fails', async () => {
+      const bookmarkId = 1;
+      const faviconUrl = 'https://linkding.example.com/static/favicon.ico';
+
+      vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
+      // Mock settings to make it appear as Linkding-served
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'test-token',
+        sync_interval: 5,
+        auto_sync: true,
+        reading_mode: 'original'
+      });
 
       // Mock failed fetch
       vi.mocked(appFetch).mockResolvedValue({
@@ -129,7 +170,7 @@ describe('FaviconService', () => {
 
     it('should handle database errors gracefully', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://example.com/favicon.ico';
+      const faviconUrl = 'https://external-website.com/favicon.ico';
 
       vi.mocked(DatabaseService.getAssetsByBookmarkId).mockRejectedValue(new Error('Database error'));
 
@@ -208,9 +249,9 @@ describe('FaviconService', () => {
       expect(appFetch).not.toHaveBeenCalled();
     });
 
-    it('should retry preload after 24 hours from failure', async () => {
+    it('should retry preload after 24 hours from failure for Linkding-served URLs', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://example.com/favicon.ico';
+      const faviconUrl = 'https://linkding.example.com/static/favicon.ico';
       const oldFailure: LocalAsset = {
         id: 1,
         bookmark_id: bookmarkId,
@@ -224,6 +265,14 @@ describe('FaviconService', () => {
       };
 
       vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([oldFailure]);
+      // Mock settings to make it appear as Linkding-served
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'test-token',
+        sync_interval: 5,
+        auto_sync: true,
+        reading_mode: 'original'
+      });
 
       // Mock successful fetch
       vi.mocked(appFetch).mockResolvedValue({
@@ -284,9 +333,9 @@ describe('FaviconService', () => {
   });
 
   describe('arrayBufferToDataUrl', () => {
-    it('should convert ArrayBuffer to data URL', async () => {
+    it('should convert ArrayBuffer to data URL for Linkding-served favicon', async () => {
       const bookmarkId = 1;
-      const faviconUrl = 'https://real-website.com/favicon.ico';
+      const faviconUrl = 'https://linkding.example.com/static/favicon.ico';
       
       // Create a known ArrayBuffer
       const buffer = new ArrayBuffer(4);
@@ -297,6 +346,14 @@ describe('FaviconService', () => {
       view[3] = 0x47;
 
       vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
+      // Mock settings to make it appear as Linkding-served
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'test-token',
+        sync_interval: 5,
+        auto_sync: true,
+        reading_mode: 'original'
+      });
 
       vi.mocked(appFetch).mockResolvedValue({
         ok: true,
