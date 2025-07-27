@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { ContentFetcher } from '../services/content-fetcher';
 import { ThemeService } from '../services/theme-service';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
 import './secure-iframe';
 import '@material/web/button/filled-button.js';
@@ -18,8 +19,26 @@ import '@material/web/menu/menu-item.js';
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
   @property({ type: Number }) bookmarkId: number | null = null;
-  @state() private bookmark: LocalBookmark | null = null;
-  @state() private isLoading = true;
+  
+  // Reactive data queries that automatically update when data changes
+  private bookmarkQuery = new ReactiveQueryController<LocalBookmark | undefined>(this, {
+    query: this.bookmarkId ? DatabaseService.createBookmarkQuery(this.bookmarkId) : () => Promise.resolve(undefined),
+    initialValue: undefined,
+    enabled: false // Will be enabled when bookmarkId is set
+  });
+
+  private progressQuery = new ReactiveQueryController<ReadProgress | undefined>(this, {
+    query: this.bookmarkId ? DatabaseService.createReadProgressQuery(this.bookmarkId) : () => Promise.resolve(undefined),
+    initialValue: undefined,
+    enabled: false
+  });
+
+  private assetsQuery = new ReactiveQueryController<any[]>(this, {
+    query: this.bookmarkId ? DatabaseService.createAssetsByBookmarkQuery(this.bookmarkId) : () => Promise.resolve([]),
+    initialValue: [],
+    enabled: false
+  });
+
   @state() private readingMode: 'original' | 'readability' = 'readability';
   @state() private readProgress = 0;
   @state() private scrollPosition = 0;
@@ -30,6 +49,16 @@ export class BookmarkReader extends LitElement {
   @state() private isLoadingContent = false;
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
+
+  // Computed properties for reactive data
+  private get bookmark(): LocalBookmark | null {
+    return this.bookmarkQuery.value || null;
+  }
+
+  private get readProgressData(): ReadProgress | undefined {
+    return this.progressQuery.value;
+  }
+
 
   private progressSaveTimeout: number | null = null;
   private readMarkTimeout: number | null = null;
@@ -360,19 +389,43 @@ export class BookmarkReader extends LitElement {
       this.updateReaderTheme();
     });
     
-    if (this.bookmarkId) {
-      await this.loadBookmark();
+    // Reactive queries will automatically load data when bookmarkId is set
+  }
+
+  override willUpdate(changedProperties: Map<string, any>) {
+    super.willUpdate(changedProperties);
+    
+    if (changedProperties.has('bookmarkId')) {
+      const hasBookmarkId = !!this.bookmarkId;
+      
+      // Enable/disable queries based on whether we have a bookmark ID
+      this.bookmarkQuery.setEnabled(hasBookmarkId);
+      this.progressQuery.setEnabled(hasBookmarkId);
+      this.assetsQuery.setEnabled(hasBookmarkId);
+      
+      if (hasBookmarkId) {
+        // Update all queries to use the new bookmark ID
+        this.bookmarkQuery.updateQuery(DatabaseService.createBookmarkQuery(this.bookmarkId!));
+        this.progressQuery.updateQuery(DatabaseService.createReadProgressQuery(this.bookmarkId!));
+        this.assetsQuery.updateQuery(DatabaseService.createAssetsByBookmarkQuery(this.bookmarkId!));
+        
+        // Reset state for new bookmark
+        this.hasBeenMarkedAsRead = false;
+        this.readProgress = 0;
+        this.scrollPosition = 0;
+      }
     }
   }
 
-  override updated(changedProperties: Map<string, any>) {
-    if (changedProperties.has('bookmarkId') && this.bookmarkId) {
-      this.loadBookmark();
-    }
-    
+  override updated(_changedProperties: Map<string, any>) {
     // Get reference to secure iframe after render
     if (!this.secureIframe) {
       this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
+    }
+    
+    // Handle bookmark data changes reactively
+    if (this.bookmark && !this.bookmarkQuery.loading) {
+      this.handleBookmarkDataReady();
     }
   }
 
@@ -388,57 +441,46 @@ export class BookmarkReader extends LitElement {
     });
   }
 
-  private async loadBookmark() {
-    if (!this.bookmarkId) return;
-
-    try {
-      this.isLoading = true;
-      this.hasBeenMarkedAsRead = false; // Reset for new bookmark
-      
-      // Reset progress state to prevent carryover from previous bookmarks
-      this.readProgress = 0;
-      this.scrollPosition = 0;
-      this.bookmark = await DatabaseService.getBookmark(this.bookmarkId) || null;
-      
-      if (this.bookmark) {
-        // Load saved reading progress
-        const progress = await DatabaseService.getReadProgress(this.bookmarkId);
-        if (progress) {
-          // Always restore saved position (remove reset logic for now)
-          this.readProgress = progress.progress;
-          this.scrollPosition = progress.scroll_position;
-          this.readingMode = progress.reading_mode;
-          this.darkModeOverride = progress.dark_mode_override || null;
-        } else {
-          // Reset to defaults for new bookmarks with no saved progress
-          this.readProgress = 0;
-          this.scrollPosition = 0;
-          this.readingMode = this.bookmark.reading_mode || 'readability';
-          this.darkModeOverride = null;
-        }
-
-        // Load available content sources
-        this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
-        
-        // Set default content source (prefer first asset if available, otherwise URL)
-        const firstAsset = this.availableContentSources.find(source => source.type === 'asset');
-        this.selectedContentSource = firstAsset || this.availableContentSources[0] || null;
-        
-        // Load content with preferred source
-        await this.loadContent();
-      }
-    } catch (error) {
-      console.error('Failed to load bookmark:', error);
-    } finally {
-      this.isLoading = false;
-    }
-
-    // Set up read marking and theme after content loads
-    await this.updateComplete;
-    this.setupReadMarking();
-    this.updateReaderTheme();
+  private async handleBookmarkDataReady() {
+    if (!this.bookmark) return;
     
+    try {
+      // Load saved reading progress
+      const progress = this.readProgressData;
+      if (progress) {
+        // Always restore saved position
+        this.readProgress = progress.progress;
+        this.scrollPosition = progress.scroll_position;
+        this.readingMode = progress.reading_mode;
+        this.darkModeOverride = progress.dark_mode_override || null;
+      } else {
+        // Reset to defaults for new bookmarks with no saved progress
+        this.readProgress = 0;
+        this.scrollPosition = 0;
+        this.readingMode = this.bookmark.reading_mode || 'readability';
+        this.darkModeOverride = null;
+      }
+
+      // Load available content sources
+      this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
+      
+      // Set default content source (prefer first asset if available, otherwise URL)
+      const firstAsset = this.availableContentSources.find(source => source.type === 'asset');
+      this.selectedContentSource = firstAsset || this.availableContentSources[0] || null;
+      
+      // Load content with preferred source
+      await this.loadContent();
+      
+      // Set up read marking and theme after content loads
+      await this.updateComplete;
+      this.setupReadMarking();
+      this.updateReaderTheme();
+      
+    } catch (error) {
+      console.error('Failed to process bookmark data:', error);
+    }
   }
+
 
   private async loadContent() {
     if (!this.bookmark || !this.selectedContentSource) return;
@@ -679,7 +721,9 @@ export class BookmarkReader extends LitElement {
   }
 
   override render() {
-    if (this.isLoading) {
+    const isLoading = this.bookmarkQuery.loading || this.progressQuery.loading || this.assetsQuery.loading;
+    
+    if (isLoading) {
       return html`
         <div class="loading-container">
           <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>

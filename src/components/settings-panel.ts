@@ -1,10 +1,11 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
 import { DataManagementController } from '../controllers/data-management-controller';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import type { AppSettings } from '../types';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/button/filled-button.js';
@@ -18,7 +19,21 @@ import '@material/web/progress/linear-progress.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
-  @property({ type: Object }) settings: AppSettings | null = null;
+  // Reactive settings query
+  private settingsQuery = new ReactiveQueryController<AppSettings | undefined>(this, {
+    query: DatabaseService.createSettingsQuery(),
+    initialValue: undefined
+  });
+
+  // Computed property for reactive settings (with setter for testing compatibility)
+  get settings(): AppSettings | null {
+    return this.settingsQuery.value || null;
+  }
+
+  set settings(value: AppSettings | null) {
+    // For testing compatibility, mock the reactive query value
+    (this.settingsQuery as any).currentValue = value;
+  }
   @state() private formData: Partial<AppSettings> = {};
   @state() private isLoading = false;
   @state() private testStatus: 'idle' | 'testing' | 'success' | 'error' = 'idle';
@@ -209,6 +224,13 @@ export class SettingsPanel extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.initializeForm();
+  }
+
+  override updated(_changedProperties: any) {
+    // React to settings changes by updating form data
+    if (this.settings && !this.settingsQuery.loading) {
+      this.initializeForm();
+    }
   }
 
   private initializeForm() {

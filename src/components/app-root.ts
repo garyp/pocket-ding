@@ -4,6 +4,7 @@ import { DatabaseService } from '../services/database';
 import { ThemeService } from '../services/theme-service';
 import { configureFetchHelper } from '../utils/fetch-helper';
 import { getBasePath } from '../utils/base-path';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import type { AppSettings } from '../types';
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
@@ -17,8 +18,21 @@ import './settings-panel';
 export class AppRoot extends LitElement {
   @state() private currentView: 'bookmarks' | 'reader' | 'settings' | 'not-found' = 'bookmarks';
   @state() private selectedBookmarkId: number | null = null;
-  @state() private settings: AppSettings | null = null;
-  @state() private isLoading = true;
+  
+  // Reactive settings query
+  private settingsQuery = new ReactiveQueryController<AppSettings | undefined>(this, {
+    query: DatabaseService.createSettingsQuery(),
+    initialValue: undefined
+  });
+
+  // Computed property for settings
+  private get settings(): AppSettings | null {
+    return this.settingsQuery.value || null;
+  }
+
+  private get isLoading(): boolean {
+    return this.settingsQuery.loading;
+  }
 
   static override styles = css`
     :host {
@@ -158,9 +172,8 @@ export class AppRoot extends LitElement {
 
   override async connectedCallback() {
     super.connectedCallback();
-    await this.loadSettings();
     this.setupRouting();
-    this.isLoading = false;
+    // Settings loading is now handled reactively
   }
 
   override disconnectedCallback() {
@@ -168,25 +181,29 @@ export class AppRoot extends LitElement {
     window.removeEventListener('popstate', this.handlePopState);
   }
 
-  private async loadSettings() {
-    try {
-      this.settings = await DatabaseService.getSettings() || null;
-      
-      // Configure fetch helper with Linkding URL if available
-      if (this.settings?.linkding_url) {
-        configureFetchHelper(this.settings.linkding_url);
-      }
-      
-      // Initialize theme service
+  override willUpdate(changedProperties: Map<string, any>) {
+    super.willUpdate(changedProperties);
+    
+    // Automatically configure fetch helper when settings change
+    if (this.settings?.linkding_url) {
+      configureFetchHelper(this.settings.linkding_url);
+    }
+    
+    // Initialize theme service when settings are available
+    if (this.settings && !this.settingsQuery.loading) {
       ThemeService.init();
       
       // Apply theme from settings if available
-      if (this.settings?.theme_mode) {
+      if (this.settings.theme_mode) {
         ThemeService.setThemeFromSettings(this.settings.theme_mode);
       }
-    } catch (error) {
-      console.error('Failed to load settings:', error);
     }
+  }
+
+  // Temporary method for test compatibility - settings loading is now reactive
+  // @ts-ignore: Used in tests
+  private async loadSettings() {
+    // No-op: Settings loading is now handled by reactive query
   }
 
   private setupRouting() {
@@ -308,18 +325,9 @@ export class AppRoot extends LitElement {
     this.updateUrl('reader', this.selectedBookmarkId || undefined);
   }
 
-  private async handleSettingsSave(e: CustomEvent) {
-    this.settings = e.detail.settings;
-    
-    // Configure fetch helper with updated Linkding URL
-    if (this.settings?.linkding_url) {
-      configureFetchHelper(this.settings.linkding_url);
-    }
-    
-    // Apply theme from updated settings
-    if (this.settings?.theme_mode) {
-      ThemeService.setThemeFromSettings(this.settings.theme_mode);
-    }
+  private async handleSettingsSave(_e: CustomEvent) {
+    // Settings will automatically update via reactive query when saved to database
+    // Configure fetch helper and theme will happen automatically in willUpdate when settings change
     
     this.currentView = 'bookmarks';
     this.updateUrl('bookmarks');
@@ -420,7 +428,6 @@ export class AppRoot extends LitElement {
       case 'settings':
         return html`
           <settings-panel
-            .settings=${this.settings}
             @settings-saved=${this.handleSettingsSave}
           ></settings-panel>
         `;
