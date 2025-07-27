@@ -60,9 +60,10 @@ afterEach(() => {
 describe('ExportService', () => {
   describe('exportData', () => {
     it('should export all non-Linkding state data', async () => {
-      // Mock database responses
-      const mockReadProgress = [
+      // Mock database responses (simulate what comes from database with id field)
+      const mockDatabaseReadProgress = [
         {
+          id: 1, // This should be filtered out
           bookmark_id: 1,
           progress: 0.5,
           last_read_at: '2023-01-01T12:00:00Z',
@@ -71,12 +72,33 @@ describe('ExportService', () => {
           dark_mode_override: 'dark' as const
         },
         {
+          id: 2, // This should be filtered out
           bookmark_id: 2,
           progress: 0.8,
           last_read_at: '2023-01-02T12:00:00Z',
           reading_mode: 'original' as const,
           scroll_position: 200,
-          dark_mode_override: null
+          dark_mode_override: null // This should be excluded from export
+        }
+      ];
+
+      // Expected export format (no id, no null dark_mode_override)
+      const expectedReadProgress = [
+        {
+          bookmark_id: 1,
+          progress: 0.5,
+          last_read_at: '2023-01-01T12:00:00Z',
+          reading_mode: 'readability',
+          scroll_position: 100,
+          dark_mode_override: 'dark'
+        },
+        {
+          bookmark_id: 2,
+          progress: 0.8,
+          last_read_at: '2023-01-02T12:00:00Z',
+          reading_mode: 'original',
+          scroll_position: 200
+          // dark_mode_override should be excluded when null
         }
       ];
 
@@ -89,7 +111,7 @@ describe('ExportService', () => {
         theme_mode: 'dark' as const
       };
 
-      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue(mockReadProgress);
+      vi.mocked(DatabaseService.getAllReadProgress).mockResolvedValue(mockDatabaseReadProgress);
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
 
       const result = await ExportService.exportData();
@@ -98,7 +120,7 @@ describe('ExportService', () => {
       expect(result).toMatchObject({
         version: '1.0',
         export_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
-        reading_progress: mockReadProgress,
+        reading_progress: expectedReadProgress,
         app_settings: {
           sync_interval: 30,  // Different from default (60)
           auto_sync: false,   // Different from default (true)
@@ -106,6 +128,14 @@ describe('ExportService', () => {
           theme_mode: 'dark'  // Different from default ('system')
         }
       });
+
+      // Verify that no id fields are present in reading progress
+      result.reading_progress.forEach(progress => {
+        expect(progress).not.toHaveProperty('id');
+      });
+
+      // Verify second entry doesn't have dark_mode_override since it was null
+      expect(result.reading_progress[1]).not.toHaveProperty('dark_mode_override');
       
       // Verify sync_metadata is not present
       expect(result).not.toHaveProperty('sync_metadata');
@@ -236,8 +266,8 @@ describe('ExportService', () => {
         progress: 0.5,
         last_read_at: '2023-01-01T12:00:00Z',
         reading_mode: 'readability',
-        scroll_position: 100,
-        dark_mode_override: null
+        scroll_position: 100
+        // dark_mode_override excluded when null
       }],
       app_settings: {
         sync_interval: 60,
@@ -289,18 +319,39 @@ describe('ExportService', () => {
     });
 
     it('should accept valid dark mode override values', () => {
-      const validValues = [null, undefined, 'light', 'dark'];
-      
-      validValues.forEach(value => {
-        const testData = {
-          ...validExportData,
-          reading_progress: [{
-            ...validExportData.reading_progress[0],
-            dark_mode_override: value
-          }]
-        };
-        expect(ExportService.validateExportData(testData)).toBe(true);
-      });
+      // Test with dark_mode_override present
+      const testDataWithDarkMode = {
+        ...validExportData,
+        reading_progress: [{
+          ...validExportData.reading_progress[0],
+          dark_mode_override: 'dark'
+        }]
+      };
+      expect(ExportService.validateExportData(testDataWithDarkMode)).toBe(true);
+
+      // Test with dark_mode_override present as light
+      const testDataWithLightMode = {
+        ...validExportData,
+        reading_progress: [{
+          ...validExportData.reading_progress[0],
+          dark_mode_override: 'light'
+        }]
+      };
+      expect(ExportService.validateExportData(testDataWithLightMode)).toBe(true);
+
+      // Test without dark_mode_override (excluded when null)
+      const testDataWithoutDarkMode = {
+        ...validExportData,
+        reading_progress: [{
+          bookmark_id: 1,
+          progress: 0.5,
+          last_read_at: '2023-01-01T12:00:00Z',
+          reading_mode: 'readability',
+          scroll_position: 100
+          // dark_mode_override excluded
+        }]
+      };
+      expect(ExportService.validateExportData(testDataWithoutDarkMode)).toBe(true);
     });
 
     it('should reject invalid dark mode override values', () => {

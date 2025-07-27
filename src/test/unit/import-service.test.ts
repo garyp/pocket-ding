@@ -41,7 +41,7 @@ describe('ImportService', () => {
         last_read_at: '2023-01-01T12:00:00Z',
         reading_mode: 'readability' as const,
         scroll_position: 100,
-        dark_mode_override: null
+        dark_mode_override: 'dark'
       },
       {
         bookmark_id: 2,
@@ -162,8 +162,8 @@ describe('ImportService', () => {
             progress: 0.6,
             last_read_at: '2023-01-01T15:00:00Z', // Newer than import (12:00:00Z)
             reading_mode: 'original',
-            scroll_position: 150,
-            dark_mode_override: null
+            scroll_position: 150
+            // dark_mode_override excluded when null
           };
         }
         return undefined; // No existing progress for bookmark 2
@@ -208,8 +208,8 @@ describe('ImportService', () => {
         progress: 0.5,
         last_read_at: '2023-01-01T12:00:00Z', // Older than import (15:00:00Z)
         reading_mode: 'original',
-        scroll_position: 100,
-        dark_mode_override: null
+        scroll_position: 100
+        // dark_mode_override excluded when null
       });
       
       vi.mocked(DatabaseService.getSettings).mockResolvedValue({

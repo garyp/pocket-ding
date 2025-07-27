@@ -1,10 +1,18 @@
 import { DatabaseService } from './database';
-import type { ReadProgress } from '../types';
+
+export interface ExportedReadProgress {
+  bookmark_id: number;
+  progress: number;
+  last_read_at: string;
+  reading_mode: 'original' | 'readability';
+  scroll_position: number;
+  dark_mode_override?: 'light' | 'dark'; // Excluded when null
+}
 
 export interface ExportData {
   version: string;
   export_timestamp: string;
-  reading_progress: ReadProgress[];
+  reading_progress: ExportedReadProgress[];
   app_settings: {
     sync_interval?: number;
     auto_sync?: boolean;
@@ -49,10 +57,20 @@ export class ExportService {
         appSettings.theme_mode = settings.theme_mode;
       }
 
+      // Filter out internal id field and null dark_mode_override values
+      const filteredReadingProgress = readingProgress.map(progress => {
+        const { id, ...filteredProgress } = progress as any;
+        // Only include dark_mode_override if it's not null
+        if (filteredProgress.dark_mode_override === null) {
+          delete filteredProgress.dark_mode_override;
+        }
+        return filteredProgress;
+      });
+
       const exportData: ExportData = {
         version: this.EXPORT_VERSION,
         export_timestamp: new Date().toISOString(),
-        reading_progress: readingProgress,
+        reading_progress: filteredReadingProgress,
         app_settings: appSettings
       };
 
@@ -156,7 +174,7 @@ export class ExportService {
     return true;
   }
 
-  private static isValidReadProgress(progress: any): progress is ReadProgress {
+  private static isValidReadProgress(progress: any): progress is ExportedReadProgress {
     return (
       typeof progress === 'object' &&
       typeof progress.bookmark_id === 'number' &&
@@ -164,9 +182,11 @@ export class ExportService {
       typeof progress.last_read_at === 'string' &&
       ['original', 'readability'].includes(progress.reading_mode) &&
       typeof progress.scroll_position === 'number' &&
-      (progress.dark_mode_override === null || 
-       progress.dark_mode_override === undefined ||
-       ['light', 'dark'].includes(progress.dark_mode_override))
+      // dark_mode_override is optional and should not be null if present
+      (progress.dark_mode_override === undefined ||
+       ['light', 'dark'].includes(progress.dark_mode_override)) &&
+      // id field should not be present in export
+      progress.id === undefined
     );
   }
 }

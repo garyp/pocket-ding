@@ -12,12 +12,18 @@ describe('BookmarkList Controller Integration', () => {
   beforeEach(async () => {
     localStorage.clear();
     
-    // Ensure IntersectionObserver is properly mocked (re-establish after vi.clearAllMocks())
-    global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    }));
+    // Use persistent implementations that won't be cleared by vi.restoreAllMocks()
+    const persistentObserve = () => {};
+    const persistentUnobserve = () => {};
+    const persistentDisconnect = () => {};
+    
+    global.IntersectionObserver = function(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {
+      return {
+        observe: persistentObserve,
+        unobserve: persistentUnobserve,
+        disconnect: persistentDisconnect,
+      };
+    } as any;
     
     mockSettings = {
       linkding_url: 'https://example.com',

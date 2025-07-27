@@ -141,18 +141,25 @@ export class FaviconService extends EventTarget {
       return this.DEFAULT_FAVICON_DATA_URL;
     }
 
-    // Try to fetch and cache the favicon
-    try {
-      const dataUrl = await this.fetchAndCacheFavicon(bookmarkId, faviconUrl);
-      return dataUrl;
-    } catch (error) {
-      // Only log errors that aren't network/CORS related to reduce console noise
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        console.debug(`Network error fetching favicon for bookmark ${bookmarkId} (likely CORS):`, faviconUrl);
-      } else {
-        console.warn(`Failed to fetch favicon for bookmark ${bookmarkId}:`, error);
+    // Check if we're in demo mode - provide mock favicons for example.com URLs
+    if (faviconUrl.startsWith('https://example.com/')) {
+      return this.getMockFavicon(bookmarkId);
+    }
+
+    // Check if this is a Linkding-served favicon vs external favicon
+    if (await this.isLinkdingServedFavicon(faviconUrl)) {
+      // Linkding-served favicons should work via appFetch
+      try {
+        const dataUrl = await this.fetchAndCacheFavicon(bookmarkId, faviconUrl);
+        return dataUrl;
+      } catch (error) {
+        console.warn(`Failed to fetch Linkding-served favicon for bookmark ${bookmarkId}:`, error);
+        return this.DEFAULT_FAVICON_DATA_URL;
       }
-      return this.DEFAULT_FAVICON_DATA_URL;
+    } else {
+      // External favicons will fail due to CORS - use fallback or service
+      console.debug(`External favicon detected for bookmark ${bookmarkId}, using fallback:`, faviconUrl);
+      return this.handleExternalFavicon(bookmarkId, faviconUrl);
     }
   }
 
@@ -276,6 +283,96 @@ export class FaviconService extends EventTarget {
     return `data:${contentType};base64,${base64String}`;
   }
 
+  /**
+   * Check if a favicon URL is served by the configured Linkding server
+   */
+  private static async isLinkdingServedFavicon(faviconUrl: string): Promise<boolean> {
+    try {
+      const settings = await DatabaseService.getSettings();
+      if (!settings?.linkding_url) {
+        return false;
+      }
+      
+      const linkdingBaseUrl = new URL(settings.linkding_url);
+      const faviconUrlObj = new URL(faviconUrl);
+      
+      // Check if the favicon URL is from the same origin as the Linkding server
+      return faviconUrlObj.origin === linkdingBaseUrl.origin;
+    } catch (error) {
+      console.debug('Error checking if favicon is Linkding-served:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Handle external favicons that can't be fetched directly due to CORS
+   */
+  private static async handleExternalFavicon(_bookmarkId: number, faviconUrl: string): Promise<string> {
+    // For now, return a generated favicon based on the URL
+    // TODO: Could integrate with a favicon service API like favicon.is or Google's favicon API
+    return this.generateFaviconFromUrl(faviconUrl);
+  }
+
+  /**
+   * Generate a favicon based on the URL when external favicon can't be fetched
+   */
+  private static generateFaviconFromUrl(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      const domain = urlObj.hostname;
+      
+      // Generate a color based on the domain
+      let hash = 0;
+      for (let i = 0; i < domain.length; i++) {
+        const char = domain.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+      }
+      
+      const colors = [
+        '#e74c3c', '#3498db', '#2ecc71', '#f39c12', 
+        '#9b59b6', '#1abc9c', '#e67e22', '#34495e',
+        '#f1c40f', '#e67e22', '#95a5a6', '#d35400'
+      ];
+      const color = colors[Math.abs(hash) % colors.length];
+      
+      // Use first letter of domain
+      const letter = domain.charAt(0).toUpperCase();
+      
+      const svg = `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="8" r="7" fill="${color}"/>
+        <text x="8" y="12" text-anchor="middle" fill="white" font-family="Arial" font-size="11" font-weight="bold">${letter}</text>
+      </svg>`;
+      
+      const base64 = btoa(svg);
+      return `data:image/svg+xml;base64,${base64}`;
+    } catch (error) {
+      console.debug('Error generating favicon from URL:', error);
+      return this.DEFAULT_FAVICON_DATA_URL;
+    }
+  }
+
+  /**
+   * Generate mock favicon for demo mode
+   */
+  private static getMockFavicon(bookmarkId: number): string {
+    // Create a simple colored circle favicon based on bookmark ID
+    const colors = [
+      '#e74c3c', '#3498db', '#2ecc71', '#f39c12', 
+      '#9b59b6', '#1abc9c', '#e67e22', '#34495e'
+    ];
+    const color = colors[bookmarkId % colors.length];
+    
+    // Simple SVG circle favicon
+    const svg = `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="8" cy="8" r="6" fill="${color}"/>
+      <text x="8" y="12" text-anchor="middle" fill="white" font-family="Arial" font-size="10" font-weight="bold">${bookmarkId}</text>
+    </svg>`;
+    
+    const base64 = btoa(svg);
+    return `data:image/svg+xml;base64,${base64}`;
+  }
+
   static async preloadFavicon(bookmarkId: number, faviconUrl?: string): Promise<void> {
     if (!faviconUrl) return;
     
@@ -295,8 +392,8 @@ export class FaviconService extends EventTarget {
       }
     }
 
-    // Fetch in background without waiting
-    this.fetchAndCacheFavicon(bookmarkId, faviconUrl).catch(error => {
+    // Use the main favicon loading logic which handles demo mode and external URLs
+    this.getFaviconForBookmark(bookmarkId, faviconUrl).catch(error => {
       console.debug(`Background favicon fetch failed for bookmark ${bookmarkId}:`, error);
     });
   }
