@@ -80,7 +80,7 @@ describe('Favicon Integration Tests', () => {
         headers: {
           get: (name: string) => name === 'content-type' ? 'image/x-icon' : null
         }
-      });
+      } as unknown as Response);
 
       // Preload favicon (simulating what happens during sync)
       await FaviconService.preloadFavicon(testBookmark.id, testBookmark.favicon_url);
@@ -129,7 +129,7 @@ describe('Favicon Integration Tests', () => {
         ok: false,
         status: 404,
         statusText: 'Not Found'
-      });
+      } as unknown as Response);
 
       // Preload favicon (simulating what happens during sync)
       await FaviconService.preloadFavicon(testBookmark.id, testBookmark.favicon_url);
@@ -180,7 +180,7 @@ describe('Favicon Integration Tests', () => {
         headers: {
           get: () => 'image/x-icon'
         }
-      });
+      } as unknown as Response);
 
       // First preload - mock that favicon gets cached successfully
       await FaviconService.preloadFavicon(testBookmark.id, testBookmark.favicon_url);
@@ -262,7 +262,7 @@ describe('Favicon Integration Tests', () => {
         headers: {
           get: () => 'image/x-icon'
         }
-      });
+      } as unknown as Response);
 
       // Get favicon URLs for display
       const favicon1 = await FaviconService.getFaviconForBookmark(1, testBookmarks[0]?.favicon_url || '');
@@ -305,7 +305,7 @@ describe('Favicon Integration Tests', () => {
         headers: {
           get: () => 'image/x-icon'
         }
-      });
+      } as unknown as Response);
 
       await FaviconService.getFaviconForBookmark(testBookmark.id, testBookmark.favicon_url);
 
