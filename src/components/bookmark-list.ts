@@ -341,7 +341,9 @@ export class BookmarkList extends LitElement {
     
     const bookmarkCards = this.renderRoot.querySelectorAll('[data-bookmark-id]');
     bookmarkCards.forEach((card) => {
-      this.intersectionObserver!.observe(card);
+      if (this.intersectionObserver) {
+        this.intersectionObserver.observe(card);
+      }
     });
   }
 
@@ -353,13 +355,25 @@ export class BookmarkList extends LitElement {
     if (changedProperties.has('bookmarks') && this.bookmarks.length > 0) {
       // Use requestAnimationFrame to ensure the DOM is fully rendered
       requestAnimationFrame(() => {
-        this.restoreScrollPosition();
+        try {
+          if (this.isConnected) {
+            this.restoreScrollPosition();
+          }
+        } catch (error) {
+          console.error('Failed to restore scroll position:', error);
+        }
       });
     }
     
     // Always update observed elements after DOM changes to ensure intersection observer works
     requestAnimationFrame(() => {
-      this.updateObservedElements();
+      try {
+        if (this.isConnected && this.intersectionObserver) {
+          this.updateObservedElements();
+        }
+      } catch (error) {
+        console.error('Failed to update observed elements:', error);
+      }
     });
   }
 

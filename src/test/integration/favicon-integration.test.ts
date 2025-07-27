@@ -86,7 +86,13 @@ describe('Favicon Integration Tests', () => {
       await FaviconService.preloadFavicon(testBookmark.id, testBookmark.favicon_url);
 
       // Wait a moment for the background operation to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.useFakeTimers();
+      try {
+        vi.advanceTimersByTime(100);
+        await vi.runAllTimersAsync();
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Verify favicon was cached
       const faviconUrl = await FaviconService.getFaviconForBookmark(testBookmark.id, testBookmark.favicon_url);
@@ -135,7 +141,13 @@ describe('Favicon Integration Tests', () => {
       await FaviconService.preloadFavicon(testBookmark.id, testBookmark.favicon_url);
 
       // Wait a moment for the background operation to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.useFakeTimers();
+      try {
+        vi.advanceTimersByTime(100);
+        await vi.runAllTimersAsync();
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Should return default favicon
       const faviconUrl = await FaviconService.getFaviconForBookmark(testBookmark.id, testBookmark.favicon_url);
@@ -184,7 +196,13 @@ describe('Favicon Integration Tests', () => {
 
       // First preload - mock that favicon gets cached successfully
       await FaviconService.preloadFavicon(testBookmark.id, testBookmark.favicon_url);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.useFakeTimers();
+      try {
+        vi.advanceTimersByTime(100);
+        await vi.runAllTimersAsync();
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Mock that favicon is now cached
       const cachedFaviconAsset: LocalAsset = {
@@ -203,7 +221,13 @@ describe('Favicon Integration Tests', () => {
 
       // Second preload should not trigger fetch
       await FaviconService.preloadFavicon(testBookmark.id, testBookmark.favicon_url);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.useFakeTimers();
+      try {
+        vi.advanceTimersByTime(100);
+        await vi.runAllTimersAsync();
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Fetch should only be called once
       expect(mockAppFetch).toHaveBeenCalledTimes(1);

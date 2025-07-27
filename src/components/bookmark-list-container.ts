@@ -162,11 +162,19 @@ export class BookmarkListContainer extends LitElement {
   };
 
   private handleSyncRequested = async () => {
-    await this.syncController.requestSync();
+    try {
+      await this.syncController.requestSync();
+    } catch (error) {
+      console.error('Failed to request sync:', error);
+    }
   };
 
   private handleFaviconLoadRequested = async (bookmarkId: number, faviconUrl: string) => {
-    await this.faviconController.loadFavicon(bookmarkId, faviconUrl);
+    try {
+      await this.faviconController.loadFavicon(bookmarkId, faviconUrl);
+    } catch (error) {
+      console.error('Failed to load favicon:', error);
+    }
   };
 
   private handleVisibilityChanged = (visibleBookmarkIds: number[]) => {
