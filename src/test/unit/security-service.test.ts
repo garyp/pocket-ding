@@ -172,11 +172,16 @@ describe('SecurityService', () => {
       expect(result).toContain('color: red');
     });
 
-    it('should handle invalid HTML gracefully', async () => {
-      const invalidHtml = '<div>No html or body tags</div>';
+    it('should wrap HTML fragments in complete HTML structure', async () => {
+      const htmlFragment = '<div>No html or body tags</div>';
       
-      await expect(SecurityService.prepareSingleFileContent(invalidHtml))
-        .rejects.toThrow('Invalid HTML structure');
+      const result = await SecurityService.prepareSingleFileContent(htmlFragment);
+      
+      expect(result).toContain('<html>');
+      expect(result).toContain('<body>');
+      expect(result).toContain('<div>No html or body tags</div>');
+      expect(result).toContain('<meta http-equiv="Content-Security-Policy"');
+      expect(result).toContain('progressTracker');
     });
 
     it('should preserve legitimate content', async () => {

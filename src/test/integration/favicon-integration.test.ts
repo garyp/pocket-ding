@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FaviconService } from '../../services/favicon-service';
 import { DatabaseService } from '../../services/database';
+import { appFetch } from '../../utils/fetch-helper';
 import type { LocalBookmark, LocalAsset } from '../../types';
 
-// Mock fetch for favicon requests
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// Mock appFetch for favicon requests (used for Linkding-served favicons)
+vi.mock('../../utils/fetch-helper', () => ({
+  appFetch: vi.fn(),
+  configureFetchHelper: vi.fn()
+}));
+
+const mockAppFetch = vi.mocked(appFetch);
 
 // Mock DatabaseService
 vi.mock('../../services/database', () => ({
@@ -14,17 +19,27 @@ vi.mock('../../services/database', () => ({
     saveAsset: vi.fn(),
     saveBookmark: vi.fn(),
     deleteAssetsByBookmarkId: vi.fn(),
+    getSettings: vi.fn(),
   },
 }));
 
 describe('Favicon Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetch.mockReset();
+    mockAppFetch.mockReset();
     vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
     vi.mocked(DatabaseService.saveAsset).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.deleteAssetsByBookmarkId).mockResolvedValue(undefined);
+    
+    // Mock settings to make favicon URLs appear as Linkding-served
+    vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+      linkding_url: 'https://linkding.example.com',
+      linkding_token: 'test-token',
+      sync_interval: 5,
+      auto_sync: true,
+      reading_mode: 'original'
+    });
   });
 
   describe('Favicon caching during sync', () => {
@@ -40,7 +55,7 @@ describe('Favicon Integration Tests', () => {
         website_title: 'Example Site',
         website_description: 'Example description',
         web_archive_snapshot_url: '',
-        favicon_url: 'https://example.com/favicon.ico',
+        favicon_url: 'https://linkding.example.com/static/favicon.ico',
         preview_image_url: '',
         is_archived: false,
         unread: true,
@@ -59,7 +74,7 @@ describe('Favicon Integration Tests', () => {
       const mockUint8Array = new Uint8Array(mockFaviconBuffer);
       mockUint8Array.fill(255);
 
-      mockFetch.mockResolvedValue({
+      mockAppFetch.mockResolvedValue({
         ok: true,
         arrayBuffer: () => Promise.resolve(mockFaviconBuffer),
         headers: {
@@ -98,7 +113,7 @@ describe('Favicon Integration Tests', () => {
         website_title: 'Example Site',
         website_description: 'Example description',
         web_archive_snapshot_url: '',
-        favicon_url: 'https://example.com/nonexistent-favicon.ico',
+        favicon_url: 'https://linkding.example.com/static/nonexistent-favicon.ico',
         preview_image_url: '',
         is_archived: false,
         unread: true,
@@ -110,7 +125,7 @@ describe('Favicon Integration Tests', () => {
       };
 
       // Mock failed favicon fetch
-      mockFetch.mockResolvedValue({
+      mockAppFetch.mockResolvedValue({
         ok: false,
         status: 404,
         statusText: 'Not Found'
@@ -146,7 +161,7 @@ describe('Favicon Integration Tests', () => {
         website_title: 'Example Site',
         website_description: 'Example description',
         web_archive_snapshot_url: '',
-        favicon_url: 'https://example.com/favicon.ico',
+        favicon_url: 'https://linkding.example.com/static/favicon.ico',
         preview_image_url: '',
         is_archived: false,
         unread: true,
@@ -159,7 +174,7 @@ describe('Favicon Integration Tests', () => {
 
       // Mock successful favicon fetch
       const mockFaviconBuffer = new ArrayBuffer(16);
-      mockFetch.mockResolvedValue({
+      mockAppFetch.mockResolvedValue({
         ok: true,
         arrayBuffer: () => Promise.resolve(mockFaviconBuffer),
         headers: {
@@ -191,7 +206,7 @@ describe('Favicon Integration Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Fetch should only be called once
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockAppFetch).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -207,7 +222,7 @@ describe('Favicon Integration Tests', () => {
           website_title: '',
           website_description: '',
           web_archive_snapshot_url: '',
-          favicon_url: 'https://example1.com/favicon.ico',
+          favicon_url: 'https://linkding.example.com/static/favicon1.ico',
           preview_image_url: '',
           is_archived: false,
           unread: true,
@@ -241,7 +256,7 @@ describe('Favicon Integration Tests', () => {
       // Mock test bookmarks are already saved (simulating sync process)
 
       // Mock favicon fetch for first bookmark
-      mockFetch.mockResolvedValue({
+      mockAppFetch.mockResolvedValue({
         ok: true,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(16)),
         headers: {
@@ -272,7 +287,7 @@ describe('Favicon Integration Tests', () => {
         website_title: '',
         website_description: '',
         web_archive_snapshot_url: '',
-        favicon_url: 'https://example.com/favicon.ico',
+        favicon_url: 'https://linkding.example.com/static/favicon.ico',
         preview_image_url: '',
         is_archived: false,
         unread: true,
@@ -284,7 +299,7 @@ describe('Favicon Integration Tests', () => {
       };
 
       // Cache a favicon
-      mockFetch.mockResolvedValue({
+      mockAppFetch.mockResolvedValue({
         ok: true,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(16)),
         headers: {

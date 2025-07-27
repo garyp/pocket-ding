@@ -8,14 +8,26 @@ export class SecurityService {
    * Uses DOMParser approach as specified in requirements
    */
   static async prepareSingleFileContent(singleFileHtml: string): Promise<string> {
-    // Check if input contains basic HTML structure
+    let contentToProcess = singleFileHtml;
+    
+    // Check if input contains basic HTML structure, if not, wrap it
     if (!singleFileHtml.includes('<html') || !singleFileHtml.includes('<body')) {
-      throw new Error('Invalid HTML structure');
+      // This is likely an HTML fragment, wrap it in a complete HTML structure
+      contentToProcess = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Content</title>
+</head>
+<body>
+  ${singleFileHtml}
+</body>
+</html>`;
     }
     
     // Parse HTML using DOMParser
     const parser = new DOMParser();
-    const doc = parser.parseFromString(singleFileHtml, 'text/html');
+    const doc = parser.parseFromString(contentToProcess, 'text/html');
     
     // Check if parsing was successful
     if (!doc.head || !doc.body) {
