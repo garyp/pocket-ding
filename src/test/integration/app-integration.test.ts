@@ -23,6 +23,11 @@ vi.mock('../../services/database', () => ({
     saveReadProgress: vi.fn(),
     clearAll: vi.fn(),
     getCompletedAssetsByBookmarkId: vi.fn(),
+    // Pagination methods required by BookmarkListContainer
+    getBookmarksPaginated: vi.fn(),
+    getBookmarkCount: vi.fn(),
+    getPageFromAnchorBookmark: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
   },
 }));
 
@@ -46,6 +51,7 @@ vi.mock('../../services/linkding-api', () => ({
 import { DatabaseService } from '../../services/database';
 import { SyncService } from '../../services/sync-service';
 import { createLinkdingAPI } from '../../services/linkding-api';
+import type { LocalBookmark } from '../../types';
 
 const mockBookmarks = [
   {
@@ -193,6 +199,31 @@ function findElementInShadowDOM(element: Element, selector: string): Element | n
   return searchInElement(element);
 }
 
+// Helper function to set up BookmarkListContainer mocks consistently
+function setupBookmarkListMocks(bookmarks: LocalBookmark[]) {
+  (DatabaseService.getAllBookmarks as any).mockResolvedValue(bookmarks);
+  (DatabaseService.getBookmarksPaginated as any).mockResolvedValue(bookmarks);
+  
+  // Mock getBookmarkCount to return correct counts for each filter
+  (DatabaseService.getBookmarkCount as any).mockImplementation((filter: 'all' | 'unread' | 'archived') => {
+    if (filter === 'all') {
+      return Promise.resolve(bookmarks.filter(b => !b.is_archived).length);
+    } else if (filter === 'unread') {
+      return Promise.resolve(bookmarks.filter(b => b.unread && !b.is_archived).length);
+    } else if (filter === 'archived') {
+      return Promise.resolve(bookmarks.filter(b => b.is_archived).length);
+    }
+    return Promise.resolve(bookmarks.length);
+  });
+  
+  (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(
+    new Map(bookmarks.map(b => [b.id, false]))
+  );
+  
+  // Mock getPageFromAnchorBookmark to return page 1 (default behavior)
+  (DatabaseService.getPageFromAnchorBookmark as any).mockResolvedValue(1);
+}
+
 describe('App Integration Tests', () => {
   let container: HTMLElement;
   let user: ReturnType<typeof userEvent.setup>;
@@ -230,6 +261,11 @@ describe('App Integration Tests', () => {
     (DatabaseService.getReadProgress as any).mockResolvedValue(null);
     (DatabaseService.saveReadProgress as any).mockResolvedValue(undefined);
     (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+    // Pagination method mocks required by BookmarkListContainer
+    (DatabaseService.getBookmarksPaginated as any).mockResolvedValue([]);
+    (DatabaseService.getBookmarkCount as any).mockResolvedValue(0);
+    (DatabaseService.getPageFromAnchorBookmark as any).mockResolvedValue(1);
+    (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(new Map());
     (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
     (SyncService.getInstance as any).mockReturnValue({
       addEventListener: vi.fn(),
@@ -300,7 +336,7 @@ describe('App Integration Tests', () => {
   describe('Settings Management', () => {
     it('should save settings and navigate to bookmarks', async () => {
       (DatabaseService.getSettings as any).mockResolvedValue(null);
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
 
       const appRoot = document.createElement('app-root') as AppRoot;
       container.appendChild(appRoot);
@@ -410,7 +446,7 @@ describe('App Integration Tests', () => {
 
   describe('Bookmark List', () => {
     it('should display bookmarks after loading', async () => {
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
@@ -436,7 +472,7 @@ describe('App Integration Tests', () => {
     });
 
     it('should filter bookmarks by unread status', async () => {
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
@@ -474,7 +510,11 @@ describe('App Integration Tests', () => {
     });
 
     it('should emit bookmark-selected event when bookmark is clicked', async () => {
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
+      // Setup pagination mocks required by BookmarkListContainer
+      (DatabaseService.getBookmarksPaginated as any).mockResolvedValue(mockBookmarks);
+      (DatabaseService.getBookmarkCount as any).mockResolvedValue(mockBookmarks.length);
+      (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(new Map([[1, false], [2, false]]));
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
@@ -607,7 +647,7 @@ describe('App Integration Tests', () => {
         auto_sync: true,
         reading_mode: 'readability',
       });
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
       container.appendChild(bookmarkList);
@@ -711,7 +751,7 @@ describe('App Integration Tests', () => {
         auto_sync: true,
         reading_mode: 'readability',
       });
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
@@ -761,7 +801,7 @@ describe('App Integration Tests', () => {
     });
 
     it('should add new bookmarks to the list in real-time during sync', async () => {
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue([mockBookmarks[0]]); // Start with one bookmark
+      setupBookmarkListMocks([mockBookmarks[0]!]); // Start with one bookmark
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
@@ -786,13 +826,13 @@ describe('App Integration Tests', () => {
       });
 
       // Sync new bookmark
-      const newBookmark = {
-        ...mockBookmarks[1],
+      const newBookmark: LocalBookmark = {
+        ...mockBookmarks[1]!,
         title: 'Newly Synced Article',
       };
 
       // Update the database mock to include the new bookmark
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue([mockBookmarks[0], newBookmark]);
+      setupBookmarkListMocks([mockBookmarks[0]!, newBookmark]);
 
       // Manually trigger the bookmark synced handler to test the functionality
       // Note: After refactoring, handleBookmarkSynced takes (bookmarkId, bookmark) parameters
@@ -817,7 +857,7 @@ describe('App Integration Tests', () => {
     });
 
     it('should update existing bookmarks in real-time during sync', async () => {
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
@@ -864,7 +904,7 @@ describe('App Integration Tests', () => {
     });
 
     it('should highlight newly synced bookmarks with animation', async () => {
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
@@ -908,7 +948,7 @@ describe('App Integration Tests', () => {
       
       try {
         // Setup comprehensive mocks with better error handling
-        (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+        setupBookmarkListMocks(mockBookmarks);
         (DatabaseService.getCompletedAssetsByBookmarkId as any).mockImplementation((bookmarkId: number) => {
           console.log(`Mock getCompletedAssetsByBookmarkId called with ID: ${bookmarkId}`);
           return Promise.resolve([]);
@@ -993,7 +1033,7 @@ describe('App Integration Tests', () => {
 
     it('should handle sync errors gracefully while maintaining UI state', async () => {
       // Setup comprehensive mocks
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
@@ -1020,7 +1060,7 @@ describe('App Integration Tests', () => {
 
     it('should allow user interaction during background sync', async () => {
       // Setup comprehensive mocks
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
@@ -1052,7 +1092,7 @@ describe('App Integration Tests', () => {
         auto_sync: true,
         reading_mode: 'readability',
       });
-      (DatabaseService.getAllBookmarks as any).mockResolvedValue(mockBookmarks);
+      setupBookmarkListMocks(mockBookmarks);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const bookmarkList = document.createElement('bookmark-list-container') as BookmarkListContainer;
