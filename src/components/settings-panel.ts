@@ -21,18 +21,12 @@ import '@material/web/progress/linear-progress.js';
 export class SettingsPanel extends LitElement {
   // Reactive settings query
   private settingsQuery = new ReactiveQueryController<AppSettings | undefined>(this, {
-    query: DatabaseService.createSettingsQuery(),
-    initialValue: undefined
+    query: DatabaseService.createSettingsQuery()
   });
 
-  // Computed property for reactive settings (with setter for testing compatibility)
+  // Computed property for reactive settings
   get settings(): AppSettings | null {
     return this.settingsQuery.value || null;
-  }
-
-  set settings(value: AppSettings | null) {
-    // For testing compatibility, mock the reactive query value
-    (this.settingsQuery as any).currentValue = value;
   }
   @state() private formData: Partial<AppSettings> = {};
   @state() private isLoading = false;

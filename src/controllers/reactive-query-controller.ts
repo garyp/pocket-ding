@@ -3,14 +3,19 @@ import { liveQuery, type Subscription } from 'dexie';
 
 export interface ReactiveQueryOptions<T> {
   query: () => Promise<T>;
-  initialValue?: T;
   onError?: (error: Error) => void;
   enabled?: boolean;
 }
 
+export interface QueryRenderCallbacks<T> {
+  pending?: () => any;
+  complete?: (value: T) => any;
+  error?: (error: Error) => any;
+}
+
 export class ReactiveQueryController<T> implements ReactiveController {
   private subscription: Subscription | null = null;
-  private currentValue: T | undefined;
+  private currentValue: T | undefined = undefined;
   private isLoading = true;
   private error: Error | null = null;
 
@@ -18,7 +23,6 @@ export class ReactiveQueryController<T> implements ReactiveController {
     private host: ReactiveControllerHost,
     private options: ReactiveQueryOptions<T>
   ) {
-    this.currentValue = options.initialValue;
     host.addController(this);
   }
 
@@ -69,7 +73,24 @@ export class ReactiveQueryController<T> implements ReactiveController {
     this.subscription = null;
   }
 
-  // Public API
+  // Render method similar to Lit's Task.render()
+  render<R>(callbacks: QueryRenderCallbacks<T>): R | undefined {
+    if (this.error && callbacks.error) {
+      return callbacks.error(this.error);
+    }
+    
+    if (this.isLoading && callbacks.pending) {
+      return callbacks.pending();
+    }
+    
+    if (!this.isLoading && this.currentValue !== undefined && callbacks.complete) {
+      return callbacks.complete(this.currentValue);
+    }
+    
+    return undefined;
+  }
+
+  // Legacy API for backward compatibility
   get value(): T | undefined { 
     return this.currentValue; 
   }

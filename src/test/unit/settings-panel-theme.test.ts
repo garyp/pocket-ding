@@ -7,6 +7,7 @@ import type { AppSettings } from '../../types';
 // Mock services
 vi.mock('../../services/database');
 vi.mock('../../services/theme-service');
+vi.mock('../../controllers/reactive-query-controller');
 
 describe('SettingsPanel Theme', () => {
   let element: SettingsPanel;
@@ -26,12 +27,25 @@ describe('SettingsPanel Theme', () => {
       theme_mode: 'system'
     };
 
+    // Mock ReactiveQueryController to return mock settings
+    const { ReactiveQueryController } = await import('../../controllers/reactive-query-controller');
+    vi.mocked(ReactiveQueryController).mockImplementation((_host: any, _options: any) => ({
+      value: mockSettings,
+      loading: false,
+      hasError: false,
+      errorMessage: null,
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      setEnabled: vi.fn(),
+      updateQuery: vi.fn(),
+      render: vi.fn()
+    }) as any);
+
     // Mock service responses
     vi.mocked(DatabaseService.saveSettings).mockResolvedValue();
 
     // Create element
     element = new SettingsPanel();
-    element.settings = mockSettings;
     document.body.appendChild(element);
     await element.updateComplete;
   });
@@ -46,20 +60,40 @@ describe('SettingsPanel Theme', () => {
     });
 
     it('should default to system theme when not set', async () => {
-      element.settings = {
+      // Update the mock to return settings without theme_mode
+      const settingsWithoutTheme = {
         ...mockSettings,
         theme_mode: undefined as any
       };
+      
+      // Update the mock controller
+      (element as any).settingsQuery = {
+        value: settingsWithoutTheme,
+        loading: false,
+        hasError: false,
+        errorMessage: null
+      };
+      
       element['initializeForm']();
       
       expect(element['formData'].theme_mode).toBe('system');
     });
 
     it('should preserve theme setting from existing settings', async () => {
-      element.settings = {
+      // Update the mock to return settings with dark theme
+      const settingsWithDarkTheme = {
         ...mockSettings,
         theme_mode: 'dark'
       };
+      
+      // Update the mock controller
+      (element as any).settingsQuery = {
+        value: settingsWithDarkTheme,
+        loading: false,
+        hasError: false,
+        errorMessage: null
+      };
+      
       element['initializeForm']();
       
       expect(element['formData'].theme_mode).toBe('dark');

@@ -59,14 +59,7 @@ export class BookmarkListContainer extends LitElement {
     filterCounts: { all: number; unread: number; archived: number };
     bookmarksWithAssets: Set<number>;
   }>(this, {
-    query: DatabaseService.createPaginationDataQuery(this.filter, this.currentPage, this.pageSize),
-    initialValue: {
-      bookmarks: [] as LocalBookmark[],
-      totalCount: 0,
-      totalPages: 1,
-      filterCounts: { all: 0, unread: 0, archived: 0 },
-      bookmarksWithAssets: new Set<number>()
-    }
+    query: DatabaseService.createPaginationDataQuery(this.filter, this.currentPage, this.pageSize)
   });
 
   // Reactive controllers

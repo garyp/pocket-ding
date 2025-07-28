@@ -23,19 +23,16 @@ export class BookmarkReader extends LitElement {
   // Reactive data queries that automatically update when data changes
   private bookmarkQuery = new ReactiveQueryController<LocalBookmark | undefined>(this, {
     query: this.bookmarkId ? DatabaseService.createBookmarkQuery(this.bookmarkId) : () => Promise.resolve(undefined),
-    initialValue: undefined,
     enabled: false // Will be enabled when bookmarkId is set
   });
 
   private progressQuery = new ReactiveQueryController<ReadProgress | undefined>(this, {
     query: this.bookmarkId ? DatabaseService.createReadProgressQuery(this.bookmarkId) : () => Promise.resolve(undefined),
-    initialValue: undefined,
     enabled: false
   });
 
   private assetsQuery = new ReactiveQueryController<any[]>(this, {
     query: this.bookmarkId ? DatabaseService.createAssetsByBookmarkQuery(this.bookmarkId) : () => Promise.resolve([]),
-    initialValue: [],
     enabled: false
   });
 

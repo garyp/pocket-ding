@@ -21,8 +21,7 @@ export class AppRoot extends LitElement {
   
   // Reactive settings query
   private settingsQuery = new ReactiveQueryController<AppSettings | undefined>(this, {
-    query: DatabaseService.createSettingsQuery(),
-    initialValue: undefined
+    query: DatabaseService.createSettingsQuery()
   });
 
   // Computed property for settings
