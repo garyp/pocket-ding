@@ -8,6 +8,18 @@ import type { AppSettings } from '../../types';
 vi.mock('../../services/database');
 vi.mock('../../services/theme-service');
 
+// Mock Dexie
+let mockSubscription: { unsubscribe: ReturnType<typeof vi.fn> };
+let mockLiveQueryResult: { subscribe: ReturnType<typeof vi.fn> };
+
+vi.mock('dexie', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    liveQuery: vi.fn((_query) => mockLiveQueryResult)
+  };
+});
+
 // Mock browser APIs
 Object.defineProperty(window, 'location', {
   value: {
@@ -34,6 +46,15 @@ describe('AppRoot Theme Integration', () => {
     // Reset all mocks
     vi.clearAllMocks();
 
+    // Set up Dexie mocks
+    mockSubscription = {
+      unsubscribe: vi.fn()
+    };
+    
+    mockLiveQueryResult = {
+      subscribe: vi.fn().mockReturnValue(mockSubscription)
+    };
+
     // Mock settings data
     mockSettings = {
       linkding_url: 'https://example.com',
@@ -46,9 +67,13 @@ describe('AppRoot Theme Integration', () => {
 
     // Mock service responses
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
-    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(mockSettings));
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
+
+    // Mock liveQuery to return our mock live query result  
+    const { liveQuery } = await import('dexie');
+    vi.mocked(liveQuery).mockReturnValue(mockLiveQueryResult as any);
 
     // Create element
     element = new AppRoot();
@@ -61,6 +86,11 @@ describe('AppRoot Theme Integration', () => {
   describe('theme initialization on app load', () => {
     it('should initialize ThemeService when app loads', async () => {
       document.body.appendChild(element);
+      
+      // Simulate the reactive query subscription completing
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
+      subscribeCallback.next(mockSettings);
+      
       await element.updateComplete;
 
       expect(ThemeService.init).toHaveBeenCalled();
@@ -68,6 +98,11 @@ describe('AppRoot Theme Integration', () => {
 
     it('should apply theme from settings when app loads', async () => {
       document.body.appendChild(element);
+      
+      // Simulate the reactive query subscription completing
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
+      subscribeCallback.next(mockSettings);
+      
       await element.updateComplete;
 
       expect(ThemeService.setThemeFromSettings).toHaveBeenCalledWith('dark');
@@ -75,8 +110,14 @@ describe('AppRoot Theme Integration', () => {
 
     it('should not apply theme if no settings exist', async () => {
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
+      vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(undefined));
 
       document.body.appendChild(element);
+      
+      // Simulate the reactive query subscription completing with undefined (no settings)
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
+      subscribeCallback.next(undefined);
+      
       await element.updateComplete;
 
       expect(ThemeService.init).toHaveBeenCalled();

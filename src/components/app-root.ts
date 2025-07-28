@@ -188,12 +188,12 @@ export class AppRoot extends LitElement {
       configureFetchHelper(this.settings.linkding_url);
     }
     
-    // Initialize theme service when settings are available
-    if (this.settings && !this.settingsQuery.loading) {
+    // Initialize theme service when settings query is complete
+    if (!this.settingsQuery.loading) {
       ThemeService.init();
       
       // Apply theme from settings if available
-      if (this.settings.theme_mode) {
+      if (this.settings?.theme_mode) {
         ThemeService.setThemeFromSettings(this.settings.theme_mode);
       }
     }

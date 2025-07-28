@@ -167,7 +167,7 @@ describe('ReactiveQueryController', () => {
       controller.hostConnected();
 
       // Simulate error
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       const testError = new Error('Test error');
       subscribeCallback.error(testError);
 
@@ -229,7 +229,7 @@ describe('ReactiveQueryController', () => {
       controller.hostConnected();
 
       // Simulate successful data loading
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       subscribeCallback.next('test-data');
 
       const callbacks: QueryRenderCallbacks<string> = {
@@ -254,7 +254,7 @@ describe('ReactiveQueryController', () => {
       controller.hostConnected();
 
       // Simulate error
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       const testError = new Error('Test error');
       subscribeCallback.error(testError);
 
@@ -288,7 +288,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       subscribeCallback.next('test-data');
 
       // Only provide complete callback
@@ -307,7 +307,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       subscribeCallback.next('legacy-value');
 
       expect(controller.value).toBe('legacy-value');
@@ -327,7 +327,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       const testError = new Error('Legacy error');
       subscribeCallback.error(testError);
 
@@ -404,7 +404,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       
       // Test with null
       subscribeCallback.next(null);
@@ -421,7 +421,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       
       subscribeCallback.next('value1');
       subscribeCallback.next('value2');
@@ -438,7 +438,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       
       // First trigger an error
       subscribeCallback.error(new Error('Test error'));
@@ -460,7 +460,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       subscribeCallback.next('update-trigger');
 
       expect(host.updateCallCount).toBeGreaterThan(initialUpdateCount);
@@ -474,7 +474,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       subscribeCallback.error(new Error('Update on error'));
 
       expect(host.updateCallCount).toBeGreaterThan(initialUpdateCount);
