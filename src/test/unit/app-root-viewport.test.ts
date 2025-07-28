@@ -56,6 +56,7 @@ describe('AppRoot Viewport and Scrollbar Behavior', () => {
 
     // Mock service responses
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
 

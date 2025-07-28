@@ -14,6 +14,7 @@ vi.mock('../../services/database', () => ({
     getBookmarks: vi.fn().mockResolvedValue([]),
     saveBookmarks: vi.fn(),
     clearBookmarks: vi.fn(),
+    createSettingsQuery: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
   },
 }));
 

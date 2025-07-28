@@ -4,10 +4,11 @@ import { customElement } from 'lit/decorators.js';
 import { ReactiveQueryController, type QueryRenderCallbacks } from '../../controllers/reactive-query-controller';
 
 // Mock Dexie
+let mockSubscription: { unsubscribe: ReturnType<typeof vi.fn> };
+let mockLiveQueryResult: { subscribe: ReturnType<typeof vi.fn> };
+
 vi.mock('dexie', () => ({
-  liveQuery: vi.fn((_query) => ({
-    subscribe: vi.fn()
-  }))
+  liveQuery: vi.fn((_query) => mockLiveQueryResult)
 }));
 
 // Create a test host component
@@ -29,20 +30,22 @@ class TestHost extends LitElement {
 describe('ReactiveQueryController', () => {
   let host: TestHost;
   let mockQuery: ReturnType<typeof vi.fn>;
-  let mockSubscription: { subscribe: ReturnType<typeof vi.fn>, unsubscribe: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     vi.clearAllMocks();
     
     mockQuery = vi.fn().mockResolvedValue('test-data');
     mockSubscription = {
-      subscribe: vi.fn(),
       unsubscribe: vi.fn()
     };
+    
+    mockLiveQueryResult = {
+      subscribe: vi.fn().mockReturnValue(mockSubscription)
+    };
 
-    // Mock liveQuery to return our mock subscription  
+    // Mock liveQuery to return our mock live query result  
     const { liveQuery } = await import('dexie');
-    vi.mocked(liveQuery).mockReturnValue(mockSubscription as any);
+    vi.mocked(liveQuery).mockReturnValue(mockLiveQueryResult as any);
 
     host = new TestHost();
     document.body.appendChild(host);
@@ -96,7 +99,7 @@ describe('ReactiveQueryController', () => {
 
       const { liveQuery } = await import('dexie');
       expect(liveQuery).toHaveBeenCalledWith(mockQuery);
-      expect(mockSubscription.subscribe).toHaveBeenCalled();
+      expect(mockLiveQueryResult.subscribe).toHaveBeenCalled();
     });
 
     it('should not subscribe when disabled', async () => {
@@ -145,7 +148,7 @@ describe('ReactiveQueryController', () => {
       controller.hostConnected();
 
       // Simulate successful subscription
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0]![0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0]![0];
       subscribeCallback.next('test-result');
 
       expect(controller.value).toBe('test-result');
@@ -164,7 +167,7 @@ describe('ReactiveQueryController', () => {
       controller.hostConnected();
 
       // Simulate error
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       const testError = new Error('Test error');
       subscribeCallback.error(testError);
 
@@ -226,7 +229,7 @@ describe('ReactiveQueryController', () => {
       controller.hostConnected();
 
       // Simulate successful data loading
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       subscribeCallback.next('test-data');
 
       const callbacks: QueryRenderCallbacks<string> = {
@@ -251,7 +254,7 @@ describe('ReactiveQueryController', () => {
       controller.hostConnected();
 
       // Simulate error
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       const testError = new Error('Test error');
       subscribeCallback.error(testError);
 
@@ -285,7 +288,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       subscribeCallback.next('test-data');
 
       // Only provide complete callback
@@ -304,7 +307,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       subscribeCallback.next('legacy-value');
 
       expect(controller.value).toBe('legacy-value');
@@ -324,7 +327,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       const testError = new Error('Legacy error');
       subscribeCallback.error(testError);
 
@@ -341,13 +344,13 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      expect(mockSubscription.subscribe).not.toHaveBeenCalled();
+      expect(mockLiveQueryResult.subscribe).not.toHaveBeenCalled();
 
       controller.setEnabled(true);
 
       const { liveQuery } = await import('dexie');
       expect(liveQuery).toHaveBeenCalledWith(mockQuery);
-      expect(mockSubscription.subscribe).toHaveBeenCalled();
+      expect(mockLiveQueryResult.subscribe).toHaveBeenCalled();
     });
 
     it('should disable subscription when set to false', () => {
@@ -401,7 +404,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       
       // Test with null
       subscribeCallback.next(null);
@@ -418,7 +421,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       
       subscribeCallback.next('value1');
       subscribeCallback.next('value2');
@@ -435,7 +438,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       
       // First trigger an error
       subscribeCallback.error(new Error('Test error'));
@@ -457,7 +460,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       subscribeCallback.next('update-trigger');
 
       expect(host.updateCallCount).toBeGreaterThan(initialUpdateCount);
@@ -471,7 +474,7 @@ describe('ReactiveQueryController', () => {
       });
 
       controller.hostConnected();
-      const subscribeCallback = mockSubscription.subscribe.mock.calls[0][0];
+      const subscribeCallback = mockLiveQueryResult.subscribe.mock.calls[0][0];
       subscribeCallback.error(new Error('Update on error'));
 
       expect(host.updateCallCount).toBeGreaterThan(initialUpdateCount);

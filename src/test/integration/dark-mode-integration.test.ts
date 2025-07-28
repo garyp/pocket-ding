@@ -91,6 +91,7 @@ describe('Dark Mode Integration', () => {
     });
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
     vi.mocked(ContentFetcher.getAvailableContentSources).mockResolvedValue([
       { type: 'asset', label: 'Cached Content', assetId: 1 }
     ]);

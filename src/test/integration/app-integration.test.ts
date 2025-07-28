@@ -28,6 +28,8 @@ vi.mock('../../services/database', () => ({
     getBookmarkCount: vi.fn(),
     getPageFromAnchorBookmark: vi.fn(),
     getBookmarksWithAssetCounts: vi.fn(),
+    createSettingsQuery: vi.fn(),
+    createPaginationDataQuery: vi.fn(),
   },
 }));
 
@@ -266,6 +268,8 @@ describe('App Integration Tests', () => {
     (DatabaseService.getBookmarkCount as any).mockResolvedValue(0);
     (DatabaseService.getPageFromAnchorBookmark as any).mockResolvedValue(1);
     (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(new Map());
+    (DatabaseService.createSettingsQuery as any).mockReturnValue({ timeout: vi.fn() } as any);
+    (DatabaseService.createPaginationDataQuery as any).mockReturnValue(() => Promise.resolve({ bookmarks: [], total: 0 }));
     (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
     (SyncService.getInstance as any).mockReturnValue({
       addEventListener: vi.fn(),

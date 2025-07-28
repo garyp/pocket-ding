@@ -95,6 +95,7 @@ describe('Reader View Scrollbar Integration', () => {
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
   });

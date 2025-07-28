@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AppRoot } from '../../components/app-root';
+import { DatabaseService } from '../../services/database';
 
 // Mock services
 vi.mock('../../services/database');
@@ -32,6 +33,9 @@ describe('AppRoot Scroll Behavior', () => {
   let appRoot: AppRoot;
 
   beforeEach(() => {
+    // Mock service responses
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
+    
     // Register the custom element
     if (!customElements.get('app-root')) {
       customElements.define('app-root', AppRoot);
