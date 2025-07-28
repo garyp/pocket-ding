@@ -13,7 +13,7 @@ let mockSubscription: { unsubscribe: ReturnType<typeof vi.fn> };
 let mockLiveQueryResult: { subscribe: ReturnType<typeof vi.fn> };
 
 vi.mock('dexie', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal() as any;
   return {
     ...actual,
     liveQuery: vi.fn((_query) => mockLiveQueryResult)
@@ -67,7 +67,7 @@ describe('AppRoot Theme Integration', () => {
 
     // Mock service responses
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
-    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(mockSettings));
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(mockSettings) as any);
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
 
@@ -110,7 +110,7 @@ describe('AppRoot Theme Integration', () => {
 
     it('should not apply theme if no settings exist', async () => {
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
-      vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(undefined));
+      vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(undefined) as any);
 
       document.body.appendChild(element);
       

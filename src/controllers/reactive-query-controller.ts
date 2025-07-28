@@ -84,7 +84,7 @@ export class ReactiveQueryController<T> implements ReactiveController {
     }
     
     if (!this.isLoading && callbacks.complete) {
-      return callbacks.complete(this.currentValue);
+      return callbacks.complete(this.currentValue as T);
     }
     
     return undefined;
