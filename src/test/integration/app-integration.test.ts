@@ -30,6 +30,7 @@ vi.mock('../../services/database', () => ({
     getBookmarksWithAssetCounts: vi.fn(),
     createSettingsQuery: vi.fn(),
     createPaginationDataQuery: vi.fn(),
+    createBookmarkQuery: vi.fn(),
   },
 }));
 
@@ -48,6 +49,37 @@ vi.mock('../../services/linkding-api', () => ({
   createLinkdingAPI: vi.fn(() => ({
     testConnection: vi.fn().mockResolvedValue(true)
   })),
+}));
+
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => {
+    const controller = {
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      _value: {
+        bookmarks: [],
+        totalCount: 0,
+        allCount: 0,
+        unreadCount: 0,
+        archivedCount: 0,
+        bookmarksWithAssets: new Map()
+      },
+      loading: false,
+      hasError: false,
+      errorMessage: '',
+      render: vi.fn((callbacks) => {
+        if (callbacks.complete) return callbacks.complete(controller._value);
+        return undefined;
+      }),
+      setEnabled: vi.fn(),
+      updateQuery: vi.fn(),
+      get value() { return this._value; },
+      set value(val) { this._value = val; },
+    };
+    
+    return controller;
+  })
 }));
 
 import { DatabaseService } from '../../services/database';
@@ -224,6 +256,16 @@ function setupBookmarkListMocks(bookmarks: LocalBookmark[]) {
   
   // Mock getPageFromAnchorBookmark to return page 1 (default behavior)
   (DatabaseService.getPageFromAnchorBookmark as any).mockResolvedValue(1);
+  
+  // Update the pagination query to return proper structure
+  (DatabaseService.createPaginationDataQuery as any).mockReturnValue(() => Promise.resolve({
+    bookmarks,
+    totalCount: bookmarks.length,
+    allCount: bookmarks.filter(b => !b.is_archived).length,
+    unreadCount: bookmarks.filter(b => b.unread && !b.is_archived).length,
+    archivedCount: bookmarks.filter(b => b.is_archived).length,
+    bookmarksWithAssets: new Map(bookmarks.map(b => [b.id, false]))
+  }));
 }
 
 describe('App Integration Tests', () => {
@@ -271,8 +313,15 @@ describe('App Integration Tests', () => {
     (DatabaseService.getBookmarkCount as any).mockResolvedValue(0);
     (DatabaseService.getPageFromAnchorBookmark as any).mockResolvedValue(1);
     (DatabaseService.getBookmarksWithAssetCounts as any).mockResolvedValue(new Map());
-    (DatabaseService.createSettingsQuery as any).mockReturnValue({ timeout: vi.fn() } as any);
-    (DatabaseService.createPaginationDataQuery as any).mockReturnValue(() => Promise.resolve({ bookmarks: [], total: 0 }));
+    (DatabaseService.createSettingsQuery as any).mockReturnValue(() => Promise.resolve(null));
+    (DatabaseService.createPaginationDataQuery as any).mockReturnValue(() => Promise.resolve({ 
+      bookmarks: [], 
+      totalCount: 0, 
+      allCount: 0, 
+      unreadCount: 0, 
+      archivedCount: 0 
+    }));
+    (DatabaseService.createBookmarkQuery as any).mockReturnValue(() => Promise.resolve(null));
     (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
     (SyncService.getInstance as any).mockReturnValue({
       addEventListener: vi.fn(),
@@ -326,10 +375,17 @@ describe('App Integration Tests', () => {
         expect(configButton).toBeTruthy();
       });
 
-      // Set the view directly since navigation isn't working in tests
-      // Also need to set settings to non-null to bypass the setup screen check
-      (appRoot as any).settings = {};
-      (appRoot as any).currentView = 'settings';
+      // Mock the settings query to return non-null settings
+      (DatabaseService.getSettings as any).mockResolvedValue({
+        linkding_url: '',
+        linkding_token: '',
+        sync_interval: 60,
+        auto_sync: true,
+        reading_mode: 'readability'
+      });
+      
+      // Trigger a re-render by calling requestUpdate
+      appRoot.requestUpdate();
       await appRoot.updateComplete;
 
 
@@ -362,11 +418,17 @@ describe('App Integration Tests', () => {
         expect(configButton).toBeTruthy();
       });
 
-      // Navigate to settings
-      // Set the view directly since navigation isn't working in tests
-      // Also need to set settings to non-null to bypass the setup screen check
-      (appRoot as any).settings = {};
-      (appRoot as any).currentView = 'settings';
+      // Navigate to settings by simulating proper settings flow
+      // Mock settings to exist so we skip the setup screen
+      (DatabaseService.getSettings as any).mockResolvedValue({
+        linkding_url: '',
+        linkding_token: '',
+        sync_interval: 60,
+        auto_sync: true,
+        reading_mode: 'readability'
+      });
+      
+      appRoot.requestUpdate();
       await appRoot.updateComplete;
 
       await waitFor(() => {
