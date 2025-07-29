@@ -31,6 +31,7 @@ vi.mock('../../services/database', () => ({
     createSettingsQuery: vi.fn(),
     createPaginationDataQuery: vi.fn(),
     createBookmarkQuery: vi.fn(),
+    createReadProgressQuery: vi.fn(),
   },
 }));
 
@@ -54,31 +55,48 @@ vi.mock('../../services/linkding-api', () => ({
 // Mock ReactiveQueryController to prevent hanging
 vi.mock('../../controllers/reactive-query-controller', () => ({
   ReactiveQueryController: vi.fn().mockImplementation((host, options) => {
-    const controller = {
-      hostConnected: vi.fn(),
-      hostDisconnected: vi.fn(),
-      _value: {
+    // Determine default value based on query type (rough heuristic)
+    const queryString = options?.query?.toString() || '';
+    let defaultValue;
+    
+    if (queryString.includes('Settings') || queryString.includes('settings')) {
+      // Settings query - return null for "no settings" case
+      defaultValue = null;
+    } else if (queryString.includes('Pagination') || queryString.includes('pagination')) {
+      // Pagination query - return empty pagination data
+      defaultValue = {
         bookmarks: [],
         totalCount: 0,
         allCount: 0,
         unreadCount: 0,
         archivedCount: 0,
         bookmarksWithAssets: new Map()
-      },
-      loading: false,
+      };
+    } else if (queryString.includes('Bookmark') || queryString.includes('bookmark')) {
+      // Bookmark query - return null for "no bookmark" case  
+      defaultValue = null;
+    } else if (queryString.includes('Progress') || queryString.includes('progress')) {
+      // Progress query - return null for "no progress" case
+      defaultValue = null;
+    } else {
+      // Default fallback
+      defaultValue = null;
+    }
+    
+    return {
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      value: defaultValue,
+      loading: false, // Always completed for tests
       hasError: false,
       errorMessage: '',
       render: vi.fn((callbacks) => {
-        if (callbacks.complete) return callbacks.complete(controller._value);
+        if (callbacks.complete) return callbacks.complete(defaultValue);
         return undefined;
       }),
       setEnabled: vi.fn(),
       updateQuery: vi.fn(),
-      get value() { return this._value; },
-      set value(val) { this._value = val; },
     };
-    
-    return controller;
   })
 }));
 
@@ -322,6 +340,7 @@ describe('App Integration Tests', () => {
       archivedCount: 0 
     }));
     (DatabaseService.createBookmarkQuery as any).mockReturnValue(() => Promise.resolve(null));
+    (DatabaseService.createReadProgressQuery as any).mockReturnValue(() => Promise.resolve(null));
     (SyncService.syncBookmarks as any).mockResolvedValue(undefined);
     (SyncService.getInstance as any).mockReturnValue({
       addEventListener: vi.fn(),
@@ -344,10 +363,9 @@ describe('App Integration Tests', () => {
 
       await appRoot.updateComplete;
       
-      // Wait for async loading to complete
-      await waitFor(() => {
-        expect((appRoot as any).isLoading).toBe(false);
-      });
+      // Advance fake timers to ensure any pending async operations complete
+      vi.runAllTimers();
+      await appRoot.updateComplete;
 
       await waitFor(() => {
         const welcomeText = findTextInShadowDOM(appRoot, 'Welcome to Pocket Ding');
@@ -365,10 +383,9 @@ describe('App Integration Tests', () => {
 
       await appRoot.updateComplete;
       
-      // Wait for async loading to complete
-      await waitFor(() => {
-        expect((appRoot as any).isLoading).toBe(false);
-      });
+      // Advance fake timers to ensure any pending async operations complete
+      vi.runAllTimers();
+      await appRoot.updateComplete;
 
       await waitFor(() => {
         const configButton = findButtonByText(appRoot, 'Configure Settings') as HTMLElement;
@@ -387,7 +404,8 @@ describe('App Integration Tests', () => {
       // Trigger a re-render by calling requestUpdate
       appRoot.requestUpdate();
       await appRoot.updateComplete;
-
+      vi.runAllTimers();
+      await appRoot.updateComplete;
 
       await waitFor(() => {
         const settingsPanel = appRoot.shadowRoot?.querySelector('settings-panel');
@@ -408,10 +426,9 @@ describe('App Integration Tests', () => {
 
       await appRoot.updateComplete;
       
-      // Wait for async loading to complete
-      await waitFor(() => {
-        expect((appRoot as any).isLoading).toBe(false);
-      });
+      // Advance fake timers to ensure any pending async operations complete
+      vi.runAllTimers();
+      await appRoot.updateComplete;
 
       await waitFor(() => {
         const configButton = findButtonByText(appRoot, 'Configure Settings') as HTMLElement;
@@ -430,6 +447,8 @@ describe('App Integration Tests', () => {
       
       appRoot.requestUpdate();
       await appRoot.updateComplete;
+      vi.runAllTimers();
+      await appRoot.updateComplete;
 
       await waitFor(() => {
         const settingsPanel = appRoot.shadowRoot?.querySelector('settings-panel') as SettingsPanel;
@@ -437,6 +456,8 @@ describe('App Integration Tests', () => {
       });
 
       const settingsPanel = appRoot.shadowRoot?.querySelector('settings-panel') as SettingsPanel;
+      await settingsPanel.updateComplete;
+      vi.runAllTimers();
       await settingsPanel.updateComplete;
       
       await waitFor(() => {
@@ -479,6 +500,8 @@ describe('App Integration Tests', () => {
       const settingsPanel = document.createElement('settings-panel') as SettingsPanel;
       container.appendChild(settingsPanel);
 
+      await settingsPanel.updateComplete;
+      vi.runAllTimers();
       await settingsPanel.updateComplete;
 
       await waitFor(() => {
@@ -632,10 +655,9 @@ describe('App Integration Tests', () => {
 
       await bookmarkReader.updateComplete;
       
-      // Wait for component to finish loading
-      await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
-      });
+      // Advance fake timers to ensure any pending async operations complete
+      vi.runAllTimers();
+      await bookmarkReader.updateComplete;
 
       await waitFor(() => {
         const title = findTextInShadowDOM(bookmarkReader, 'Test Article 1');
@@ -656,10 +678,9 @@ describe('App Integration Tests', () => {
 
       await bookmarkReader.updateComplete;
       
-      // Wait for component to finish loading
-      await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
-      });
+      // Advance fake timers to ensure any pending async operations complete
+      vi.runAllTimers();
+      await bookmarkReader.updateComplete;
 
       await waitFor(() => {
         const readerButton = findButtonByText(bookmarkReader, 'Reader') as HTMLElement;
@@ -697,10 +718,9 @@ describe('App Integration Tests', () => {
       
       await bookmarkReader.updateComplete;
       
-      // Wait for component to finish loading
-      await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
-      });
+      // Advance fake timers to ensure any pending async operations complete
+      vi.runAllTimers();
+      await bookmarkReader.updateComplete;
 
       await waitFor(() => {
         const progressText = findTextInShadowDOM(bookmarkReader, '50% read');
