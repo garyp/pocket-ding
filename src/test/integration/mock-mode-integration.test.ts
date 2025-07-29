@@ -14,8 +14,28 @@ vi.mock('../../services/database', () => ({
     getBookmarks: vi.fn().mockResolvedValue([]),
     saveBookmarks: vi.fn(),
     clearBookmarks: vi.fn(),
-    createSettingsQuery: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
+    createSettingsQuery: vi.fn(() => () => Promise.resolve(undefined)),
+    createPaginationDataQuery: vi.fn(() => () => Promise.resolve({ bookmarks: [], totalCount: 0 })),
+    createBookmarkQuery: vi.fn(() => () => Promise.resolve(null)),
   },
+}));
+
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: undefined,
+    loading: false,
+    hasError: false,
+    errorMessage: null,
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(undefined);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
 }));
 
 // Import services after mocking
@@ -34,6 +54,9 @@ describe('Mock Mode Integration', () => {
   };
 
   beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     // Clear all mocks
     vi.clearAllMocks();
     
@@ -41,14 +64,16 @@ describe('Mock Mode Integration', () => {
     settingsPanel = document.createElement('settings-panel');
     document.body.appendChild(settingsPanel);
     
-    // Wait for component to be ready
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for component to be ready using fake timers
+    await settingsPanel.updateComplete;
   });
 
   afterEach(() => {
     if (settingsPanel) {
       document.body.removeChild(settingsPanel);
     }
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('Mock API Integration', () => {

@@ -23,6 +23,9 @@ describe('ThemeService', () => {
   let mockMediaQuery: any;
 
   beforeEach(() => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     // Reset all mocks
     vi.clearAllMocks();
     
@@ -44,6 +47,8 @@ describe('ThemeService', () => {
   afterEach(() => {
     // Clean up any theme styles created during tests
     document.querySelectorAll('style[data-material-theme]').forEach(style => style.remove());
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('init', () => {
@@ -72,7 +77,8 @@ describe('ThemeService', () => {
       ThemeService.init();
       
       // Wait for theme to be applied - needs more time for async import
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.advanceTimersByTime(100);
+      await vi.runAllTicks();
       
       expect(document.documentElement.className).toBe('dark');
       const themeStyle = document.querySelector('style[data-material-theme]');
@@ -105,7 +111,8 @@ describe('ThemeService', () => {
       ThemeService.setTheme('light');
       
       // Wait for theme to be applied - needs more time for async import
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.advanceTimersByTime(100);
+      await vi.runAllTicks();
       
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('theme-mode', 'light');
       expect(document.documentElement.className).toBe('light');
@@ -118,7 +125,8 @@ describe('ThemeService', () => {
       ThemeService.setTheme('dark');
       
       // Wait for theme to be applied - needs more time for async import
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.advanceTimersByTime(100);
+      await vi.runAllTicks();
       
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('theme-mode', 'dark');
       expect(document.documentElement.className).toBe('dark');
@@ -259,7 +267,7 @@ describe('ThemeService', () => {
 
     it('should replace existing theme style when changing themes', async () => {
       // Wait for theme to be applied
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       
       // Initial theme style should exist
       expect(document.querySelectorAll('style[data-material-theme]')).toHaveLength(1);
@@ -267,7 +275,7 @@ describe('ThemeService', () => {
       ThemeService.setTheme('dark');
       
       // Wait for theme change to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       
       // Should still have only one theme style
       const themeStyles = document.querySelectorAll('style[data-material-theme]');
@@ -279,7 +287,7 @@ describe('ThemeService', () => {
       ThemeService.setTheme('light');
       
       // Wait for theme to be applied
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       
       const themeStyle = document.querySelector('style[data-material-theme]');
       expect(themeStyle?.getAttribute('data-material-theme')).toBe('light');

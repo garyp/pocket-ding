@@ -19,7 +19,40 @@ vi.mock('../../services/database', () => ({
     saveSettings: vi.fn(),
     getSettings: vi.fn(),
     clearAll: vi.fn(),
+    createSettingsQuery: vi.fn(),
+    createPaginationDataQuery: vi.fn(),
+    createBookmarkQuery: vi.fn(),
   },
+}));
+
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: {
+      linkding_url: 'https://linkding.example.com',
+      linkding_token: 'test-token',
+      sync_interval: 60,
+      auto_sync: true,
+      reading_mode: 'readability'
+    },
+    loading: false,
+    hasError: false,
+    errorMessage: null,
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete({
+        linkding_url: 'https://linkding.example.com',
+        linkding_token: 'test-token',
+        sync_interval: 60,
+        auto_sync: true,
+        reading_mode: 'readability'
+      });
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
 }));
 
 // Mock LinkdingAPI
@@ -46,25 +79,30 @@ describe('Settings Panel - Sync Integration', () => {
   };
 
   beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     vi.clearAllMocks();
     
     // Setup default mock behaviors
     (SyncService.fullSync as any).mockResolvedValue(undefined);
     (DatabaseService.saveSettings as any).mockResolvedValue(undefined);
     (DatabaseService.getSettings as any).mockResolvedValue(mockSettings);
+    (DatabaseService.createSettingsQuery as any).mockReturnValue(() => Promise.resolve(mockSettings));
 
     // Create settings panel element
     settingsPanel = document.createElement('settings-panel');
     settingsPanel.settings = mockSettings;
     document.body.appendChild(settingsPanel);
     
-    // Wait for component to initialize
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Wait for component to initialize using fake timers
     await settingsPanel.updateComplete;
   });
 
   afterEach(() => {
     document.body.removeChild(settingsPanel);
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('Full Sync Button', () => {
@@ -160,19 +198,20 @@ describe('Settings Panel - Sync Integration', () => {
         await settingsPanel.updateComplete;
         
         (SyncService.fullSync as any).mockImplementation((_settings: any, callback: any) => {
-          // Simulate progress updates
-          setTimeout(() => {
-            callback(1, 10);
-            setTimeout(() => callback(5, 10), 10);
-            setTimeout(() => callback(10, 10), 20);
-          }, 0);
-          return new Promise(resolve => setTimeout(resolve, 50));
+          // Simulate progress updates with fake timers
+          callback(1, 10);
+          vi.advanceTimersByTime(10);
+          callback(5, 10);
+          vi.advanceTimersByTime(10);
+          callback(10, 10);
+          return Promise.resolve();
         });
         
         const syncPromise = settingsPanel.handleFullSync();
         
-        // Wait a bit for progress updates
-        await new Promise(resolve => setTimeout(resolve, 30));
+        // Advance fake timers for progress updates
+        vi.advanceTimersByTime(30);
+        await settingsPanel.updateComplete;
         
         expect(settingsPanel.isFullSyncing).toBe(true);
         expect(settingsPanel.fullSyncTotal).toBe(10);
@@ -251,13 +290,13 @@ describe('Settings Panel - Sync Integration', () => {
         
         (SyncService.fullSync as any).mockImplementation((_settings: any, callback: any) => {
           callback(5, 10); // Set progress
-          return new Promise(resolve => setTimeout(resolve, 100));
+          return Promise.resolve();
         });
         
         const syncPromise = settingsPanel.handleFullSync();
         
-        // Wait for progress to be set
-        await new Promise(resolve => setTimeout(resolve, 10));
+        // Wait for progress to be set using fake timers
+        vi.advanceTimersByTime(10);
         await settingsPanel.updateComplete;
         
         const progressBar = settingsPanel.shadowRoot.querySelector('md-linear-progress');
