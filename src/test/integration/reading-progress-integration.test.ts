@@ -9,9 +9,37 @@ import { ThemeService } from '../../services/theme-service';
 import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../../types';
 
 // Mock services
-vi.mock('../../services/database');
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getBookmark: vi.fn(),
+    getReadProgress: vi.fn(),
+    saveReadProgress: vi.fn(),
+    saveBookmark: vi.fn(),
+    createBookmarkQuery: vi.fn(),
+    createReadProgressQuery: vi.fn(),
+  },
+}));
+
 vi.mock('../../services/content-fetcher');
 vi.mock('../../services/theme-service');
+
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: null,
+    loading: false,
+    hasError: false,
+    errorMessage: '',
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(null);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
+}));
 
 describe('Reading Progress Integration Tests', () => {
   let element: BookmarkReader;
@@ -63,6 +91,8 @@ describe('Reading Progress Integration Tests', () => {
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
+    vi.mocked(DatabaseService.createBookmarkQuery).mockReturnValue(() => Promise.resolve(mockBookmark));
+    vi.mocked(DatabaseService.createReadProgressQuery).mockReturnValue(() => Promise.resolve(undefined));
 
     // Mock ContentFetcher
     const mockContentSources: ContentSourceOption[] = [
