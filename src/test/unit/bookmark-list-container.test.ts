@@ -65,6 +65,9 @@ describe('BookmarkListContainer', () => {
   let element: BookmarkListContainer;
 
   beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     vi.clearAllMocks();
     
     // Setup default mock implementations
@@ -109,14 +112,16 @@ describe('BookmarkListContainer', () => {
     vi.mocked(SyncController).mockImplementation(() => ({
       hostConnected: vi.fn(),
       hostDisconnected: vi.fn(),
-      state: { isRunning: false, progress: 0, total: 0 }
+      state: { isRunning: false, progress: 0, total: 0 },
+      getSyncState: vi.fn().mockReturnValue({ isRunning: false, progress: 0, total: 0 })
     }) as any);
     
     vi.mocked(FaviconController).mockImplementation(() => ({
       hostConnected: vi.fn(),
       hostDisconnected: vi.fn(),
       getFaviconUrl: vi.fn().mockReturnValue(''),
-      updateFavicons: vi.fn()
+      updateFavicons: vi.fn(),
+      getFaviconState: vi.fn().mockReturnValue({ updatingIds: new Set() })
     }) as any);
     
     vi.mocked(StateController).mockImplementation(() => ({
@@ -146,6 +151,8 @@ describe('BookmarkListContainer', () => {
     if (element) {
       element.remove();
     }
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('Initialization', () => {
@@ -162,7 +169,7 @@ describe('BookmarkListContainer', () => {
       await element.updateComplete;
       
       // Wait for async loading to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       
       expect(DatabaseService.getPageFromAnchorBookmark).toHaveBeenCalled();
       expect(DatabaseService.getBookmarksPaginated).toHaveBeenCalled();
@@ -196,7 +203,7 @@ describe('BookmarkListContainer', () => {
       await element.updateComplete;
       
       // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
       
       const presentationComponent = element.shadowRoot?.querySelector('bookmark-list');

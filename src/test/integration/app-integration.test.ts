@@ -231,6 +231,9 @@ describe('App Integration Tests', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     user = userEvent.setup();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -279,6 +282,8 @@ describe('App Integration Tests', () => {
 
   afterEach(() => {
     document.body.removeChild(container);
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('Initial Setup Flow', () => {
@@ -458,7 +463,7 @@ describe('App Integration Tests', () => {
       await bookmarkList.updateComplete;
       
       // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await bookmarkList.updateComplete;
       
       // Wait for component to finish loading
@@ -484,7 +489,7 @@ describe('App Integration Tests', () => {
       await bookmarkList.updateComplete;
       
       // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await bookmarkList.updateComplete;
       
       // Wait for component to finish loading
@@ -526,7 +531,7 @@ describe('App Integration Tests', () => {
       await bookmarkList.updateComplete;
       
       // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await bookmarkList.updateComplete;
       
       // Wait for component to finish loading
@@ -609,7 +614,7 @@ describe('App Integration Tests', () => {
       await bookmarkReader.updateComplete;
 
       // Wait a bit for the mode change to process
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.advanceTimersByTime(100);
     });
 
     it('should restore reading progress', async () => {
@@ -659,7 +664,7 @@ describe('App Integration Tests', () => {
       await bookmarkList.updateComplete;
       
       // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await bookmarkList.updateComplete;
 
       // Wait for component to be fully loaded and filter buttons to be rendered
@@ -850,7 +855,7 @@ describe('App Integration Tests', () => {
       }
 
       // Add a small delay to ensure all updates have propagated
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.advanceTimersByTime(100);
 
       // Check that the container state has been updated
       expect((bookmarkList as any).containerState.bookmarks.length).toBe(2);
