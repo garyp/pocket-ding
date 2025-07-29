@@ -6,6 +6,24 @@ import { DatabaseService } from '../../services/database';
 vi.mock('../../services/database');
 vi.mock('../../services/theme-service');
 
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: null,
+    loading: false,
+    hasError: false,
+    errorMessage: '',
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(null);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
+}));
+
 // Mock browser APIs
 Object.defineProperty(window, 'location', {
   value: {
@@ -34,7 +52,7 @@ describe('AppRoot Scroll Behavior', () => {
 
   beforeEach(() => {
     // Mock service responses
-    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(null));
     
     // Register the custom element
     if (!customElements.get('app-root')) {

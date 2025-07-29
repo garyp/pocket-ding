@@ -18,6 +18,24 @@ vi.mock('../../services/theme-service', () => ({
   }
 }));
 
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: null,
+    loading: false,
+    hasError: false,
+    errorMessage: '',
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(null);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
+}));
+
 // Mock browser APIs
 Object.defineProperty(window, 'location', {
   value: {
@@ -56,7 +74,7 @@ describe('AppRoot Viewport and Scrollbar Behavior', () => {
 
     // Mock service responses
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
-    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(mockSettings));
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
 
