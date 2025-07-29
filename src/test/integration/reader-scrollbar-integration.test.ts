@@ -9,7 +9,17 @@ import { ThemeService } from '../../services/theme-service';
 import type { AppSettings } from '../../types';
 
 // Mock services
-vi.mock('../../services/database');
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getSettings: vi.fn(),
+    getBookmark: vi.fn(),
+    getReadProgress: vi.fn(),
+    saveReadProgress: vi.fn(),
+    createSettingsQuery: vi.fn(),
+    createBookmarkQuery: vi.fn(),
+  },
+}));
+
 vi.mock('../../services/theme-service', () => ({
   ThemeService: {
     init: vi.fn(),
@@ -20,6 +30,24 @@ vi.mock('../../services/theme-service', () => ({
     removeThemeChangeListener: vi.fn(),
     reset: vi.fn(),
   }
+}));
+
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: null,
+    loading: false,
+    hasError: false,
+    errorMessage: '',
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(null);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
 }));
 
 // Mock browser APIs
@@ -95,7 +123,8 @@ describe('Reader View Scrollbar Integration', () => {
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
-    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(mockSettings));
+    vi.mocked(DatabaseService.createBookmarkQuery).mockReturnValue(() => Promise.resolve(null));
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
   });

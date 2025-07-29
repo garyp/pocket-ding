@@ -27,6 +27,24 @@ Object.defineProperty(window, 'matchMedia', {
 vi.mock('../../services/database');
 vi.mock('../../services/content-fetcher');
 
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: null,
+    loading: false,
+    hasError: false,
+    errorMessage: '',
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(null);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
+}));
+
 // Component is auto-registered by the @customElement decorator
 
 describe('Dark Mode Integration', () => {
@@ -94,7 +112,7 @@ describe('Dark Mode Integration', () => {
     });
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
-    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue({ timeout: vi.fn() } as any);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(null));
     vi.mocked(ContentFetcher.getAvailableContentSources).mockResolvedValue([
       { type: 'asset', label: 'Cached Content', assetId: 1 }
     ]);
