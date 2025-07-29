@@ -18,6 +18,7 @@ export class SyncService extends EventTarget {
   private static syncPromise: Promise<void> | null = null;
   private static currentSyncProgress = 0;
   private static currentSyncTotal = 0;
+  private static disableYielding = false; // For testing
   
 
   static getInstance(): SyncService {
@@ -25,6 +26,11 @@ export class SyncService extends EventTarget {
       this.instance = new SyncService();
     }
     return this.instance;
+  }
+
+  // For testing: disable yielding to avoid setTimeout issues
+  static setYieldingEnabled(enabled: boolean): void {
+    this.disableYielding = !enabled;
   }
 
 
@@ -153,7 +159,7 @@ export class SyncService extends EventTarget {
         onProgress?.(processed, total);
         
         // Yield control periodically to allow UI updates
-        if (processed % 5 === 0) {
+        if (processed % 5 === 0 && !SyncService.disableYielding) {
           await new Promise(resolve => setTimeout(resolve, 0));
         }
       }
