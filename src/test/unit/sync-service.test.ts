@@ -99,6 +99,9 @@ describe('SyncService', () => {
   let mockApi: any;
 
   beforeEach(() => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     vi.clearAllMocks();
     
     // Setup API mock
@@ -127,6 +130,11 @@ describe('SyncService', () => {
       content: '<html>fetched content</html>',
       readability_content: 'processed content',
     });
+  });
+
+  afterEach(() => {
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('syncBookmarks', () => {
@@ -241,7 +249,7 @@ describe('SyncService', () => {
 
     it('should prevent concurrent syncs', async () => {
       mockApi.getAllBookmarks.mockImplementation(() => 
-        new Promise(resolve => setTimeout(() => resolve(mockRemoteBookmarks), 100))
+        (vi.advanceTimersByTime(100), Promise.resolve(mockRemoteBookmarks))
       );
 
       const sync1 = SyncService.syncBookmarks(mockSettings);
@@ -761,12 +769,12 @@ describe('SyncService', () => {
     it('should track sync progress state across component lifecycle', async () => {
       // Make async operations slower to test intermediate state
       mockApi.getAllBookmarks.mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        vi.advanceTimersByTime(50);
         return mockRemoteBookmarks;
       });
       (DatabaseService.getAllBookmarks as any).mockResolvedValue([]);
       (DatabaseService.saveBookmark as any).mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 20));
+        vi.advanceTimersByTime(20);
         return undefined;
       });
 
@@ -781,7 +789,7 @@ describe('SyncService', () => {
       expect(SyncService.isSyncInProgress()).toBe(true);
 
       // Wait for getAllBookmarks to complete and set total
-      await new Promise(resolve => setTimeout(resolve, 60));
+      vi.advanceTimersByTime(60);
 
       // Should still be in progress with total set
       expect(SyncService.isSyncInProgress()).toBe(true);
