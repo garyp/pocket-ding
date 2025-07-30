@@ -18,6 +18,9 @@ describe('FaviconController', () => {
   let controller: FaviconController;
 
   beforeEach(() => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     vi.clearAllMocks();
 
     // Create mock host
@@ -35,6 +38,8 @@ describe('FaviconController', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('initialization', () => {
@@ -205,7 +210,7 @@ describe('FaviconController', () => {
       controller.handleVisibilityChanged([1, 2, 3], bookmarks);
 
       // Allow async operations to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
 
       expect(FaviconService.getFaviconForBookmark).toHaveBeenCalledTimes(2);
       expect(FaviconService.getFaviconForBookmark).toHaveBeenCalledWith(1, bookmarks[0]!.favicon_url!);

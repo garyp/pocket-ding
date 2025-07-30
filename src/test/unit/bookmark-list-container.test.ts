@@ -12,8 +12,14 @@ vi.mock('../../services/database', () => ({
     getBookmarksWithAssetCounts: vi.fn(),
     getCompletedAssetsByBookmarkId: vi.fn(),
     getSettings: vi.fn(),
+    createPaginationDataQuery: vi.fn(),
   },
 }));
+
+vi.mock('../../controllers/reactive-query-controller');
+vi.mock('../../controllers/sync-controller');
+vi.mock('../../controllers/favicon-controller');
+vi.mock('../../controllers/state-controller');
 
 vi.mock('../../services/sync-service', () => ({
   SyncService: {
@@ -58,7 +64,10 @@ const mockBookmarks: LocalBookmark[] = [
 describe('BookmarkListContainer', () => {
   let element: BookmarkListContainer;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     vi.clearAllMocks();
     
     // Setup default mock implementations
@@ -67,6 +76,65 @@ describe('BookmarkListContainer', () => {
     vi.mocked(DatabaseService.getPageFromAnchorBookmark).mockResolvedValue(1);
     vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map([[1, false]]));
     vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
+    vi.mocked(DatabaseService.createPaginationDataQuery).mockReturnValue(() => Promise.resolve({
+      bookmarks: mockBookmarks,
+      totalCount: 1,
+      totalPages: 1,
+      filterCounts: { all: 1, unread: 1, archived: 0 },
+      bookmarksWithAssets: new Set<number>()
+    }));
+
+    // Mock ReactiveQueryController
+    const { ReactiveQueryController } = await import('../../controllers/reactive-query-controller');
+    vi.mocked(ReactiveQueryController).mockImplementation((_host: any, _options: any) => ({
+      value: {
+        bookmarks: mockBookmarks,
+        totalCount: 1,
+        totalPages: 1,
+        filterCounts: { all: 1, unread: 1, archived: 0 },
+        bookmarksWithAssets: new Set<number>()
+      },
+      loading: false,
+      hasError: false,
+      errorMessage: null,
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      setEnabled: vi.fn(),
+      updateQuery: vi.fn(),
+      render: vi.fn()
+    }) as any);
+
+    // Mock other controllers
+    const { SyncController } = await import('../../controllers/sync-controller');
+    const { FaviconController } = await import('../../controllers/favicon-controller');
+    const { StateController } = await import('../../controllers/state-controller');
+    
+    vi.mocked(SyncController).mockImplementation(() => ({
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      state: { isRunning: false, progress: 0, total: 0 },
+      getSyncState: vi.fn().mockReturnValue({ isRunning: false, progress: 0, total: 0 })
+    }) as any);
+    
+    vi.mocked(FaviconController).mockImplementation(() => ({
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      getFaviconUrl: vi.fn().mockReturnValue(''),
+      updateFavicons: vi.fn(),
+      getFaviconState: vi.fn().mockReturnValue({ updatingIds: new Set() })
+    }) as any);
+    
+    vi.mocked(StateController).mockImplementation(() => ({
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      setState: vi.fn(),
+      getState: vi.fn().mockReturnValue({
+        currentPage: 1,
+        pageSize: 25,
+        filter: 'all'
+      })
+    }) as any);
+
     vi.mocked(SyncService.getInstance).mockReturnValue({
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -83,6 +151,8 @@ describe('BookmarkListContainer', () => {
     if (element) {
       element.remove();
     }
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('Initialization', () => {
@@ -99,7 +169,7 @@ describe('BookmarkListContainer', () => {
       await element.updateComplete;
       
       // Wait for async loading to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       
       expect(DatabaseService.getPageFromAnchorBookmark).toHaveBeenCalled();
       expect(DatabaseService.getBookmarksPaginated).toHaveBeenCalled();
@@ -133,7 +203,7 @@ describe('BookmarkListContainer', () => {
       await element.updateComplete;
       
       // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
       
       const presentationComponent = element.shadowRoot?.querySelector('bookmark-list');

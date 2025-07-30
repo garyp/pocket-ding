@@ -4,10 +4,12 @@ import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
 import { StateController } from '../controllers/state-controller';
-import type { LocalBookmark, PaginationState, BookmarkListContainerState, FilterCounts } from '../types';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
+import type { LocalBookmark, PaginationState, BookmarkListContainerState } from '../types';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
+import '@material/web/progress/circular-progress.js';
 import './bookmark-list';
 
 @customElement('bookmark-list-container')
@@ -50,21 +52,16 @@ export class BookmarkListContainer extends LitElement {
   @state() private filter: 'all' | 'unread' | 'archived' = 'all';
   @state() private anchorBookmarkId?: number;
 
-  // Non-persistent UI state
-  @state() private containerState: {
+  // Reactive data query that automatically updates when data changes
+  private paginationDataQuery = new ReactiveQueryController<{
     bookmarks: LocalBookmark[];
-    isLoading: boolean;
+    totalCount: number;
+    totalPages: number;
+    filterCounts: { all: number; unread: number; archived: number };
     bookmarksWithAssets: Set<number>;
-  } = {
-    bookmarks: [],
-    isLoading: true,
-    bookmarksWithAssets: new Set<number>()
-  };
-
-  // Non-persistent pagination data (computed with persistent @state properties)
-  @state() private totalCount: number = 0;
-  @state() private totalPages: number = 1;
-  @state() private filterCounts?: FilterCounts;
+  }>(this, {
+    query: DatabaseService.createPaginationDataQuery(this.filter, this.currentPage, this.pageSize)
+  });
 
   // Reactive controllers
   private syncController = new SyncController(this, {
@@ -99,16 +96,22 @@ export class BookmarkListContainer extends LitElement {
     }
   });
 
-  // Computed pagination state combining persistent and non-persistent properties
-  private get paginationState(): PaginationState {
+  // Build pagination state from reactive data
+  private buildPaginationState(paginationData: {
+    bookmarks: LocalBookmark[];
+    totalCount: number;
+    totalPages: number;
+    filterCounts: { all: number; unread: number; archived: number };
+    bookmarksWithAssets: Set<number>;
+  }): PaginationState {
     return {
       currentPage: this.currentPage,
       pageSize: this.pageSize,
-      totalCount: this.totalCount,
-      totalPages: this.totalPages,
+      totalCount: paginationData.totalCount,
+      totalPages: paginationData.totalPages,
       filter: this.filter,
       ...(this.anchorBookmarkId ? { anchorBookmarkId: this.anchorBookmarkId } : {}),
-      ...(this.filterCounts ? { filterCounts: this.filterCounts } : {})
+      filterCounts: paginationData.filterCounts
     };
   }
 
@@ -116,7 +119,7 @@ export class BookmarkListContainer extends LitElement {
     super.connectedCallback();
     // StateController automatically handles persistence via observedProperties
     void this.stateController; // Suppress TS6133: declared but never read warning
-    this.loadBookmarks();
+    // All data loading now happens reactively - no manual loading needed!
   }
 
   override disconnectedCallback() {
@@ -124,138 +127,19 @@ export class BookmarkListContainer extends LitElement {
   }
 
 
-  private async loadBookmarks() {
-    try {
-      this.containerState = {
-        ...this.containerState,
-        isLoading: true,
-      };
 
-      // Use anchor bookmark ID to determine the correct page
-      const targetPage = await DatabaseService.getPageFromAnchorBookmark(
-        this.anchorBookmarkId,
-        this.filter,
-        this.pageSize,
-        this.currentPage
-      );
-
-      await this.loadBookmarksPage(this.filter, targetPage);
-    } catch (error) {
-      console.error('Failed to load bookmarks:', error);
-      this.containerState = {
-        ...this.containerState,
-        isLoading: false,
-      };
-    }
-  }
-
-  private async loadBookmarksPage(filter: 'all' | 'unread' | 'archived', page: number) {
-    try {
-      // Get paginated bookmarks, total count for current filter, and counts for all filters
-      const [bookmarks, totalCount, allCount, unreadCount, archivedCount] = await Promise.all([
-        DatabaseService.getBookmarksPaginated(filter, page, this.pageSize),
-        DatabaseService.getBookmarkCount(filter),
-        DatabaseService.getBookmarkCount('all'),
-        DatabaseService.getBookmarkCount('unread'),
-        DatabaseService.getBookmarkCount('archived')
-      ]);
-      
-      // Get asset information for current page bookmarks
-      const bookmarkIds = bookmarks.map(b => b.id);
-      const assetCounts = await DatabaseService.getBookmarksWithAssetCounts(bookmarkIds);
-      
-      // Convert to Set for compatibility with existing code
-      const bookmarksWithAssets = new Set<number>();
-      assetCounts.forEach((hasAssets, bookmarkId) => {
-        if (hasAssets) {
-          bookmarksWithAssets.add(bookmarkId);
-        }
-      });
-
-      const totalPages = Math.ceil(totalCount / this.pageSize);
-
-      // Update persistent properties (StateController will automatically persist)
-      this.currentPage = page;
-      this.filter = filter;
-
-      // Update non-persistent state
-      this.totalCount = totalCount;
-      this.totalPages = totalPages;
-      this.filterCounts = {
-        all: allCount,
-        unread: unreadCount,
-        archived: archivedCount
-      };
-
-      this.containerState = {
-        ...this.containerState,
-        bookmarks,
-        isLoading: false,
-        bookmarksWithAssets
-      };
-
-      console.log(`Loaded page ${page} of ${totalPages} (${bookmarks.length} bookmarks, ${totalCount} total for filter '${filter}')`);
-      
-    } catch (error) {
-      console.error('Failed to load bookmarks page:', error);
-      this.containerState = {
-        ...this.containerState,
-        isLoading: false,
-      };
-    }
-  }
 
   // Controller event handlers
   private async handleSyncCompleted() {
-    // No need to reload bookmarks - they're updated incrementally via handleBookmarkSynced
+    // With reactive queries, bookmarks automatically update when sync completes
     console.log('Sync completed');
   }
  
   private async handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
     if (!updatedBookmark || !bookmarkId) return;
     
-    // Check if bookmark has assets
-    const assets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmarkId);
-    const hasAssets = assets.length > 0;
-    
-    // Check if the bookmark is already on the current page
-    const bookmarkIndex = this.containerState.bookmarks.findIndex(b => b.id === bookmarkId);
-    
-    if (bookmarkIndex !== -1) {
-      // Update existing bookmark in place
-      const updatedBookmarks = [...this.containerState.bookmarks];
-      updatedBookmarks[bookmarkIndex] = updatedBookmark;
-      
-      const updatedBookmarksWithAssets = new Set(this.containerState.bookmarksWithAssets);
-      if (hasAssets) {
-        updatedBookmarksWithAssets.add(bookmarkId);
-      } else {
-        updatedBookmarksWithAssets.delete(bookmarkId);
-      }
-      
-      this.containerState = {
-        ...this.containerState,
-        bookmarks: updatedBookmarks,
-        bookmarksWithAssets: updatedBookmarksWithAssets,
-      };
-    } else {
-      // For new bookmarks, check if they should be visible on current page
-      // by checking if they would appear in a fresh load of this page
-      const currentPageBookmarks = await DatabaseService.getBookmarksPaginated(
-        this.filter,
-        this.currentPage,
-        this.pageSize
-      );
-      
-      // If the new bookmark should be visible on current page, reload the page
-      if (currentPageBookmarks.some(b => b.id === bookmarkId)) {
-        await this.loadBookmarksPage(
-          this.filter, 
-          this.currentPage
-        );
-        return; // Early return since loadBookmarksPage handles everything
-      }
-    }
+    // With reactive queries, the UI automatically updates when database changes.
+    // We only need to handle navigation for anchor bookmarks.
     
     // If this is the anchor bookmark, ensure we're on the correct page to show it
     if (bookmarkId === this.anchorBookmarkId) {
@@ -268,9 +152,11 @@ export class BookmarkListContainer extends LitElement {
       
       // If the anchor bookmark is now on a different page, navigate to that page
       if (targetPage !== this.currentPage) {
-        // Update currentPage property (StateController will automatically persist)
-        this.currentPage = targetPage;
-        await this.loadBookmarksPage(this.filter, targetPage);
+        this.currentPage = targetPage; // StateController will automatically persist
+        // Update the reactive query to navigate to the correct page
+        this.paginationDataQuery.updateQuery(
+          DatabaseService.createPaginationDataQuery(this.filter, this.currentPage, this.pageSize)
+        );
       }
     }
   }
@@ -304,14 +190,17 @@ export class BookmarkListContainer extends LitElement {
   };
 
   private handleVisibilityChanged = (visibleBookmarkIds: number[]) => {
-    this.faviconController.handleVisibilityChanged(visibleBookmarkIds, this.containerState.bookmarks);
+    const paginationData = this.paginationDataQuery.value!;
+    this.faviconController.handleVisibilityChanged(visibleBookmarkIds, paginationData.bookmarks);
   };
 
   private handlePageChange = async (page: number) => {
     if (page !== this.currentPage) {
-      // StateController will automatically persist these changes
-      this.currentPage = page;
-      await this.loadBookmarksPage(this.filter, page);
+      this.currentPage = page; // StateController persists this
+      // Update the reactive query - this triggers automatic re-render
+      this.paginationDataQuery.updateQuery(
+        DatabaseService.createPaginationDataQuery(this.filter, this.currentPage, this.pageSize)
+      );
     }
   };
 
@@ -325,10 +214,12 @@ export class BookmarkListContainer extends LitElement {
         1 // fallback to page 1
       );
       
-      // StateController will automatically persist these changes
-      this.filter = filter;
-      this.currentPage = targetPage;
-      await this.loadBookmarksPage(filter, targetPage);
+      this.filter = filter; // StateController persists this
+      this.currentPage = targetPage; // StateController persists this
+      // Update the reactive query - this triggers automatic re-render
+      this.paginationDataQuery.updateQuery(
+        DatabaseService.createPaginationDataQuery(this.filter, this.currentPage, this.pageSize)
+      );
     }
   };
 
@@ -336,42 +227,55 @@ export class BookmarkListContainer extends LitElement {
     const syncState = this.syncController.getSyncState();
     const faviconState = this.faviconController.getFaviconState();
     
-    return html`
-      ${syncState.isSyncing ? html`
-        <div class="sync-progress">
-          <div class="sync-progress-text">
-            <span>
-              ${syncState.syncTotal > 0 
-                ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
-                : 'Starting sync...'
-              }
-            </span>
-            <md-badge class="sync-badge">
-              <md-icon slot="icon">sync</md-icon>
-              Syncing
-            </md-badge>
-          </div>
-          <md-linear-progress 
-            .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
-            ?indeterminate=${syncState.syncTotal === 0}
-          ></md-linear-progress>
+    return this.paginationDataQuery.render({
+      pending: () => html`
+        <div style="display: flex; justify-content: center; padding: 2rem;">
+          <md-circular-progress indeterminate></md-circular-progress>
         </div>
-      ` : ''}
-      
-      <bookmark-list
-        .bookmarks=${this.containerState.bookmarks}
-        .isLoading=${this.containerState.isLoading}
-        .bookmarksWithAssets=${this.containerState.bookmarksWithAssets}
-        .faviconCache=${faviconState.faviconCache}
-        .syncedBookmarkIds=${syncState.syncedBookmarkIds}
-        .paginationState=${this.paginationState}
-        .onBookmarkSelect=${this.handleBookmarkSelect}
-        .onSyncRequested=${this.handleSyncRequested}
-        .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
-        .onVisibilityChanged=${this.handleVisibilityChanged}
-        .onPageChange=${this.handlePageChange}
-        .onFilterChange=${this.handleFilterChange}
-      ></bookmark-list>
-    `;
+      `,
+      error: (error) => html`
+        <div style="text-align: center; padding: 2rem; color: var(--md-sys-color-error);">
+          <h3>Failed to load bookmarks</h3>
+          <p>${error.message}</p>
+        </div>
+      `,
+      value: (paginationData) => html`
+        ${syncState.isSyncing ? html`
+          <div class="sync-progress">
+            <div class="sync-progress-text">
+              <span>
+                ${syncState.syncTotal > 0 
+                  ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
+                  : 'Starting sync...'
+                }
+              </span>
+              <md-badge class="sync-badge">
+                <md-icon slot="icon">sync</md-icon>
+                Syncing
+              </md-badge>
+            </div>
+            <md-linear-progress 
+              .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
+              ?indeterminate=${syncState.syncTotal === 0}
+            ></md-linear-progress>
+          </div>
+        ` : ''}
+        
+        <bookmark-list
+          .bookmarks=${paginationData.bookmarks}
+          .isLoading=${this.paginationDataQuery.loading}
+          .bookmarksWithAssets=${paginationData.bookmarksWithAssets}
+          .faviconCache=${faviconState.faviconCache}
+          .syncedBookmarkIds=${syncState.syncedBookmarkIds}
+          .paginationState=${this.buildPaginationState(paginationData)}
+          .onBookmarkSelect=${this.handleBookmarkSelect}
+          .onSyncRequested=${this.handleSyncRequested}
+          .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
+          .onVisibilityChanged=${this.handleVisibilityChanged}
+          .onPageChange=${this.handlePageChange}
+          .onFilterChange=${this.handleFilterChange}
+        ></bookmark-list>
+      `
+    });
   }
 }

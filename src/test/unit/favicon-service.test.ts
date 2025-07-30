@@ -22,11 +22,16 @@ vi.mock('../../utils/fetch-helper', () => ({
 
 describe('FaviconService', () => {
   beforeEach(() => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('getFaviconForBookmark', () => {
@@ -287,7 +292,7 @@ describe('FaviconService', () => {
       FaviconService.preloadFavicon(bookmarkId, faviconUrl);
 
       // Give it a moment to start the async operation
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
 
       expect(appFetch).toHaveBeenCalledWith(faviconUrl, expect.objectContaining({
         signal: expect.any(AbortSignal),
