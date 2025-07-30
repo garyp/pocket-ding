@@ -249,44 +249,38 @@ export class DatabaseService {
   }
 
   // Reactive query factory methods (return async functions for ReactiveQueryController)
-  static createAllBookmarksQuery = () => () => 
-    db.bookmarks.orderBy('date_added').reverse().toArray();
+  static createAllBookmarksQuery = (): (() => Promise<LocalBookmark[]>) => () => 
+    this.getAllBookmarks();
 
-  static createBookmarksPaginatedQuery = (filter: 'all' | 'unread' | 'archived', page: number, pageSize: number) => async () => {
-    const offset = (page - 1) * pageSize;
-    const query = this.buildFilteredQuery(filter);
-    return await query.offset(offset).limit(pageSize).toArray();
-  };
+  static createBookmarksPaginatedQuery = (filter: 'all' | 'unread' | 'archived', page: number, pageSize: number): (() => Promise<LocalBookmark[]>) => () =>
+    this.getBookmarksPaginated(filter, page, pageSize);
 
-  static createBookmarkCountQuery = (filter: 'all' | 'unread' | 'archived') => async () => {
-    const query = this.buildFilteredQuery(filter);
-    return await query.count();
-  };
+  static createBookmarkCountQuery = (filter: 'all' | 'unread' | 'archived'): (() => Promise<number>) => () =>
+    this.getBookmarkCount(filter);
 
-  static createBookmarkQuery = (id: number) => () => db.bookmarks.get(id);
+  static createBookmarkQuery = (id: number): (() => Promise<LocalBookmark | undefined>) => () => 
+    this.getBookmark(id);
 
-  static createReadProgressQuery = (bookmarkId: number) => () => 
-    db.readProgress.where('bookmark_id').equals(bookmarkId).first();
+  static createReadProgressQuery = (bookmarkId: number): (() => Promise<ReadProgress | undefined>) => () => 
+    this.getReadProgress(bookmarkId);
 
-  static createSettingsQuery = () => () => db.settings.toCollection().first();
+  static createSettingsQuery = (): (() => Promise<AppSettings | undefined>) => () => 
+    this.getSettings();
 
-  static createAssetsByBookmarkQuery = (bookmarkId: number) => () => 
-    db.assets.where('bookmark_id').equals(bookmarkId).toArray();
+  static createAssetsByBookmarkQuery = (bookmarkId: number): (() => Promise<LocalAsset[]>) => () =>
+    this.getAssetsByBookmarkId(bookmarkId);
 
-  static createBookmarksWithAssetsQuery = (bookmarkIds: number[]) => async () => {
-    const assetCounts = new Map<number, boolean>();
-    for (const bookmarkId of bookmarkIds) {
-      const count = await db.assets
-        .where('bookmark_id').equals(bookmarkId)
-        .and(asset => asset.status === 'complete')
-        .count();
-      assetCounts.set(bookmarkId, count > 0);
-    }
-    return assetCounts;
-  };
+  static createBookmarksWithAssetsQuery = (bookmarkIds: number[]): (() => Promise<Map<number, boolean>>) => () =>
+    this.getBookmarksWithAssetCounts(bookmarkIds);
 
   // Computed reactive queries for complex data
-  static createPaginationDataQuery = (filter: 'all' | 'unread' | 'archived', page: number, pageSize: number) => async () => {
+  static createPaginationDataQuery = (filter: 'all' | 'unread' | 'archived', page: number, pageSize: number): (() => Promise<{
+    bookmarks: LocalBookmark[];
+    totalCount: number;
+    totalPages: number;
+    filterCounts: { all: number; unread: number; archived: number };
+    bookmarksWithAssets: Set<number>;
+  }>) => async () => {
     const [bookmarks, totalCount, allCount, unreadCount, archivedCount] = await Promise.all([
       this.getBookmarksPaginated(filter, page, pageSize),
       this.getBookmarkCount(filter),

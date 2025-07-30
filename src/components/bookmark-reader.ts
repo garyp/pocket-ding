@@ -18,22 +18,19 @@ import '@material/web/menu/menu-item.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
-  @property({ type: Number }) bookmarkId: number | null = null;
+  @property({ type: Number }) bookmarkId!: number;
   
   // Reactive data queries that automatically update when data changes
   private bookmarkQuery = new ReactiveQueryController<LocalBookmark | undefined>(this, {
-    query: this.bookmarkId ? DatabaseService.createBookmarkQuery(this.bookmarkId) : () => Promise.resolve(undefined),
-    enabled: false // Will be enabled when bookmarkId is set
+    query: DatabaseService.createBookmarkQuery(this.bookmarkId)
   });
 
   private progressQuery = new ReactiveQueryController<ReadProgress | undefined>(this, {
-    query: this.bookmarkId ? DatabaseService.createReadProgressQuery(this.bookmarkId) : () => Promise.resolve(undefined),
-    enabled: false
+    query: DatabaseService.createReadProgressQuery(this.bookmarkId)
   });
 
   private assetsQuery = new ReactiveQueryController<any[]>(this, {
-    query: this.bookmarkId ? DatabaseService.createAssetsByBookmarkQuery(this.bookmarkId) : () => Promise.resolve([]),
-    enabled: false
+    query: DatabaseService.createAssetsByBookmarkQuery(this.bookmarkId)
   });
 
   @state() private readingMode: 'original' | 'readability' = 'readability';
@@ -393,24 +390,15 @@ export class BookmarkReader extends LitElement {
     super.willUpdate(changedProperties);
     
     if (changedProperties.has('bookmarkId')) {
-      const hasBookmarkId = !!this.bookmarkId;
+      // Update all queries to use the new bookmark ID
+      this.bookmarkQuery.updateQuery(DatabaseService.createBookmarkQuery(this.bookmarkId));
+      this.progressQuery.updateQuery(DatabaseService.createReadProgressQuery(this.bookmarkId));
+      this.assetsQuery.updateQuery(DatabaseService.createAssetsByBookmarkQuery(this.bookmarkId));
       
-      // Enable/disable queries based on whether we have a bookmark ID
-      this.bookmarkQuery.setEnabled(hasBookmarkId);
-      this.progressQuery.setEnabled(hasBookmarkId);
-      this.assetsQuery.setEnabled(hasBookmarkId);
-      
-      if (hasBookmarkId) {
-        // Update all queries to use the new bookmark ID
-        this.bookmarkQuery.updateQuery(DatabaseService.createBookmarkQuery(this.bookmarkId!));
-        this.progressQuery.updateQuery(DatabaseService.createReadProgressQuery(this.bookmarkId!));
-        this.assetsQuery.updateQuery(DatabaseService.createAssetsByBookmarkQuery(this.bookmarkId!));
-        
-        // Reset state for new bookmark
-        this.hasBeenMarkedAsRead = false;
-        this.readProgress = 0;
-        this.scrollPosition = 0;
-      }
+      // Reset state for new bookmark
+      this.hasBeenMarkedAsRead = false;
+      this.readProgress = 0;
+      this.scrollPosition = 0;
     }
   }
 

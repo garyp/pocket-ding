@@ -54,7 +54,7 @@ vi.mock('../../services/linkding-api', () => ({
 
 // Mock ReactiveQueryController to prevent hanging
 vi.mock('../../controllers/reactive-query-controller', () => ({
-  ReactiveQueryController: vi.fn().mockImplementation((host, options) => {
+  ReactiveQueryController: vi.fn().mockImplementation((_host, options) => {
     // Create a dynamic controller that responds to query changes
     const controller = {
       hostConnected: vi.fn(),

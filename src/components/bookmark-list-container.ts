@@ -9,6 +9,7 @@ import type { LocalBookmark, PaginationState, BookmarkListContainerState } from 
 import '@material/web/labs/badge/badge.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
+import '@material/web/progress/circular-progress.js';
 import './bookmark-list';
 
 @customElement('bookmark-list-container')
@@ -95,9 +96,14 @@ export class BookmarkListContainer extends LitElement {
     }
   });
 
-  // Computed pagination state combining persistent and reactive data
-  private get paginationState(): PaginationState {
-    const paginationData = this.paginationDataQuery.value!;
+  // Build pagination state from reactive data
+  private buildPaginationState(paginationData: {
+    bookmarks: LocalBookmark[];
+    totalCount: number;
+    totalPages: number;
+    filterCounts: { all: number; unread: number; archived: number };
+    bookmarksWithAssets: Set<number>;
+  }): PaginationState {
     return {
       currentPage: this.currentPage,
       pageSize: this.pageSize,
@@ -220,44 +226,56 @@ export class BookmarkListContainer extends LitElement {
   override render() {
     const syncState = this.syncController.getSyncState();
     const faviconState = this.faviconController.getFaviconState();
-    const paginationData = this.paginationDataQuery.value!;
     
-    return html`
-      ${syncState.isSyncing ? html`
-        <div class="sync-progress">
-          <div class="sync-progress-text">
-            <span>
-              ${syncState.syncTotal > 0 
-                ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
-                : 'Starting sync...'
-              }
-            </span>
-            <md-badge class="sync-badge">
-              <md-icon slot="icon">sync</md-icon>
-              Syncing
-            </md-badge>
-          </div>
-          <md-linear-progress 
-            .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
-            ?indeterminate=${syncState.syncTotal === 0}
-          ></md-linear-progress>
+    return this.paginationDataQuery.render({
+      pending: () => html`
+        <div style="display: flex; justify-content: center; padding: 2rem;">
+          <md-circular-progress indeterminate></md-circular-progress>
         </div>
-      ` : ''}
-      
-      <bookmark-list
-        .bookmarks=${paginationData.bookmarks}
-        .isLoading=${this.paginationDataQuery.loading}
-        .bookmarksWithAssets=${paginationData.bookmarksWithAssets}
-        .faviconCache=${faviconState.faviconCache}
-        .syncedBookmarkIds=${syncState.syncedBookmarkIds}
-        .paginationState=${this.paginationState}
-        .onBookmarkSelect=${this.handleBookmarkSelect}
-        .onSyncRequested=${this.handleSyncRequested}
-        .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
-        .onVisibilityChanged=${this.handleVisibilityChanged}
-        .onPageChange=${this.handlePageChange}
-        .onFilterChange=${this.handleFilterChange}
-      ></bookmark-list>
-    `;
+      `,
+      error: (error) => html`
+        <div style="text-align: center; padding: 2rem; color: var(--md-sys-color-error);">
+          <h3>Failed to load bookmarks</h3>
+          <p>${error.message}</p>
+        </div>
+      `,
+      value: (paginationData) => html`
+        ${syncState.isSyncing ? html`
+          <div class="sync-progress">
+            <div class="sync-progress-text">
+              <span>
+                ${syncState.syncTotal > 0 
+                  ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
+                  : 'Starting sync...'
+                }
+              </span>
+              <md-badge class="sync-badge">
+                <md-icon slot="icon">sync</md-icon>
+                Syncing
+              </md-badge>
+            </div>
+            <md-linear-progress 
+              .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
+              ?indeterminate=${syncState.syncTotal === 0}
+            ></md-linear-progress>
+          </div>
+        ` : ''}
+        
+        <bookmark-list
+          .bookmarks=${paginationData.bookmarks}
+          .isLoading=${this.paginationDataQuery.loading}
+          .bookmarksWithAssets=${paginationData.bookmarksWithAssets}
+          .faviconCache=${faviconState.faviconCache}
+          .syncedBookmarkIds=${syncState.syncedBookmarkIds}
+          .paginationState=${this.buildPaginationState(paginationData)}
+          .onBookmarkSelect=${this.handleBookmarkSelect}
+          .onSyncRequested=${this.handleSyncRequested}
+          .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
+          .onVisibilityChanged=${this.handleVisibilityChanged}
+          .onPageChange=${this.handlePageChange}
+          .onFilterChange=${this.handleFilterChange}
+        ></bookmark-list>
+      `
+    });
   }
 }

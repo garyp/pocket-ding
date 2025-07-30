@@ -29,7 +29,7 @@ vi.mock('../../services/content-fetcher');
 
 // Mock ReactiveQueryController to prevent hanging
 vi.mock('../../controllers/reactive-query-controller', () => ({
-  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+  ReactiveQueryController: vi.fn().mockImplementation((_host, _options) => ({
     hostConnected: vi.fn(),
     hostDisconnected: vi.fn(),
     value: null,
@@ -112,7 +112,7 @@ describe('Dark Mode Integration', () => {
     });
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
-    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(null));
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(undefined));
     vi.mocked(ContentFetcher.getAvailableContentSources).mockResolvedValue([
       { type: 'asset', label: 'Cached Content', assetId: 1 }
     ]);

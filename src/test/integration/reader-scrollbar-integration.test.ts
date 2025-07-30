@@ -34,15 +34,15 @@ vi.mock('../../services/theme-service', () => ({
 
 // Mock ReactiveQueryController to prevent hanging
 vi.mock('../../controllers/reactive-query-controller', () => ({
-  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+  ReactiveQueryController: vi.fn().mockImplementation((_host, _options) => ({
     hostConnected: vi.fn(),
     hostDisconnected: vi.fn(),
-    value: null,
+    value: undefined,
     loading: false,
     hasError: false,
     errorMessage: '',
     render: vi.fn((callbacks) => {
-      if (callbacks.complete) return callbacks.complete(null);
+      if (callbacks.complete) return callbacks.complete(undefined);
       return undefined;
     }),
     setEnabled: vi.fn(),
@@ -124,7 +124,7 @@ describe('Reader View Scrollbar Integration', () => {
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(mockSettings));
-    vi.mocked(DatabaseService.createBookmarkQuery).mockReturnValue(() => Promise.resolve(null));
+    vi.mocked(DatabaseService.createBookmarkQuery).mockReturnValue(() => Promise.resolve(undefined));
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
   });

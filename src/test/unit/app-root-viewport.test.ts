@@ -20,7 +20,7 @@ vi.mock('../../services/theme-service', () => ({
 
 // Mock ReactiveQueryController to prevent hanging
 vi.mock('../../controllers/reactive-query-controller', () => ({
-  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
+  ReactiveQueryController: vi.fn().mockImplementation((_host, _options) => ({
     hostConnected: vi.fn(),
     hostDisconnected: vi.fn(),
     value: null,

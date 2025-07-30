@@ -10,27 +10,30 @@ vi.mock('../../services/theme-service');
 
 // Mock ReactiveQueryController to prevent hanging
 vi.mock('../../controllers/reactive-query-controller', () => ({
-  ReactiveQueryController: vi.fn().mockImplementation((host, options) => ({
-    hostConnected: vi.fn(),
-    hostDisconnected: vi.fn(),
-    _value: undefined,
-    loading: false,
-    hasError: false,
-    errorMessage: null,
-    render: vi.fn((callbacks) => {
-      if (callbacks.complete && this._value !== undefined) {
-        return callbacks.complete(this._value);
-      }
-      if (callbacks.pending) {
-        return callbacks.pending();
-      }
-      return undefined;
-    }),
-    setEnabled: vi.fn(),
-    updateQuery: vi.fn(),
-    get value() { return this._value; },
-    set value(val) { this._value = val; },
-  }))
+  ReactiveQueryController: vi.fn().mockImplementation((_host, _options) => {
+    const mock = {
+      _value: undefined as any,
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      loading: false,
+      hasError: false,
+      errorMessage: null,
+      render: vi.fn((callbacks: any) => {
+        if (callbacks && callbacks.value && mock._value !== undefined) {
+          return callbacks.value(mock._value);
+        }
+        if (callbacks && callbacks.pending) {
+          return callbacks.pending();
+        }
+        return undefined;
+      }),
+      setEnabled: vi.fn(),
+      updateQuery: vi.fn(),
+      get value() { return mock._value; },
+      set value(val) { mock._value = val; },
+    };
+    return mock;
+  })
 }));
 
 // Mock browser APIs

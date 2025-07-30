@@ -209,14 +209,14 @@ describe('ReactiveQueryController', () => {
 
       const callbacks: QueryRenderCallbacks<string> = {
         pending: vi.fn().mockReturnValue('loading...'),
-        complete: vi.fn().mockReturnValue('complete'),
+        value: vi.fn().mockReturnValue('complete'),
         error: vi.fn().mockReturnValue('error')
       };
 
       const result = controller.render(callbacks);
 
       expect(callbacks.pending).toHaveBeenCalled();
-      expect(callbacks.complete).not.toHaveBeenCalled();
+      expect(callbacks.value).not.toHaveBeenCalled();
       expect(callbacks.error).not.toHaveBeenCalled();
       expect(result).toBe('loading...');
     });
@@ -234,14 +234,14 @@ describe('ReactiveQueryController', () => {
 
       const callbacks: QueryRenderCallbacks<string> = {
         pending: vi.fn().mockReturnValue('loading...'),
-        complete: vi.fn().mockReturnValue('data loaded'),
+        value: vi.fn().mockReturnValue('data loaded'),
         error: vi.fn().mockReturnValue('error')
       };
 
       const result = controller.render(callbacks);
 
       expect(callbacks.pending).not.toHaveBeenCalled();
-      expect(callbacks.complete).toHaveBeenCalledWith('test-data');
+      expect(callbacks.value).toHaveBeenCalledWith('test-data');
       expect(callbacks.error).not.toHaveBeenCalled();
       expect(result).toBe('data loaded');
     });
@@ -260,14 +260,14 @@ describe('ReactiveQueryController', () => {
 
       const callbacks: QueryRenderCallbacks<string> = {
         pending: vi.fn().mockReturnValue('loading...'),
-        complete: vi.fn().mockReturnValue('complete'),
+        value: vi.fn().mockReturnValue('complete'),
         error: vi.fn().mockReturnValue('error occurred')
       };
 
       const result = controller.render(callbacks);
 
       expect(callbacks.pending).not.toHaveBeenCalled();
-      expect(callbacks.complete).not.toHaveBeenCalled();
+      expect(callbacks.value).not.toHaveBeenCalled();
       expect(callbacks.error).toHaveBeenCalledWith(testError);
       expect(result).toBe('error occurred');
     });
@@ -293,7 +293,7 @@ describe('ReactiveQueryController', () => {
 
       // Only provide complete callback
       const result = controller.render({
-        complete: (value) => `Got: ${value}`
+        value: (value) => `Got: ${value}`
       });
 
       expect(result).toBe('Got: test-data');

@@ -9,7 +9,7 @@ export interface ReactiveQueryOptions<T> {
 
 export interface QueryRenderCallbacks<T> {
   pending?: () => any;
-  complete?: (value: T) => any;
+  value?: (data: T) => any;
   error?: (error: Error) => any;
 }
 
@@ -37,35 +37,20 @@ export class ReactiveQueryController<T> implements ReactiveController {
   }
 
   private subscribe(): void {
-    try {
-      // Check if query function exists (can be undefined in test environments)
-      if (!this.options.query) {
+    this.subscription = liveQuery(this.options.query).subscribe({
+      next: (value) => {
+        this.currentValue = value;
         this.isLoading = false;
+        this.error = null;
         this.host.requestUpdate();
-        return;
+      },
+      error: (error) => {
+        this.error = error;
+        this.isLoading = false;
+        this.options.onError?.(error);
+        this.host.requestUpdate();
       }
-
-      this.subscription = liveQuery(this.options.query).subscribe({
-        next: (value) => {
-          this.currentValue = value;
-          this.isLoading = false;
-          this.error = null;
-          this.host.requestUpdate();
-        },
-        error: (error) => {
-          this.error = error;
-          this.isLoading = false;
-          this.options.onError?.(error);
-          this.host.requestUpdate();
-        }
-      });
-    } catch (error) {
-      // Handle cases where liveQuery fails to initialize (e.g., in test environments)
-      this.error = error as Error;
-      this.isLoading = false;
-      this.options.onError?.(error as Error);
-      this.host.requestUpdate();
-    }
+    });
   }
 
   private unsubscribe(): void {
@@ -83,8 +68,8 @@ export class ReactiveQueryController<T> implements ReactiveController {
       return callbacks.pending();
     }
     
-    if (!this.isLoading && callbacks.complete) {
-      return callbacks.complete(this.currentValue as T);
+    if (!this.isLoading && callbacks.value) {
+      return callbacks.value(this.currentValue as T);
     }
     
     return undefined;
