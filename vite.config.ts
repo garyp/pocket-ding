@@ -23,7 +23,7 @@ export default defineConfig(({ command }) => {
         },
         manifest: {
           name: 'Pocket Ding',
-          short_name: 'LinkReader',
+          short_name: 'Pocket Ding',
           description: 'A PWA reader for Linkding bookmarks',
           theme_color: '#2563eb',
           background_color: '#ffffff',
@@ -31,16 +31,20 @@ export default defineConfig(({ command }) => {
           orientation: 'portrait',
           scope: base,
           start_url: base,
+          categories: ['productivity', 'utilities'],
+          lang: 'en',
           icons: [
             {
               src: base + 'icon-192.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
             },
             {
               src: base + 'icon-512.png',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
             }
           ]
         }
