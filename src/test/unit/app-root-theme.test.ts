@@ -8,6 +8,34 @@ import type { AppSettings } from '../../types';
 vi.mock('../../services/database');
 vi.mock('../../services/theme-service');
 
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((_host, _options) => {
+    const mock = {
+      _value: undefined as any,
+      hostConnected: vi.fn(),
+      hostDisconnected: vi.fn(),
+      loading: false,
+      hasError: false,
+      errorMessage: null,
+      render: vi.fn((callbacks: any) => {
+        if (callbacks && callbacks.value && mock._value !== undefined) {
+          return callbacks.value(mock._value);
+        }
+        if (callbacks && callbacks.pending) {
+          return callbacks.pending();
+        }
+        return undefined;
+      }),
+      setEnabled: vi.fn(),
+      updateQuery: vi.fn(),
+      get value() { return mock._value; },
+      set value(val) { mock._value = val; },
+    };
+    return mock;
+  })
+}));
+
 // Mock browser APIs
 Object.defineProperty(window, 'location', {
   value: {
@@ -31,6 +59,9 @@ describe('AppRoot Theme Integration', () => {
   let mockSettings: AppSettings;
 
   beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     // Reset all mocks
     vi.clearAllMocks();
 
@@ -46,6 +77,7 @@ describe('AppRoot Theme Integration', () => {
 
     // Mock service responses
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(mockSettings));
     vi.mocked(ThemeService.init).mockImplementation(() => {});
     vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
 
@@ -55,28 +87,61 @@ describe('AppRoot Theme Integration', () => {
 
   afterEach(() => {
     element?.remove();
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('theme initialization on app load', () => {
     it('should initialize ThemeService when app loads', async () => {
+      // Set up ReactiveQueryController mock to return settings
+      const { ReactiveQueryController } = await import('../../controllers/reactive-query-controller');
+      const mockController = vi.mocked(ReactiveQueryController).mock.results[0]?.value;
+      if (mockController) {
+        mockController._value = mockSettings;
+      }
+      
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Allow async operations to complete
+      await vi.runAllTicks();
 
       expect(ThemeService.init).toHaveBeenCalled();
     });
 
     it('should apply theme from settings when app loads', async () => {
+      // Set up ReactiveQueryController mock to return settings
+      const { ReactiveQueryController } = await import('../../controllers/reactive-query-controller');
+      const mockController = vi.mocked(ReactiveQueryController).mock.results[0]?.value;
+      if (mockController) {
+        mockController._value = mockSettings;
+      }
+      
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Allow async operations to complete
+      await vi.runAllTicks();
 
       expect(ThemeService.setThemeFromSettings).toHaveBeenCalledWith('dark');
     });
 
     it('should not apply theme if no settings exist', async () => {
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
+      vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(undefined));
 
+      // Set up ReactiveQueryController mock to return undefined (no settings)
+      const { ReactiveQueryController } = await import('../../controllers/reactive-query-controller');
+      const mockController = vi.mocked(ReactiveQueryController).mock.results[0]?.value;
+      if (mockController) {
+        mockController._value = undefined;
+      }
+      
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Allow async operations to complete
+      await vi.runAllTicks();
 
       expect(ThemeService.init).toHaveBeenCalled();
       expect(ThemeService.setThemeFromSettings).not.toHaveBeenCalled();

@@ -9,6 +9,7 @@ import type { LocalBookmark, ReadProgress } from '../../types';
 vi.mock('../../services/database');
 vi.mock('../../services/content-fetcher');
 vi.mock('../../services/theme-service');
+vi.mock('../../controllers/reactive-query-controller');
 
 // Component is auto-registered by the @customElement decorator
 
@@ -18,6 +19,9 @@ describe('BookmarkReader Dark Mode', () => {
   let mockProgress: ReadProgress;
 
   beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     // Reset all mocks
     vi.clearAllMocks();
 
@@ -79,6 +83,8 @@ describe('BookmarkReader Dark Mode', () => {
 
   afterEach(() => {
     element.remove();
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('dark mode override initialization', () => {
@@ -97,7 +103,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       expect(element['darkModeOverride']).toBe('dark');
@@ -111,7 +117,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       expect(element['darkModeOverride']).toBe('light');
@@ -137,7 +143,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       // Simulate theme change
@@ -158,7 +164,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       expect(element.classList.contains('reader-dark-mode')).toBe(false);
@@ -184,7 +190,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       expect(element.classList.contains('reader-dark-mode')).toBe(false);
@@ -203,7 +209,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
     });
 
@@ -258,7 +264,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
@@ -271,7 +277,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
@@ -283,7 +289,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
       
       // Set dark override and trigger update
@@ -301,7 +307,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
 
       const button = element.shadowRoot?.querySelector('md-text-button[title]');
@@ -313,7 +319,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
       
       // Set dark override and trigger update
@@ -329,7 +335,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
       
       // Set light override and trigger update
@@ -346,7 +352,7 @@ describe('BookmarkReader Dark Mode', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await vi.runAllTicks();
       await element.updateComplete;
     });
 

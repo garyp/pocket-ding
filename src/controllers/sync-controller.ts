@@ -24,6 +24,7 @@ export class SyncController implements ReactiveController {
   private host: ReactiveControllerHost;
   private syncService: SyncService | null = null;
   private options: SyncControllerOptions;
+  private highlightClearTimeout: number | null = null;
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -67,6 +68,12 @@ export class SyncController implements ReactiveController {
       this.syncService.removeEventListener('sync-completed', this.handleSyncCompleted);
       this.syncService.removeEventListener('sync-error', this.handleSyncError);
       this.syncService.removeEventListener('bookmark-synced', this.handleBookmarkSynced);
+    }
+    
+    // Clean up timeout
+    if (this.highlightClearTimeout) {
+      clearTimeout(this.highlightClearTimeout);
+      this.highlightClearTimeout = null;
     }
   }
 
@@ -146,8 +153,12 @@ export class SyncController implements ReactiveController {
     
     // Clear synced highlights after delay (3 seconds)
     // Use vitest fake timers in tests for deterministic timing
-    setTimeout(() => {
+    if (this.highlightClearTimeout) {
+      clearTimeout(this.highlightClearTimeout);
+    }
+    this.highlightClearTimeout = window.setTimeout(() => {
       this.clearSyncedHighlights();
+      this.highlightClearTimeout = null;
     }, 3000);
   };
 

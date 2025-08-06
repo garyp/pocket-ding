@@ -1,9 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AppRoot } from '../../components/app-root';
+import { DatabaseService } from '../../services/database';
 
 // Mock services
 vi.mock('../../services/database');
 vi.mock('../../services/theme-service');
+
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((_host, _options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: undefined,
+    loading: false,
+    hasError: false,
+    errorMessage: '',
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(undefined);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
+}));
 
 // Mock browser APIs
 Object.defineProperty(window, 'location', {
@@ -32,6 +51,9 @@ describe('AppRoot Scroll Behavior', () => {
   let appRoot: AppRoot;
 
   beforeEach(() => {
+    // Mock service responses
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(undefined));
+    
     // Register the custom element
     if (!customElements.get('app-root')) {
       customElements.define('app-root', AppRoot);

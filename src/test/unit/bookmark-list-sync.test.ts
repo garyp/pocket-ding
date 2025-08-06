@@ -90,6 +90,8 @@ describe('BookmarkListContainer Background Sync', () => {
   ];
 
   beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
     
     // Setup mock event listeners tracking
     mockEventListeners = {};
@@ -140,6 +142,8 @@ describe('BookmarkListContainer Background Sync', () => {
       document.body.removeChild(element);
     }
     vi.unstubAllGlobals();
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   const triggerSyncEvent = (eventType: string, detail: any) => {
@@ -259,7 +263,7 @@ describe('BookmarkListContainer Background Sync', () => {
       });
       
       // Wait for handleBookmarkSynced async operation to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
 
       const presentationComponent = getPresentationComponent();
@@ -284,7 +288,7 @@ describe('BookmarkListContainer Background Sync', () => {
       });
       
       // Wait for handleBookmarkSynced async operation to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
 
       const presentationComponent = getPresentationComponent();
@@ -304,7 +308,7 @@ describe('BookmarkListContainer Background Sync', () => {
       });
       
       // Wait for handleBookmarkSynced async operation to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
 
       const presentationComponent = getPresentationComponent();
@@ -325,7 +329,7 @@ describe('BookmarkListContainer Background Sync', () => {
       });
       
       // Wait for the async asset check in handleBookmarkSynced to complete
-      await new Promise(resolve => setTimeout(resolve, 10));
+      vi.advanceTimersByTime(10);
       await element.updateComplete;
 
       // Check for cached badge by looking for download icon
@@ -347,7 +351,7 @@ describe('BookmarkListContainer Background Sync', () => {
       triggerSyncEvent('sync-completed', { processed: 2 });
       
       // Wait for sync completion
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
 
       progressContainer = element.shadowRoot?.querySelector('.sync-progress');
@@ -498,7 +502,7 @@ describe('BookmarkListContainer Background Sync', () => {
       await newElement.updateComplete;
       
       // Wait for loadBookmarks to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await newElement.updateComplete;
 
       // Should not show sync progress
@@ -521,7 +525,7 @@ describe('BookmarkListContainer Background Sync', () => {
       await newElement.updateComplete;
       
       // Wait for loadBookmarks to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await newElement.updateComplete;
 
       // Should not have any synced bookmarks highlighted (stale highlights cleared)

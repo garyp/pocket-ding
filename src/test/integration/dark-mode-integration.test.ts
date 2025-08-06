@@ -27,6 +27,24 @@ Object.defineProperty(window, 'matchMedia', {
 vi.mock('../../services/database');
 vi.mock('../../services/content-fetcher');
 
+// Mock ReactiveQueryController to prevent hanging
+vi.mock('../../controllers/reactive-query-controller', () => ({
+  ReactiveQueryController: vi.fn().mockImplementation((_host, _options) => ({
+    hostConnected: vi.fn(),
+    hostDisconnected: vi.fn(),
+    value: null,
+    loading: false,
+    hasError: false,
+    errorMessage: '',
+    render: vi.fn((callbacks) => {
+      if (callbacks.complete) return callbacks.complete(null);
+      return undefined;
+    }),
+    setEnabled: vi.fn(),
+    updateQuery: vi.fn(),
+  }))
+}));
+
 // Component is auto-registered by the @customElement decorator
 
 describe('Dark Mode Integration', () => {
@@ -35,6 +53,9 @@ describe('Dark Mode Integration', () => {
   let mockBookmark: LocalBookmark;
 
   beforeEach(async () => {
+    // Use fake timers for deterministic testing
+    vi.useFakeTimers();
+    
     // Reset all mocks
     vi.clearAllMocks();
     
@@ -55,8 +76,8 @@ describe('Dark Mode Integration', () => {
     // Clean up document
     document.documentElement.className = '';
     
-    // Wait for any pending async operations to complete
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Fast-forward any immediate timers
+    vi.runAllTimers();
 
     // Mock bookmark data
     mockBookmark = {
@@ -91,6 +112,7 @@ describe('Dark Mode Integration', () => {
     });
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
+    vi.mocked(DatabaseService.createSettingsQuery).mockReturnValue(() => Promise.resolve(undefined));
     vi.mocked(ContentFetcher.getAvailableContentSources).mockResolvedValue([
       { type: 'asset', label: 'Cached Content', assetId: 1 }
     ]);
@@ -107,6 +129,8 @@ describe('Dark Mode Integration', () => {
 
   afterEach(() => {
     element?.remove();
+    // Always restore real timers
+    vi.useRealTimers();
   });
 
   describe('System theme integration', () => {
@@ -126,7 +150,7 @@ describe('Dark Mode Integration', () => {
       expect(element.classList.contains('reader-dark-mode')).toBe(true);
       
       // Material theme should be dark (allow time for async theme loading)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      vi.advanceTimersByTime(100);
       const themeStyle = document.querySelector('style[data-material-theme]');
       expect(themeStyle?.getAttribute('data-material-theme')).toBe('dark');
     });
@@ -200,7 +224,7 @@ describe('Dark Mode Integration', () => {
       element.bookmarkId = 2;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
       
       expect(element['darkModeOverride']).toBeNull();
@@ -220,7 +244,7 @@ describe('Dark Mode Integration', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
       
       expect(element['darkModeOverride']).toBe('dark');
@@ -244,7 +268,7 @@ describe('Dark Mode Integration', () => {
       element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
       
       expect(element.classList.contains('reader-dark-mode')).toBe(true);
@@ -263,7 +287,7 @@ describe('Dark Mode Integration', () => {
       element.bookmarkId = 2;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
       
       expect(element.classList.contains('reader-dark-mode')).toBe(false);
@@ -282,7 +306,7 @@ describe('Dark Mode Integration', () => {
       element.bookmarkId = 3;
       await element.updateComplete;
       // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      vi.runAllTimers();
       await element.updateComplete;
       
       // Should follow system (light in this case)
@@ -319,7 +343,7 @@ describe('Dark Mode Integration', () => {
 
     it('should update UI elements when toggling', async () => {
       // Wait for component to fully render and load bookmark
-      await new Promise(resolve => setTimeout(resolve, 50));
+      vi.advanceTimersByTime(50);
       await element.updateComplete;
       
       // Check initial state - make sure the element is rendered
