@@ -172,6 +172,22 @@ export class FaviconController implements ReactiveController {
   }
 
   /**
+   * Preload favicons for all bookmarks with favicon URLs (for immediate availability)
+   */
+  async preloadFaviconsForBookmarks(bookmarks: Array<{ id: number; favicon_url?: string }>): Promise<void> {
+    if (!this.faviconService) {
+      return; // Service not ready yet
+    }
+
+    const faviconCache = this.faviconService.getAllCachedFaviconUrls();
+    const loadPromises = bookmarks
+      .filter(bookmark => bookmark.favicon_url && !faviconCache.has(bookmark.id) && !this.isLoadingSet.has(bookmark.id))
+      .map(bookmark => this.loadFavicon(bookmark.id, bookmark.favicon_url!));
+    
+    await Promise.allSettled(loadPromises);
+  }
+
+  /**
    * Setup service event listener for reactive updates
    */
   private setupServiceEventListener(): void {
