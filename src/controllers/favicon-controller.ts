@@ -64,18 +64,14 @@ export class FaviconController implements ReactiveController {
    */
   getFaviconState(): FaviconState {
     if (!this.faviconService) {
-      console.log('FaviconController: Service not initialized, returning empty cache');
       return {
         faviconCache: new Map(),
         isLoading: new Set(),
       };
     }
 
-    const cachedFavicons = this.faviconService.getAllCachedFaviconUrls();
-    console.log(`FaviconController: Returning ${cachedFavicons.size} cached favicons`);
-    
     return {
-      faviconCache: new Map(cachedFavicons),
+      faviconCache: new Map(this.faviconService.getAllCachedFaviconUrls()),
       isLoading: new Set(this.isLoadingSet),
     };
   }
@@ -84,8 +80,6 @@ export class FaviconController implements ReactiveController {
    * Load favicon for a specific bookmark
    */
   async loadFavicon(bookmarkId: number, faviconUrl: string): Promise<void> {
-    console.log(`FaviconController: loadFavicon called for bookmark ${bookmarkId} with URL: ${faviconUrl}`);
-    
     if (!this.faviconService) {
       console.warn('FaviconService not initialized');
       return;
@@ -93,12 +87,7 @@ export class FaviconController implements ReactiveController {
 
     // Skip if already cached or loading
     const faviconCache = this.faviconService.getAllCachedFaviconUrls();
-    if (faviconCache.has(bookmarkId)) {
-      console.log(`FaviconController: Favicon already cached for bookmark ${bookmarkId}, skipping`);
-      return;
-    }
-    if (this.isLoadingSet.has(bookmarkId)) {
-      console.log(`FaviconController: Favicon already loading for bookmark ${bookmarkId}, skipping`);
+    if (faviconCache.has(bookmarkId) || this.isLoadingSet.has(bookmarkId)) {
       return;
     }
 
@@ -175,15 +164,27 @@ export class FaviconController implements ReactiveController {
       // Set up event listener now that service is ready
       this.setupServiceEventListener();
       
-      // Debug: Check how many cached favicons we have after initialization
-      const cachedFavicons = this.faviconService.getAllCachedFaviconUrls();
-      console.log(`FaviconController initialized with ${cachedFavicons.size} cached favicons`);
-      
       // Trigger update since we may have cached favicons
       this.host.requestUpdate();
     } catch (error) {
       console.error('Failed to initialize favicon service:', error);
     }
+  }
+
+  /**
+   * Preload favicons for all bookmarks with favicon URLs (for immediate availability)
+   */
+  async preloadFaviconsForBookmarks(bookmarks: Array<{ id: number; favicon_url?: string }>): Promise<void> {
+    if (!this.faviconService) {
+      return; // Service not ready yet
+    }
+
+    const faviconCache = this.faviconService.getAllCachedFaviconUrls();
+    const loadPromises = bookmarks
+      .filter(bookmark => bookmark.favicon_url && !faviconCache.has(bookmark.id) && !this.isLoadingSet.has(bookmark.id))
+      .map(bookmark => this.loadFavicon(bookmark.id, bookmark.favicon_url!));
+    
+    await Promise.allSettled(loadPromises);
   }
 
   /**

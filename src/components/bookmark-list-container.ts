@@ -196,6 +196,10 @@ export class BookmarkListContainer extends LitElement {
 
       console.log(`Loaded page ${page} of ${totalPages} (${bookmarks.length} bookmarks, ${totalCount} total for filter '${filter}')`);
       
+      // Preload favicons for all bookmarks with favicon URLs
+      // This ensures favicons are available immediately, especially for demo mode
+      this.faviconController.preloadFaviconsForBookmarks(bookmarks);
+      
     } catch (error) {
       console.error('Failed to load bookmarks page:', error);
       this.containerState = {
