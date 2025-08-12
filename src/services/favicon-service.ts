@@ -43,15 +43,20 @@ export class FaviconService extends EventTarget {
     try {
       // Get all bookmarks and their cached favicons
       const bookmarks = await DatabaseService.getAllBookmarks();
+      console.log(`FaviconService: Initializing cache for ${bookmarks.length} bookmarks`);
       
+      let cachedCount = 0;
       for (const bookmark of bookmarks) {
         if (bookmark.favicon_url) {
           const cachedFavicon = await FaviconService.getCachedFavicon(bookmark.id);
           if (cachedFavicon) {
             this.faviconCache.set(bookmark.id, cachedFavicon);
+            cachedCount++;
           }
         }
       }
+      
+      console.log(`FaviconService: Cache initialized with ${cachedCount} cached favicons`);
     } catch (error) {
       console.error('Failed to initialize favicon cache:', error);
     }

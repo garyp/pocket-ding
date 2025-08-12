@@ -64,14 +64,18 @@ export class FaviconController implements ReactiveController {
    */
   getFaviconState(): FaviconState {
     if (!this.faviconService) {
+      console.log('FaviconController: Service not initialized, returning empty cache');
       return {
         faviconCache: new Map(),
         isLoading: new Set(),
       };
     }
 
+    const cachedFavicons = this.faviconService.getAllCachedFaviconUrls();
+    console.log(`FaviconController: Returning ${cachedFavicons.size} cached favicons`);
+    
     return {
-      faviconCache: new Map(this.faviconService.getAllCachedFaviconUrls()),
+      faviconCache: new Map(cachedFavicons),
       isLoading: new Set(this.isLoadingSet),
     };
   }
@@ -163,6 +167,10 @@ export class FaviconController implements ReactiveController {
       
       // Set up event listener now that service is ready
       this.setupServiceEventListener();
+      
+      // Debug: Check how many cached favicons we have after initialization
+      const cachedFavicons = this.faviconService.getAllCachedFaviconUrls();
+      console.log(`FaviconController initialized with ${cachedFavicons.size} cached favicons`);
       
       // Trigger update since we may have cached favicons
       this.host.requestUpdate();
