@@ -84,6 +84,8 @@ export class FaviconController implements ReactiveController {
    * Load favicon for a specific bookmark
    */
   async loadFavicon(bookmarkId: number, faviconUrl: string): Promise<void> {
+    console.log(`FaviconController: loadFavicon called for bookmark ${bookmarkId} with URL: ${faviconUrl}`);
+    
     if (!this.faviconService) {
       console.warn('FaviconService not initialized');
       return;
@@ -91,7 +93,12 @@ export class FaviconController implements ReactiveController {
 
     // Skip if already cached or loading
     const faviconCache = this.faviconService.getAllCachedFaviconUrls();
-    if (faviconCache.has(bookmarkId) || this.isLoadingSet.has(bookmarkId)) {
+    if (faviconCache.has(bookmarkId)) {
+      console.log(`FaviconController: Favicon already cached for bookmark ${bookmarkId}, skipping`);
+      return;
+    }
+    if (this.isLoadingSet.has(bookmarkId)) {
+      console.log(`FaviconController: Favicon already loading for bookmark ${bookmarkId}, skipping`);
       return;
     }
 

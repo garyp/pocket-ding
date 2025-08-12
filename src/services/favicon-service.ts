@@ -47,12 +47,19 @@ export class FaviconService extends EventTarget {
       
       let cachedCount = 0;
       for (const bookmark of bookmarks) {
+        console.log(`FaviconService: Processing bookmark ${bookmark.id} with URL: ${bookmark.url}, favicon_url: ${bookmark.favicon_url}`);
+        
         if (bookmark.favicon_url) {
           const cachedFavicon = await FaviconService.getCachedFavicon(bookmark.id);
           if (cachedFavicon) {
             this.faviconCache.set(bookmark.id, cachedFavicon);
             cachedCount++;
+            console.log(`FaviconService: Loaded cached favicon for bookmark ${bookmark.id}`);
+          } else {
+            console.log(`FaviconService: No cached favicon found for bookmark ${bookmark.id}, will generate on demand`);
           }
+        } else {
+          console.log(`FaviconService: Bookmark ${bookmark.id} has no favicon_url`);
         }
       }
       
@@ -135,19 +142,24 @@ export class FaviconService extends EventTarget {
   }
 
   static async getFaviconForBookmark(bookmarkId: number, faviconUrl?: string): Promise<string> {
+    console.log(`FaviconService: getFaviconForBookmark called for bookmark ${bookmarkId} with URL: ${faviconUrl}`);
+    
     // First check if we have a cached favicon
     const cachedFavicon = await this.getCachedFavicon(bookmarkId);
     if (cachedFavicon) {
+      console.log(`FaviconService: Returning cached favicon for bookmark ${bookmarkId}`);
       return cachedFavicon;
     }
 
     // If no cached favicon and no URL provided, return default
     if (!faviconUrl) {
+      console.log(`FaviconService: No favicon URL provided for bookmark ${bookmarkId}, returning default`);
       return this.DEFAULT_FAVICON_DATA_URL;
     }
 
     // Check if we're in demo mode - provide mock favicons for example.com URLs
     if (faviconUrl.startsWith('https://example.com/')) {
+      console.log(`FaviconService: Generating mock favicon for bookmark ${bookmarkId} (demo mode)`);
       return this.getMockFavicon(bookmarkId);
     }
 
