@@ -6,6 +6,7 @@ import type { ReactiveControllerHost } from 'lit';
 vi.mock('../../services/favicon-service', () => ({
   FaviconService: {
     getFaviconForBookmark: vi.fn(),
+    getInstance: vi.fn(),
   },
 }));
 
@@ -242,6 +243,108 @@ describe('FaviconController', () => {
       expect(state1).not.toBe(state2);
       expect(state1.faviconCache).not.toBe(state2.faviconCache);
       expect(state1.isLoading).not.toBe(state2.isLoading);
+    });
+  });
+
+  describe('service cache synchronization', () => {
+    let mockFaviconService: any;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      
+      mockFaviconService = {
+        waitForInitialization: vi.fn().mockResolvedValue(undefined),
+        getAllCachedFaviconUrls: vi.fn().mockReturnValue(new Map()),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        loadFaviconForBookmark: vi.fn().mockResolvedValue(undefined),
+      };
+      
+      vi.mocked(FaviconService.getInstance).mockReturnValue(mockFaviconService);
+      controller = new FaviconController(mockHost);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should initialize cache from service on host connect', async () => {
+      const existingFavicons = new Map([
+        [123, 'data:image/png;base64,cached1'],
+        [456, 'data:image/png;base64,cached2']
+      ]);
+      
+      mockFaviconService.getAllCachedFaviconUrls.mockReturnValue(existingFavicons);
+      
+      controller.hostConnected();
+      
+      // Wait for async initialization
+      await vi.runAllTimersAsync();
+      
+      expect(mockFaviconService.waitForInitialization).toHaveBeenCalled();
+      expect(mockFaviconService.getAllCachedFaviconUrls).toHaveBeenCalled();
+      expect(mockFaviconService.addEventListener).toHaveBeenCalledWith('favicon-loaded', expect.any(Function));
+      
+      const faviconState = controller.getFaviconState();
+      expect(faviconState.faviconCache.get(123)).toBe('data:image/png;base64,cached1');
+      expect(faviconState.faviconCache.get(456)).toBe('data:image/png;base64,cached2');
+      expect(mockHost.requestUpdate).toHaveBeenCalled();
+    });
+
+    it('should handle service initialization errors gracefully', async () => {
+      mockFaviconService.waitForInitialization.mockRejectedValue(new Error('Service initialization failed'));
+      
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
+      controller.hostConnected();
+      
+      // Wait for async initialization
+      await vi.runAllTimersAsync();
+      
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to initialize favicon cache from service:', expect.any(Error));
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should sync cache when service emits favicon-loaded event', async () => {
+      let eventListener: Function;
+      mockFaviconService.addEventListener.mockImplementation((eventType: string, listener: Function) => {
+        if (eventType === 'favicon-loaded') {
+          eventListener = listener;
+        }
+      });
+      
+      controller.hostConnected();
+      await vi.runAllTimersAsync();
+      
+      // Simulate favicon-loaded event
+      const mockEvent = new CustomEvent('favicon-loaded', {
+        detail: { bookmarkId: 789, faviconUrl: 'data:image/png;base64,newFavicon' }
+      });
+      
+      eventListener!(mockEvent);
+      
+      const faviconState = controller.getFaviconState();
+      expect(faviconState.faviconCache.get(789)).toBe('data:image/png;base64,newFavicon');
+      expect(mockHost.requestUpdate).toHaveBeenCalled();
+    });
+
+    it('should clean up service event listener on disconnect', async () => {
+      controller.hostConnected();
+      await vi.runAllTimersAsync();
+      
+      controller.hostDisconnected();
+      
+      expect(mockFaviconService.removeEventListener).toHaveBeenCalledWith('favicon-loaded', expect.any(Function));
+    });
+
+    it('should use service instance for favicon loading when available', async () => {
+      controller.hostConnected();
+      await vi.runAllTimersAsync();
+      
+      await controller.loadFavicon(123, 'https://example.com/favicon.ico');
+      
+      expect(mockFaviconService.loadFaviconForBookmark).toHaveBeenCalledWith(123, 'https://example.com/favicon.ico');
     });
   });
 });

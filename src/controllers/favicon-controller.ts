@@ -28,6 +28,10 @@ export class FaviconController implements ReactiveController {
     isLoading: new Set<number>(),
   };
 
+  // Service event listener
+  private faviconService: FaviconService | null = null;
+  private faviconLoadedHandler: ((event: Event) => void) | null = null;
+
 
   constructor(host: ReactiveControllerHost, options: FaviconControllerOptions = {}) {
     this.host = host;
@@ -40,10 +44,15 @@ export class FaviconController implements ReactiveController {
   }
 
   hostConnected(): void {
+    // Initialize cache with existing cached favicons from the service
+    // This also sets up the service event listener
+    this.initializeCacheFromService();
     // No intersection observer setup needed - handled by BookmarkList component
   }
 
   hostDisconnected(): void {
+    // Clean up service event listener
+    this.cleanupServiceEventListener();
     // No cleanup needed - intersection observer is in BookmarkList component
   }
 
@@ -79,16 +88,22 @@ export class FaviconController implements ReactiveController {
     this.host.requestUpdate();
 
     try {
-      const faviconDataUrl = await FaviconService.getFaviconForBookmark(bookmarkId, faviconUrl);
-      
-      // Update cache and remove from loading
-      this._faviconState.faviconCache.set(bookmarkId, faviconDataUrl);
-      this._faviconState.isLoading.delete(bookmarkId);
-      this.host.requestUpdate();
+      // Use the service instance to load favicon
+      if (this.faviconService) {
+        await this.faviconService.loadFaviconForBookmark(bookmarkId, faviconUrl);
+        // The service will fire 'favicon-loaded' event which our listener will handle
+        // This ensures the cache is synchronized
+      } else {
+        // Fallback to direct service call if not initialized
+        const faviconDataUrl = await FaviconService.getFaviconForBookmark(bookmarkId, faviconUrl);
+        this._faviconState.faviconCache.set(bookmarkId, faviconDataUrl);
+        this._faviconState.isLoading.delete(bookmarkId);
+        this.host.requestUpdate();
 
-      // Notify host component
-      if (this.options.onFaviconLoaded) {
-        this.options.onFaviconLoaded(bookmarkId, faviconDataUrl);
+        // Notify host component
+        if (this.options.onFaviconLoaded) {
+          this.options.onFaviconLoaded(bookmarkId, faviconDataUrl);
+        }
       }
     } catch (error) {
       console.error('Failed to load favicon:', error);
@@ -139,6 +154,62 @@ export class FaviconController implements ReactiveController {
   }
 
 
+
+  /**
+   * Initialize cache with existing cached favicons from the service
+   */
+  private async initializeCacheFromService(): Promise<void> {
+    try {
+      this.faviconService = FaviconService.getInstance();
+      await this.faviconService.waitForInitialization();
+      const existingCachedFavicons = this.faviconService.getAllCachedFaviconUrls();
+      
+      // Update our cache with existing cached favicons
+      existingCachedFavicons.forEach((faviconUrl, bookmarkId) => {
+        this._faviconState.faviconCache.set(bookmarkId, faviconUrl);
+      });
+      
+      // Set up event listener now that service is ready
+      this.setupServiceEventListener();
+      
+      // Trigger update if we have cached favicons
+      if (existingCachedFavicons.size > 0) {
+        this.host.requestUpdate();
+      }
+    } catch (error) {
+      console.error('Failed to initialize favicon cache from service:', error);
+    }
+  }
+
+  /**
+   * Setup service event listener to sync cache when favicons are loaded
+   */
+  private setupServiceEventListener(): void {
+    if (this.faviconService) {
+      this.faviconLoadedHandler = (event: Event) => {
+        const customEvent = event as CustomEvent<{ bookmarkId: number; faviconUrl: string }>;
+        const { bookmarkId, faviconUrl } = customEvent.detail;
+        
+        // Update our cache with the newly loaded favicon
+        this._faviconState.faviconCache.set(bookmarkId, faviconUrl);
+        this._faviconState.isLoading.delete(bookmarkId);
+        this.host.requestUpdate();
+      };
+      
+      this.faviconService.addEventListener('favicon-loaded', this.faviconLoadedHandler);
+    }
+  }
+
+  /**
+   * Clean up service event listener
+   */
+  private cleanupServiceEventListener(): void {
+    if (this.faviconService && this.faviconLoadedHandler) {
+      this.faviconService.removeEventListener('favicon-loaded', this.faviconLoadedHandler);
+      this.faviconLoadedHandler = null;
+      this.faviconService = null;
+    }
+  }
 
   /**
    * Handle visibility changes from external observers
