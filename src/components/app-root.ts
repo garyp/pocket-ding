@@ -35,41 +35,59 @@ export class AppRoot extends LitElement {
     }
 
     .app-header {
-      background: var(--md-sys-color-primary);
-      color: var(--md-sys-color-on-primary);
-      padding: 1rem;
+      background: var(--md-sys-color-surface-container);
+      color: var(--md-sys-color-on-surface);
+      padding: 0 1rem;
+      height: 4rem; /* 64px at 16px root font size */
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.12), 0 1px 2px 0 rgba(0, 0, 0, 0.24);
+      position: relative;
+      z-index: 4;
     }
 
     .app-title {
       margin: 0;
+      font-size: 1.375rem; /* 22px at 16px root - Material Design title-large */
+      font-weight: 400;
+      line-height: 1.75rem; /* 28px */
+      letter-spacing: 0;
     }
 
     .header-actions {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.25rem; /* 4px - minimal spacing for icon buttons */
     }
 
     .header-content {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 1rem; /* 16px - standard component spacing */
+      min-width: 0;
+      flex: 1;
     }
 
     .header-actions md-text-button {
-      --md-text-button-label-text-color: var(--md-sys-color-on-primary);
+      --md-text-button-label-text-color: var(--md-sys-color-on-surface);
+      --md-text-button-with-icon-spacing: 0.5rem;
+      --md-text-button-container-height: 2.5rem; /* 40px */
+      --md-text-button-container-shape: 1.25rem; /* 20px border radius */
+      min-width: 2.5rem; /* 40px minimum touch target */
     }
 
     .app-header md-text-button {
-      --md-text-button-label-text-color: var(--md-sys-color-on-primary);
+      --md-text-button-label-text-color: var(--md-sys-color-on-surface);
+      --md-text-button-with-icon-spacing: 0.5rem;
+      --md-text-button-container-height: 2.5rem;
+      --md-text-button-container-shape: 1.25rem;
+      min-width: 2.5rem;
     }
 
     .header-actions md-text-button md-icon,
     .app-header md-text-button md-icon {
-      color: var(--md-sys-color-on-primary);
+      color: var(--md-sys-color-on-surface);
+      font-size: 1.5rem; /* 24px - Material Design icon size */
     }
 
     .app-content {
@@ -138,14 +156,35 @@ export class AppRoot extends LitElement {
       margin-bottom: 1.5rem;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 48rem) { /* 768px breakpoint */
       .app-header {
-        padding: 0.75rem;
+        padding: 0 0.75rem; /* 12px - reduced for mobile */
+        height: 3.5rem; /* 56px - standard mobile header height */
       }
       
+      .app-title {
+        font-size: 1.25rem; /* 20px - slightly smaller on mobile */
+        line-height: 1.5rem; /* 24px */
+      }
       
-      .header-actions md-text-button {
-        font-size: 0.875rem;
+      .header-content {
+        gap: 0.75rem; /* 12px - tighter spacing on mobile */
+      }
+      
+      .header-actions {
+        gap: 0.125rem; /* 2px - minimal gap for mobile */
+      }
+      
+      .header-actions md-text-button,
+      .app-header md-text-button {
+        --md-text-button-container-height: 2.25rem; /* 36px - smaller on mobile */
+        --md-text-button-container-shape: 1.125rem; /* 18px border radius */
+        min-width: 2.25rem; /* 36px minimum */
+      }
+      
+      .header-actions md-text-button md-icon,
+      .app-header md-text-button md-icon {
+        font-size: 1.25rem; /* 20px - smaller icons on mobile */
       }
     }
 

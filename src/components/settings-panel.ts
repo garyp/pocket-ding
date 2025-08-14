@@ -33,21 +33,28 @@ export class SettingsPanel extends LitElement {
     :host {
       display: block;
       padding: 1rem;
-      max-width: 600px;
+      max-width: 37.5rem; /* 600px - responsive max width */
       margin: 0 auto;
     }
 
     .settings-card {
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
+      background: var(--md-sys-color-surface-container-low);
+      border-radius: 0.75rem; /* 12px - Material Design card radius */
     }
 
     .form-section {
       margin-bottom: 2rem;
+      padding: 1rem;
     }
 
     .form-section h3 {
-      margin-bottom: 1rem;
+      margin: 0 0 1rem 0;
       color: var(--md-sys-color-on-surface);
+      font-size: 1.25rem; /* 20px - Material Design title-medium */
+      font-weight: 500;
+      line-height: 1.75rem; /* 28px */
+      letter-spacing: 0.009375rem; /* 0.15px */
     }
 
     .form-group {
@@ -58,6 +65,9 @@ export class SettingsPanel extends LitElement {
       display: block;
       margin-bottom: 0.5rem;
       font-weight: 500;
+      font-size: 0.875rem; /* 14px - Material Design body-medium */
+      line-height: 1.25rem; /* 20px */
+      letter-spacing: 0.015625rem; /* 0.25px */
       color: var(--md-sys-color-on-surface-variant);
     }
 
@@ -65,7 +75,8 @@ export class SettingsPanel extends LitElement {
       display: flex;
       gap: 1rem;
       justify-content: flex-end;
-      margin-top: 2rem;
+      margin-top: 1.5rem;
+      padding: 0 1rem 1rem;
     }
 
     .test-connection {
@@ -117,13 +128,34 @@ export class SettingsPanel extends LitElement {
       margin-bottom: 0.5rem;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 48rem) { /* 768px breakpoint */
       :host {
-        padding: 0.5rem;
+        padding: 0.75rem; /* 12px - reduced for mobile */
+      }
+      
+      .form-section {
+        padding: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+      
+      .form-section h3 {
+        font-size: 1.125rem; /* 18px - slightly smaller on mobile */
+        line-height: 1.5rem; /* 24px */
+        margin-bottom: 0.75rem;
+      }
+      
+      .form-group {
+        margin-bottom: 0.75rem;
       }
       
       .form-actions {
         flex-direction: column;
+        padding: 0 0.75rem 0.75rem;
+        gap: 0.75rem;
+      }
+      
+      .settings-card {
+        margin-bottom: 1rem;
       }
     }
 
