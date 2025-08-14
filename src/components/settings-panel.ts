@@ -32,40 +32,51 @@ export class SettingsPanel extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      padding: 1rem;
+      padding: 16px;
       max-width: 600px;
       margin: 0 auto;
     }
 
     .settings-card {
-      margin-bottom: 2rem;
+      margin-bottom: 24px;
+      background: var(--md-sys-color-surface-container-low);
+      border-radius: 12px;
     }
 
     .form-section {
-      margin-bottom: 2rem;
+      margin-bottom: 32px;
+      padding: 16px;
     }
 
     .form-section h3 {
-      margin-bottom: 1rem;
+      margin: 0 0 16px 0;
       color: var(--md-sys-color-on-surface);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 28px;
+      letter-spacing: 0.15px;
     }
 
     .form-group {
-      margin-bottom: 1rem;
+      margin-bottom: 16px;
     }
 
     .form-group label {
       display: block;
-      margin-bottom: 0.5rem;
+      margin-bottom: 8px;
       font-weight: 500;
+      font-size: 14px;
+      line-height: 20px;
+      letter-spacing: 0.25px;
       color: var(--md-sys-color-on-surface-variant);
     }
 
     .form-actions {
       display: flex;
-      gap: 1rem;
+      gap: 16px;
       justify-content: flex-end;
-      margin-top: 2rem;
+      margin-top: 24px;
+      padding: 0 16px 16px;
     }
 
     .test-connection {
@@ -119,11 +130,32 @@ export class SettingsPanel extends LitElement {
 
     @media (max-width: 768px) {
       :host {
-        padding: 0.5rem;
+        padding: 12px;
+      }
+      
+      .form-section {
+        padding: 12px;
+        margin-bottom: 24px;
+      }
+      
+      .form-section h3 {
+        font-size: 18px;
+        line-height: 24px;
+        margin-bottom: 12px;
+      }
+      
+      .form-group {
+        margin-bottom: 12px;
       }
       
       .form-actions {
         flex-direction: column;
+        padding: 0 12px 12px;
+        gap: 12px;
+      }
+      
+      .settings-card {
+        margin-bottom: 16px;
       }
     }
 

@@ -35,41 +35,59 @@ export class AppRoot extends LitElement {
     }
 
     .app-header {
-      background: var(--md-sys-color-primary);
-      color: var(--md-sys-color-on-primary);
-      padding: 1rem;
+      background: var(--md-sys-color-surface-container);
+      color: var(--md-sys-color-on-surface);
+      padding: 0 16px;
+      height: 64px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.12), 0 1px 2px 0 rgba(0, 0, 0, 0.24);
+      position: relative;
+      z-index: 4;
     }
 
     .app-title {
       margin: 0;
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 28px;
+      letter-spacing: 0px;
     }
 
     .header-actions {
       display: flex;
-      gap: 0.5rem;
+      gap: 4px;
     }
 
     .header-content {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 16px;
+      min-width: 0;
+      flex: 1;
     }
 
     .header-actions md-text-button {
-      --md-text-button-label-text-color: var(--md-sys-color-on-primary);
+      --md-text-button-label-text-color: var(--md-sys-color-on-surface);
+      --md-text-button-with-icon-spacing: 8px;
+      --md-text-button-container-height: 40px;
+      --md-text-button-container-shape: 20px;
+      min-width: 40px;
     }
 
     .app-header md-text-button {
-      --md-text-button-label-text-color: var(--md-sys-color-on-primary);
+      --md-text-button-label-text-color: var(--md-sys-color-on-surface);
+      --md-text-button-with-icon-spacing: 8px;
+      --md-text-button-container-height: 40px;
+      --md-text-button-container-shape: 20px;
+      min-width: 40px;
     }
 
     .header-actions md-text-button md-icon,
     .app-header md-text-button md-icon {
-      color: var(--md-sys-color-on-primary);
+      color: var(--md-sys-color-on-surface);
+      font-size: 24px;
     }
 
     .app-content {
@@ -140,12 +158,33 @@ export class AppRoot extends LitElement {
 
     @media (max-width: 768px) {
       .app-header {
-        padding: 0.75rem;
+        padding: 0 12px;
+        height: 56px;
       }
       
+      .app-title {
+        font-size: 20px;
+        line-height: 24px;
+      }
       
-      .header-actions md-text-button {
-        font-size: 0.875rem;
+      .header-content {
+        gap: 12px;
+      }
+      
+      .header-actions {
+        gap: 2px;
+      }
+      
+      .header-actions md-text-button,
+      .app-header md-text-button {
+        --md-text-button-container-height: 36px;
+        --md-text-button-container-shape: 18px;
+        min-width: 36px;
+      }
+      
+      .header-actions md-text-button md-icon,
+      .app-header md-text-button md-icon {
+        font-size: 20px;
       }
     }
 

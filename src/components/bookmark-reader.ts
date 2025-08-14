@@ -54,15 +54,16 @@ export class BookmarkReader extends LitElement {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.75rem 1rem;
+      padding: 12px 16px;
       background: var(--md-sys-color-surface-container);
       border-bottom: 1px solid var(--md-sys-color-outline-variant);
-      gap: 1rem;
+      gap: 16px;
+      min-height: 56px;
     }
 
     .reading-mode-toggle {
       display: flex;
-      gap: 0.5rem;
+      gap: 8px;
     }
 
     .content-source-selector {
@@ -72,21 +73,24 @@ export class BookmarkReader extends LitElement {
     .toolbar-section {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 12px;
     }
 
     .progress-section {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 8px;
       flex: 1;
       min-width: 0;
     }
 
     .progress-text {
-      font-size: 0.875rem;
+      font-size: 14px;
+      line-height: 20px;
+      letter-spacing: 0.25px;
       color: var(--md-sys-color-on-surface-variant);
       white-space: nowrap;
+      font-weight: 500;
     }
 
     .reader-content {
@@ -222,22 +226,29 @@ export class BookmarkReader extends LitElement {
     }
 
     .bookmark-header {
-      margin-bottom: 2rem;
-      padding-bottom: 1rem;
+      margin-bottom: 32px;
+      padding: 16px;
+      padding-bottom: 16px;
       border-bottom: 1px solid var(--md-sys-color-outline-variant);
     }
 
     .bookmark-title {
       color: var(--md-sys-color-on-surface);
-      margin: 0 0 0.5rem 0;
+      margin: 0 0 8px 0;
+      font-size: 28px;
+      font-weight: 400;
+      line-height: 36px;
+      letter-spacing: 0px;
     }
 
     .bookmark-meta {
       display: flex;
       align-items: center;
-      gap: 1rem;
+      gap: 16px;
       flex-wrap: wrap;
-      font-size: 0.875rem;
+      font-size: 14px;
+      line-height: 20px;
+      letter-spacing: 0.25px;
       color: var(--md-sys-color-on-surface-variant);
     }
 
@@ -315,23 +326,40 @@ export class BookmarkReader extends LitElement {
 
     @media (max-width: 768px) {
       .reader-toolbar {
-        padding: 0.5rem;
+        padding: 8px 12px;
         flex-wrap: wrap;
+        min-height: 48px;
       }
       
       .progress-section {
         order: 3;
         flex-basis: 100%;
-        margin-top: 0.5rem;
+        margin-top: 8px;
       }
       
-      .reader-content {
-        padding: 0.75rem;
+      .toolbar-section {
+        gap: 8px;
       }
       
+      .reading-mode-toggle {
+        gap: 4px;
+      }
+      
+      .bookmark-header {
+        padding: 12px;
+        margin-bottom: 24px;
+      }
+      
+      .bookmark-title {
+        font-size: 24px;
+        line-height: 32px;
+        margin-bottom: 6px;
+      }
       
       .bookmark-meta {
-        font-size: 0.8rem;
+        font-size: 12px;
+        line-height: 16px;
+        gap: 12px;
       }
     }
 

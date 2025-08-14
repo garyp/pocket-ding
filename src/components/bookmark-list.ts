@@ -67,33 +67,42 @@ export class BookmarkList extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      padding: 1rem;
+      padding: 16px;
       max-width: 800px;
       margin: 0 auto;
     }
 
     .filters {
       display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-      padding: 0 0.5rem;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 0 4px;
     }
 
     .bookmark-list {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: 16px;
     }
 
     .bookmark-card {
       cursor: pointer;
-      transition: transform 0.2s ease;
+      transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
       border: 1px solid var(--md-sys-color-outline-variant);
+      background: var(--md-sys-color-surface-container-low);
+      border-radius: 12px;
+      min-height: 48px;
     }
 
     .bookmark-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      background: var(--md-sys-color-surface-container);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      border-color: var(--md-sys-color-outline);
+    }
+
+    .bookmark-card:active {
+      background: var(--md-sys-color-surface-container-high);
+      transform: scale(0.98);
     }
 
     .bookmark-card.synced {
@@ -108,27 +117,31 @@ export class BookmarkList extends LitElement {
     }
 
     .bookmark-content {
-      padding: 1rem;
+      padding: 16px;
     }
 
     .bookmark-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 0.5rem;
+      margin-bottom: 12px;
     }
 
     .bookmark-title {
       margin: 0;
       color: var(--md-sys-color-on-surface);
       flex: 1;
-      margin-right: 1rem;
+      margin-right: 16px;
+      font-size: 16px;
+      font-weight: 400;
+      line-height: 24px;
+      letter-spacing: 0.5px;
     }
 
     .bookmark-meta {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 8px;
       flex-shrink: 0;
     }
 
@@ -141,22 +154,26 @@ export class BookmarkList extends LitElement {
     }
 
     .bookmark-description {
-      margin: 0 0 0.75rem 0;
+      margin: 0 0 12px 0;
       color: var(--md-sys-color-on-surface-variant);
-      line-height: 1.4;
+      line-height: 20px;
+      font-size: 14px;
+      letter-spacing: 0.25px;
     }
 
     .bookmark-url {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      color: var(--md-sys-color-outline);
+      gap: 8px;
+      color: var(--md-sys-color-on-surface-variant);
       text-decoration: none;
-      font-size: 0.85rem;
-      margin-bottom: 0.5rem;
-      padding: 0.25rem 0;
-      border-radius: 0.25rem;
-      transition: background-color 0.2s ease;
+      font-size: 12px;
+      line-height: 16px;
+      letter-spacing: 0.4px;
+      margin-bottom: 8px;
+      padding: 4px 0;
+      border-radius: 4px;
+      transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
     }
 
     .bookmark-url:hover {
@@ -174,24 +191,29 @@ export class BookmarkList extends LitElement {
     .bookmark-tags {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.25rem;
-      margin-bottom: 0.5rem;
+      gap: 8px;
+      margin-bottom: 8px;
     }
 
     .bookmark-progress {
-      margin-bottom: 0.5rem;
+      margin-bottom: 8px;
     }
 
     .progress-text {
-      font-size: 0.75rem;
+      font-size: 12px;
+      line-height: 16px;
+      letter-spacing: 0.4px;
       color: var(--md-sys-color-on-surface-variant);
-      margin-bottom: 0.25rem;
+      margin-bottom: 4px;
+      font-weight: 500;
     }
 
     .bookmark-date {
-      font-size: 0.75rem;
+      font-size: 12px;
+      line-height: 16px;
+      letter-spacing: 0.4px;
       color: var(--md-sys-color-outline);
-      margin-top: 0.5rem;
+      margin-top: 8px;
     }
 
     .circular-progress-48 {
@@ -205,42 +227,72 @@ export class BookmarkList extends LitElement {
       justify-content: center;
       min-height: 200px;
       flex-direction: column;
-      gap: 1rem;
+      gap: 16px;
     }
 
     .empty-state {
       text-align: center;
       color: var(--md-sys-color-on-surface-variant);
-      padding: 2rem;
+      padding: 32px;
+      background: var(--md-sys-color-surface-container-low);
+      border-radius: 16px;
+      margin: 16px 0;
     }
 
     .empty-state h3 {
-      margin: 0 0 0.5rem 0;
+      margin: 0 0 8px 0;
       color: var(--md-sys-color-on-surface);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 28px;
+      letter-spacing: 0.15px;
     }
 
     .empty-state p {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 200px;
-      flex-direction: column;
-      gap: 1rem;
+      margin: 0 0 16px 0;
+      font-size: 14px;
+      line-height: 20px;
+      letter-spacing: 0.25px;
     }
 
     @media (max-width: 768px) {
       :host {
-        padding: 0.5rem;
+        padding: 12px;
       }
       
       .bookmark-content {
-        padding: 0.75rem;
+        padding: 12px;
       }
       
+      .bookmark-header {
+        margin-bottom: 8px;
+      }
+      
+      .bookmark-title {
+        font-size: 14px;
+        line-height: 20px;
+        margin-right: 12px;
+      }
+      
+      .bookmark-description {
+        margin-bottom: 8px;
+        font-size: 12px;
+        line-height: 16px;
+      }
       
       .filters {
         padding: 0;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      
+      .bookmark-list {
+        gap: 12px;
+      }
+      
+      .empty-state {
+        padding: 24px;
+        margin: 12px 0;
       }
     }
   `;
