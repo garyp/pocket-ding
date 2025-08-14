@@ -58,6 +58,7 @@ export class BookmarkReader extends LitElement {
       background: var(--md-sys-color-surface-container);
       border-bottom: 1px solid var(--md-sys-color-outline-variant);
       gap: 1rem;
+      min-height: 3.5rem; /* 56px - consistent with other toolbars */
     }
 
     .reading-mode-toggle {
@@ -84,9 +85,12 @@ export class BookmarkReader extends LitElement {
     }
 
     .progress-text {
-      font-size: 0.875rem;
+      font-size: 0.875rem; /* 14px - Material Design body-medium */
+      line-height: 1.25rem; /* 20px */
+      letter-spacing: 0.015625rem; /* 0.25px */
       color: var(--md-sys-color-on-surface-variant);
       white-space: nowrap;
+      font-weight: 500;
     }
 
     .reader-content {
@@ -223,6 +227,7 @@ export class BookmarkReader extends LitElement {
 
     .bookmark-header {
       margin-bottom: 2rem;
+      padding: 1rem;
       padding-bottom: 1rem;
       border-bottom: 1px solid var(--md-sys-color-outline-variant);
     }
@@ -230,6 +235,10 @@ export class BookmarkReader extends LitElement {
     .bookmark-title {
       color: var(--md-sys-color-on-surface);
       margin: 0 0 0.5rem 0;
+      font-size: 1.75rem; /* 28px - Material Design headline-small */
+      font-weight: 400;
+      line-height: 2.25rem; /* 36px */
+      letter-spacing: 0;
     }
 
     .bookmark-meta {
@@ -237,7 +246,9 @@ export class BookmarkReader extends LitElement {
       align-items: center;
       gap: 1rem;
       flex-wrap: wrap;
-      font-size: 0.875rem;
+      font-size: 0.875rem; /* 14px - Material Design body-medium */
+      line-height: 1.25rem; /* 20px */
+      letter-spacing: 0.015625rem; /* 0.25px */
       color: var(--md-sys-color-on-surface-variant);
     }
 
@@ -313,10 +324,11 @@ export class BookmarkReader extends LitElement {
       margin-bottom: 0.5rem;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 48rem) { /* 768px breakpoint */
       .reader-toolbar {
-        padding: 0.5rem;
+        padding: 0.5rem 0.75rem;
         flex-wrap: wrap;
+        min-height: 3rem; /* 48px - smaller on mobile */
       }
       
       .progress-section {
@@ -325,13 +337,29 @@ export class BookmarkReader extends LitElement {
         margin-top: 0.5rem;
       }
       
-      .reader-content {
-        padding: 0.75rem;
+      .toolbar-section {
+        gap: 0.5rem;
       }
       
+      .reading-mode-toggle {
+        gap: 0.25rem;
+      }
+      
+      .bookmark-header {
+        padding: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+      
+      .bookmark-title {
+        font-size: 1.5rem; /* 24px - smaller on mobile */
+        line-height: 2rem; /* 32px */
+        margin-bottom: 0.375rem;
+      }
       
       .bookmark-meta {
-        font-size: 0.8rem;
+        font-size: 0.75rem; /* 12px - smaller on mobile */
+        line-height: 1rem; /* 16px */
+        gap: 0.75rem;
       }
     }
 
