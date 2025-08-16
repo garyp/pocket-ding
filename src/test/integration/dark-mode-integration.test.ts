@@ -125,8 +125,9 @@ describe('Dark Mode Integration', () => {
       expect(document.documentElement.className).toBe('dark');
       expect(element.classList.contains('reader-dark-mode')).toBe(true);
       
-      // Material theme should be dark (allow time for async theme loading)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Material theme should be dark (wait for async theme loading to complete)
+      // Wait for the theme service's updateInProgress promise to resolve
+      await new Promise(resolve => setTimeout(resolve, 300));
       const themeStyle = document.querySelector('style[data-material-theme]');
       expect(themeStyle?.getAttribute('data-material-theme')).toBe('dark');
     });
