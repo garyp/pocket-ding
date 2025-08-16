@@ -54,11 +54,11 @@ export class BookmarkReader extends LitElement {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.75rem 1rem;
+      padding: 0.5rem 0.75rem;
       background: var(--md-sys-color-surface-container);
       border-bottom: 1px solid var(--md-sys-color-outline-variant);
-      gap: 1rem;
-      min-height: 3.5rem; /* 56px - consistent with other toolbars */
+      gap: 0.5rem;
+      min-height: 3rem; /* 48px - reduced from 3.5rem */
     }
 
     .reading-mode-toggle {
@@ -326,23 +326,27 @@ export class BookmarkReader extends LitElement {
 
     @media (max-width: 48rem) { /* 768px breakpoint */
       .reader-toolbar {
-        padding: 0.5rem 0.75rem;
-        flex-wrap: wrap;
-        min-height: 3rem; /* 48px - smaller on mobile */
+        padding: 0.25rem 0.5rem;
+        flex-wrap: nowrap;
+        min-height: 2.75rem; /* 44px - reduced from 3rem */
+        gap: 0.25rem;
       }
       
       .progress-section {
-        order: 3;
-        flex-basis: 100%;
-        margin-top: 0.5rem;
+        /* Remove wrapping - keep inline */
+        /* order: 3; */
+        /* flex-basis: 100%; */
+        /* margin-top: 0.5rem; */
+        flex: 1;
+        min-width: 0;
       }
       
       .toolbar-section {
-        gap: 0.5rem;
+        gap: 0.25rem;
       }
       
       .reading-mode-toggle {
-        gap: 0.25rem;
+        gap: 0.125rem;
       }
       
       .bookmark-header {
