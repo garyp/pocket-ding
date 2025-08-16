@@ -63,20 +63,26 @@ export class PaginationControls extends LitElement {
 
     @media (max-width: 768px) {
       :host {
-        flex-direction: column;
-        gap: 0.75rem;
+        padding: 0.5rem;
+        gap: 0.25rem;
+      }
+
+      .page-button {
+        min-width: 32px;
+        height: 32px;
+      }
+
+      .ellipsis {
+        min-width: 32px;
+        height: 32px;
+      }
+
+      .page-input {
+        width: 50px;
       }
 
       .pagination-info {
-        order: 1;
-      }
-
-      .nav-buttons {
-        order: 2;
-      }
-
-      .page-numbers {
-        order: 3;
+        font-size: 0.75rem;
       }
     }
   `;
@@ -86,8 +92,12 @@ export class PaginationControls extends LitElement {
     const totalPages = Math.max(1, this.totalPages);
     const current = Math.min(Math.max(1, this.currentPage), totalPages);
 
-    if (totalPages <= 7) {
-      // Show all pages if 7 or fewer
+    // On mobile, show fewer page numbers to prevent overflow
+    const isMobile = window.innerWidth <= 768;
+    const maxPages = isMobile ? 5 : 7;
+
+    if (totalPages <= maxPages) {
+      // Show all pages if within limit
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
       }
@@ -95,27 +105,51 @@ export class PaginationControls extends LitElement {
       // Always show first page
       pages.push(1);
 
-      if (current <= 4) {
-        // Near the beginning
-        for (let i = 2; i <= 5; i++) {
-          pages.push(i);
-        }
-        pages.push(-1); // Ellipsis
-        pages.push(totalPages);
-      } else if (current >= totalPages - 3) {
-        // Near the end
-        pages.push(-1); // Ellipsis
-        for (let i = totalPages - 4; i <= totalPages; i++) {
-          pages.push(i);
+      if (isMobile) {
+        // Mobile: show minimal pages
+        if (current <= 3) {
+          // Near the beginning
+          pages.push(2);
+          pages.push(3);
+          pages.push(-1); // Ellipsis
+          pages.push(totalPages);
+        } else if (current >= totalPages - 2) {
+          // Near the end
+          pages.push(-1); // Ellipsis
+          pages.push(totalPages - 2);
+          pages.push(totalPages - 1);
+          pages.push(totalPages);
+        } else {
+          // In the middle
+          pages.push(-1); // Ellipsis
+          pages.push(current);
+          pages.push(-1); // Ellipsis
+          pages.push(totalPages);
         }
       } else {
-        // In the middle
-        pages.push(-1); // Ellipsis
-        for (let i = current - 1; i <= current + 1; i++) {
-          pages.push(i);
+        // Desktop: show more pages
+        if (current <= 4) {
+          // Near the beginning
+          for (let i = 2; i <= 5; i++) {
+            pages.push(i);
+          }
+          pages.push(-1); // Ellipsis
+          pages.push(totalPages);
+        } else if (current >= totalPages - 3) {
+          // Near the end
+          pages.push(-1); // Ellipsis
+          for (let i = totalPages - 4; i <= totalPages; i++) {
+            pages.push(i);
+          }
+        } else {
+          // In the middle
+          pages.push(-1); // Ellipsis
+          for (let i = current - 1; i <= current + 1; i++) {
+            pages.push(i);
+          }
+          pages.push(-1); // Ellipsis
+          pages.push(totalPages);
         }
-        pages.push(-1); // Ellipsis
-        pages.push(totalPages);
       }
     }
 
@@ -209,19 +243,25 @@ export class PaginationControls extends LitElement {
         </md-text-button>
       </div>
 
-      <div class="pagination-info">
-        <span>Page</span>
-        <md-outlined-text-field
-          class="page-input"
-          type="number"
-          .value=${this.currentPage.toString()}
-          min="1"
-          max=${this.totalPages.toString()}
-          ?disabled=${this.disabled}
-          @keydown=${this.handlePageInputKeydown}
-        ></md-outlined-text-field>
-        <span>of ${this.totalPages}</span>
-      </div>
+      ${window.innerWidth > 768 ? html`
+        <div class="pagination-info">
+          <span>Page</span>
+          <md-outlined-text-field
+            class="page-input"
+            type="number"
+            .value=${this.currentPage.toString()}
+            min="1"
+            max=${this.totalPages.toString()}
+            ?disabled=${this.disabled}
+            @keydown=${this.handlePageInputKeydown}
+          ></md-outlined-text-field>
+          <span>of ${this.totalPages}</span>
+        </div>
+      ` : html`
+        <div class="pagination-info">
+          <span>${this.currentPage} of ${this.totalPages}</span>
+        </div>
+      `}
     `;
   }
 }
