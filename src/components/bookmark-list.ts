@@ -496,13 +496,10 @@ export class BookmarkList extends LitElement {
                 <md-icon class="read-icon" title="Read">drafts</md-icon>
               `}
               ${bookmark.is_archived ? html`
-                <md-badge>Archived</md-badge>
+                <md-badge value="Archived"></md-badge>
               ` : ''}
               ${this.bookmarksWithAssets.has(bookmark.id) ? html`
-                <md-badge>
-                  <md-icon slot="icon">download</md-icon>
-                  Cached
-                </md-badge>
+                <md-badge value="Cached"></md-badge>
               ` : ''}
             </div>
           </div>
@@ -524,7 +521,7 @@ export class BookmarkList extends LitElement {
           ${bookmark.tag_names.length > 0 ? html`
             <div class="bookmark-tags">
               ${bookmark.tag_names.map(tag => html`
-                <md-badge>${tag}</md-badge>
+                <md-badge value="${tag}"></md-badge>
               `)}
             </div>
           ` : ''}

@@ -350,10 +350,7 @@ export class BookmarkListContainer extends LitElement {
                 : 'Starting sync...'
               }
             </span>
-            <md-badge class="sync-badge">
-              <md-icon slot="icon">sync</md-icon>
-              Syncing
-            </md-badge>
+            <md-badge class="sync-badge" value="Syncing"></md-badge>
           </div>
           <md-linear-progress 
             .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
