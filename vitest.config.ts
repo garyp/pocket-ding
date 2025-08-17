@@ -9,7 +9,8 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/playwright/**',
-      '**/src/test/playwright/**'
+      '**/src/test/playwright/**',
+      '**/tests/**'
     ],
     deps: {
       inline: [/^lit/, /^@lit/, /^@shoelace-style/]
