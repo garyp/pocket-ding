@@ -617,13 +617,6 @@ export class BookmarkList extends LitElement {
           </md-filled-button>
         </div>
       ` : html`
-        <pagination-controls
-          .currentPage=${this.paginationState.currentPage}
-          .totalPages=${this.paginationState.totalPages}
-          .disabled=${this.isLoading}
-          .onPageChange=${this.handlePageChange}
-        ></pagination-controls>
-        
         <div class="bookmark-list">
           ${bookmarks.map(bookmark => this.renderBookmark(bookmark))}
         </div>
