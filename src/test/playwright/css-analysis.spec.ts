@@ -148,7 +148,7 @@ test.describe('CSS Analysis and Visual Validation', () => {
       
       // Take screenshot
       await page.screenshot({ 
-        path: `toolbar-${size.name}.png`, 
+        path: `images/toolbar-${size.name}.png`, 
         fullPage: false,
         clip: { x: 0, y: 0, width: size.width, height: Math.min(200, size.height) }
       });

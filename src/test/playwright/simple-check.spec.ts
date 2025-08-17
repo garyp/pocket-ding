@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 test('App loads successfully', async ({ page }) => {
   await page.goto('/');
@@ -7,7 +7,7 @@ test('App loads successfully', async ({ page }) => {
   await page.waitForSelector('app-root', { timeout: 10000 });
   
   // Take a screenshot to see what's happening
-  await page.screenshot({ path: 'app-loaded.png', fullPage: true });
+  await page.screenshot({ path: 'images/app-loaded.png', fullPage: true });
   
   // Check if we can enter mock mode
   await page.evaluate(() => {
@@ -18,7 +18,7 @@ test('App loads successfully', async ({ page }) => {
   await page.waitForSelector('bookmark-list', { timeout: 15000 });
   
   // Take another screenshot
-  await page.screenshot({ path: 'mock-mode.png', fullPage: true });
+  await page.screenshot({ path: 'images/mock-mode.png', fullPage: true });
   
   console.log('App loaded successfully in mock mode');
 });

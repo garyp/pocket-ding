@@ -53,7 +53,7 @@ test.describe('Reader Component Direct Test', () => {
     console.log(`Desktop toolbar height: ${desktopHeight}px`);
     
     // Take desktop screenshot
-    await page.screenshot({ path: 'reader-desktop-direct.png', fullPage: false });
+    await page.screenshot({ path: 'images/reader-desktop-direct.png', fullPage: false });
     
     // Test tablet size
     await page.setViewportSize({ width: 768, height: 1024 });
@@ -63,7 +63,7 @@ test.describe('Reader Component Direct Test', () => {
     console.log(`Tablet toolbar height: ${tabletHeight}px`);
     
     // Take tablet screenshot
-    await page.screenshot({ path: 'reader-tablet-direct.png', fullPage: false });
+    await page.screenshot({ path: 'images/reader-tablet-direct.png', fullPage: false });
     
     // Test mobile size
     await page.setViewportSize({ width: 390, height: 844 });
@@ -73,7 +73,7 @@ test.describe('Reader Component Direct Test', () => {
     console.log(`Mobile toolbar height: ${mobileHeight}px`);
     
     // Take mobile screenshot
-    await page.screenshot({ path: 'reader-mobile-direct.png', fullPage: false });
+    await page.screenshot({ path: 'images/reader-mobile-direct.png', fullPage: false });
     
     // Verify the heights are within expected ranges
     expect(desktopHeight).toBeLessThan(50); // Should be ~40px
