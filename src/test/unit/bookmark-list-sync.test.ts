@@ -328,10 +328,10 @@ describe('BookmarkListContainer Background Sync', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
       await element.updateComplete;
 
-      // Check for cached badge by looking for download icon
+      // Check for cached badge
       const presentationComponent = getPresentationComponent();
-      const downloadIcon = [...(presentationComponent?.shadowRoot?.querySelectorAll('md-icon') || [])].find(icon => icon.textContent === 'download');
-      expect(downloadIcon).toBeTruthy();
+      const cachedBadge = [...(presentationComponent?.shadowRoot?.querySelectorAll('md-badge') || [])].find(badge => badge.getAttribute('value') === 'Cached');
+      expect(cachedBadge).toBeTruthy();
     });
   });
 

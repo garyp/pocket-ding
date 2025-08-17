@@ -202,7 +202,7 @@ describe('BookmarkList', () => {
       
       const firstBookmarkTags = tags?.[0]?.querySelectorAll('md-badge');
       expect(firstBookmarkTags).toHaveLength(1);
-      expect(firstBookmarkTags?.[0]?.textContent).toBe('test');
+      expect(firstBookmarkTags?.[0]?.getAttribute('value')).toBe('test');
     });
 
     it('should show read/unread status correctly', async () => {
