@@ -191,8 +191,37 @@ export class BookmarkList extends LitElement {
     .bookmark-tags {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.25rem;
+      gap: 0.5rem;
       margin-bottom: 0.5rem;
+    }
+
+    .tag-badge {
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.25rem 0.5rem;
+      border-radius: 1rem;
+      white-space: nowrap;
+      border: 1px solid var(--md-sys-color-outline-variant);
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .status-icon {
+      color: var(--md-sys-color-primary);
+    }
+
+    .status-icon.archived {
+      color: var(--md-sys-color-tertiary);
+    }
+
+    .status-icon.cached {
+      color: var(--md-sys-color-secondary);
     }
 
     .bookmark-progress {
@@ -490,17 +519,19 @@ export class BookmarkList extends LitElement {
           <div class="bookmark-header">
             <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
             <div class="bookmark-meta">
-              ${bookmark.unread ? html`
-                <md-icon class="unread-icon" title="Unread">email</md-icon>
-              ` : html`
-                <md-icon class="read-icon" title="Read">drafts</md-icon>
-              `}
-              ${bookmark.is_archived ? html`
-                <md-badge value="Archived"></md-badge>
-              ` : ''}
-              ${this.bookmarksWithAssets.has(bookmark.id) ? html`
-                <md-badge value="Cached"></md-badge>
-              ` : ''}
+              <div class="status-icons">
+                ${bookmark.unread ? html`
+                  <md-icon class="unread-icon" title="Unread">email</md-icon>
+                ` : html`
+                  <md-icon class="read-icon" title="Read">drafts</md-icon>
+                `}
+                ${bookmark.is_archived ? html`
+                  <md-icon class="status-icon archived" title="Archived">archive</md-icon>
+                ` : ''}
+                ${this.bookmarksWithAssets.has(bookmark.id) ? html`
+                  <md-icon class="status-icon cached" title="Cached">download_done</md-icon>
+                ` : ''}
+              </div>
             </div>
           </div>
           
@@ -521,7 +552,7 @@ export class BookmarkList extends LitElement {
           ${bookmark.tag_names.length > 0 ? html`
             <div class="bookmark-tags">
               ${bookmark.tag_names.map(tag => html`
-                <md-badge value="${tag}"></md-badge>
+                <span class="tag-badge">${tag}</span>
               `)}
             </div>
           ` : ''}
