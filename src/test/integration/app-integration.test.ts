@@ -568,11 +568,9 @@ describe('App Integration Tests', () => {
 
       await waitFor(() => {
         const title = findTextInShadowDOM(bookmarkReader, 'Test Article 1');
-        const readerButton = findTextInShadowDOM(bookmarkReader, 'Reader');
-        const originalButton = findTextInShadowDOM(bookmarkReader, 'Original');
+        const processingToggle = bookmarkReader.shadowRoot?.querySelector('.processing-mode-toggle md-filled-icon-button, .processing-mode-toggle md-icon-button');
         expect(title).toBeTruthy();
-        expect(readerButton).toBeTruthy();
-        expect(originalButton).toBeTruthy();
+        expect(processingToggle).toBeTruthy();
       });
     });
 
@@ -591,17 +589,17 @@ describe('App Integration Tests', () => {
       });
 
       await waitFor(() => {
-        const readerButton = findButtonByText(bookmarkReader, 'Reader') as HTMLElement;
-        expect(readerButton).toBeTruthy();
+        const processingToggle = bookmarkReader.shadowRoot?.querySelector('.processing-mode-toggle md-filled-icon-button, .processing-mode-toggle md-icon-button') as HTMLElement;
+        expect(processingToggle).toBeTruthy();
       });
 
-      // Should start in reader mode
-      const readerButton = findButtonByText(bookmarkReader, 'Reader') as HTMLElement;
-      expect(readerButton?.tagName.toLowerCase()).toBe('md-filled-button');
+      // Should start in readable mode (filled icon button)
+      const processingToggle = bookmarkReader.shadowRoot?.querySelector('.processing-mode-toggle md-filled-icon-button') as HTMLElement;
+      expect(processingToggle).toBeTruthy();
 
-      // Switch to original mode
-      const originalButton = findButtonByText(bookmarkReader, 'Original') as HTMLElement;
-      await user.click(originalButton);
+      // Switch to raw mode by clicking the toggle
+      const toggleButton = bookmarkReader.shadowRoot?.querySelector('.processing-mode-toggle md-filled-icon-button, .processing-mode-toggle md-icon-button') as HTMLElement;
+      await user.click(toggleButton);
       await bookmarkReader.updateComplete;
 
       // Wait a bit for the mode change to process

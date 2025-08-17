@@ -669,22 +669,21 @@ describe('Reading Progress Integration Tests', () => {
       await simulateScroll(240, 1000, 400);
       expect(getProgressText()).toContain('40% read');
 
-      // Find the original button (currently not primary since we start in readability mode)
-      const originalButton = element.shadowRoot?.querySelector('.reading-mode-toggle md-text-button:nth-child(2)') as HTMLElement;
-      expect(originalButton?.textContent?.trim()).toBe('Original');
+      // Find the processing mode toggle (should be in readable mode with filled icon button)
+      const processingToggle = element.shadowRoot?.querySelector('.processing-mode-toggle md-filled-icon-button, .processing-mode-toggle md-icon-button') as HTMLElement;
+      expect(processingToggle).toBeTruthy();
       
-      originalButton?.click();
+      processingToggle?.click();
       await element.updateComplete;
 
       // Progress should be maintained
       expect(getProgressText()).toContain('40% read');
 
-      // Switch back to readability mode
-      const readerButton = Array.from(element.shadowRoot?.querySelectorAll('.reading-mode-toggle md-text-button, .reading-mode-toggle md-filled-button') || [])
-        .find(btn => btn.textContent?.trim() === 'Reader') as HTMLElement;
-      expect(readerButton?.textContent?.trim()).toBe('Reader');
+      // Switch back to readability mode by clicking the toggle again
+      const processingToggleAgain = element.shadowRoot?.querySelector('.processing-mode-toggle md-filled-icon-button, .processing-mode-toggle md-icon-button') as HTMLElement;
+      expect(processingToggleAgain).toBeTruthy();
       
-      readerButton?.click();
+      processingToggleAgain?.click();
       await element.updateComplete;
 
       // Progress should still be maintained
