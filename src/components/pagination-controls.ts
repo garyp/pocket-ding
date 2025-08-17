@@ -19,7 +19,9 @@ export class PaginationControls extends LitElement {
       justify-content: center;
       gap: 0.5rem;
       padding: 1rem;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      min-height: 56px;
     }
 
     .pagination-info {
@@ -28,28 +30,35 @@ export class PaginationControls extends LitElement {
       gap: 0.5rem;
       color: var(--md-sys-color-on-surface);
       font-size: 0.875rem;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .page-input {
       width: 60px;
+      flex-shrink: 0;
     }
 
     .page-numbers {
       display: flex;
       align-items: center;
       gap: 0.25rem;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      flex-shrink: 1;
+      min-width: 0;
     }
 
     .page-button {
       min-width: 40px;
       height: 40px;
+      flex-shrink: 0;
     }
 
     .nav-buttons {
       display: flex;
       align-items: center;
       gap: 0.25rem;
+      flex-shrink: 0;
     }
 
     .ellipsis {
@@ -59,22 +68,26 @@ export class PaginationControls extends LitElement {
       min-width: 40px;
       height: 40px;
       color: var(--md-sys-color-on-surface-variant);
+      flex-shrink: 0;
     }
 
     @media (max-width: 768px) {
       :host {
         padding: 0.5rem;
         gap: 0.25rem;
+        min-height: 48px;
       }
 
       .page-button {
-        min-width: 32px;
-        height: 32px;
+        min-width: 28px;
+        height: 28px;
+        font-size: 0.75rem;
       }
 
       .ellipsis {
-        min-width: 32px;
-        height: 32px;
+        min-width: 28px;
+        height: 28px;
+        font-size: 0.75rem;
       }
 
       .pagination-info {
@@ -82,7 +95,29 @@ export class PaginationControls extends LitElement {
       }
 
       .page-input {
-        width: 50px;
+        width: 40px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      :host {
+        gap: 0.125rem;
+        padding: 0.25rem;
+      }
+      
+      .page-button {
+        min-width: 24px;
+        height: 24px;
+        font-size: 0.7rem;
+      }
+
+      .ellipsis {
+        min-width: 24px;
+        height: 24px;
+      }
+
+      .page-input {
+        width: 36px;
       }
     }
   `;
@@ -92,9 +127,17 @@ export class PaginationControls extends LitElement {
     const totalPages = Math.max(1, this.totalPages);
     const current = Math.min(Math.max(1, this.currentPage), totalPages);
     
-    // Check if mobile viewport (≤768px)
-    const isMobile = window.innerWidth <= 768;
-    const maxVisiblePages = isMobile ? 5 : 7;
+    // Responsive page number limits based on viewport
+    const width = window.innerWidth;
+    let maxVisiblePages: number;
+    
+    if (width <= 480) {
+      maxVisiblePages = 3; // Very narrow screens: show only 3 pages max
+    } else if (width <= 768) {
+      maxVisiblePages = 4; // Mobile: show 4 pages max  
+    } else {
+      maxVisiblePages = 7; // Desktop: show up to 7 pages
+    }
 
     if (totalPages <= maxVisiblePages) {
       // Show all pages if within limit
@@ -105,21 +148,37 @@ export class PaginationControls extends LitElement {
       // Always show first page
       pages.push(1);
 
-      if (isMobile) {
-        // Mobile layout: show fewer pages
-        if (current <= 3) {
-          // Near the beginning
-          for (let i = 2; i <= 3; i++) {
+      if (width <= 480) {
+        // Very narrow screens: minimal pagination
+        if (totalPages <= 3) {
+          for (let i = 2; i <= totalPages; i++) {
             pages.push(i);
           }
+        } else {
+          // Just show current or last page with ellipsis
+          if (current !== 1 && current !== totalPages) {
+            pages.push(-1); // Ellipsis
+          }
+          if (current !== 1 && current !== totalPages) {
+            pages.push(current);
+          }
+          if (totalPages > 1) {
+            pages.push(-1); // Ellipsis
+            pages.push(totalPages);
+          }
+        }
+      } else if (width <= 768) {
+        // Mobile layout: show fewer pages
+        if (current <= 2) {
+          // Near the beginning
+          if (totalPages > 2) pages.push(2);
           pages.push(-1); // Ellipsis
           pages.push(totalPages);
-        } else if (current >= totalPages - 2) {
+        } else if (current >= totalPages - 1) {
           // Near the end
           pages.push(-1); // Ellipsis
-          for (let i = totalPages - 2; i <= totalPages; i++) {
-            pages.push(i);
-          }
+          if (totalPages > 2) pages.push(totalPages - 1);
+          if (totalPages > 1) pages.push(totalPages);
         } else {
           // In the middle
           pages.push(-1); // Ellipsis
@@ -131,16 +190,16 @@ export class PaginationControls extends LitElement {
         // Desktop layout: show more pages
         if (current <= 4) {
           // Near the beginning
-          for (let i = 2; i <= 5; i++) {
+          for (let i = 2; i <= Math.min(5, totalPages - 1); i++) {
             pages.push(i);
           }
-          pages.push(-1); // Ellipsis
+          if (totalPages > 5) pages.push(-1); // Ellipsis
           pages.push(totalPages);
         } else if (current >= totalPages - 3) {
           // Near the end
           pages.push(-1); // Ellipsis
-          for (let i = totalPages - 4; i <= totalPages; i++) {
-            pages.push(i);
+          for (let i = Math.max(2, totalPages - 4); i <= totalPages; i++) {
+            if (i !== 1) pages.push(i);
           }
         } else {
           // In the middle
