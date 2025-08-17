@@ -68,6 +68,7 @@ export class BookmarkReader extends LitElement {
 
     .content-source-selector {
       min-width: 120px;
+      max-width: 200px;
     }
 
     .toolbar-section {
@@ -330,6 +331,11 @@ export class BookmarkReader extends LitElement {
         flex-wrap: nowrap;
         min-height: 2.75rem; /* 44px - reduced from 3rem */
         gap: 0.25rem;
+      }
+      
+      .content-source-selector {
+        min-width: 80px;
+        max-width: 140px;
       }
       
       .progress-section {
