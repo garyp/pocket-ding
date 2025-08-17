@@ -200,9 +200,9 @@ describe('BookmarkList', () => {
       const tags = element.shadowRoot?.querySelectorAll('.bookmark-tags');
       expect(tags).toHaveLength(2);
       
-      const firstBookmarkTags = tags?.[0]?.querySelectorAll('md-badge');
+      const firstBookmarkTags = tags?.[0]?.querySelectorAll('.tag-badge');
       expect(firstBookmarkTags).toHaveLength(1);
-      expect(firstBookmarkTags?.[0]?.getAttribute('value')).toBe('test');
+      expect(firstBookmarkTags?.[0]?.textContent).toBe('test');
     });
 
     it('should show read/unread status correctly', async () => {
@@ -225,6 +225,72 @@ describe('BookmarkList', () => {
       const readIcon = element.shadowRoot?.querySelector('.bookmark-card:last-child .read-icon');
       expect(readIcon).toBeTruthy();
       expect(readIcon?.textContent).toBe('drafts');
+    });
+
+    it('should show archive icon for archived bookmarks', async () => {
+      // Create archived bookmark
+      const archivedBookmark: LocalBookmark[] = [
+        {
+          ...mockBookmarks[0],
+          id: 3,
+          is_archived: true,
+        } as LocalBookmark
+      ];
+
+      element = new BookmarkList();
+      element.bookmarks = archivedBookmark;
+      element.isLoading = false;
+      element.bookmarksWithAssets = new Set();
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'archived' // Use archived filter to show archived bookmarks
+      };
+      
+      document.body.appendChild(element);
+      await element.updateComplete;
+      
+      // Should have archive icon
+      const archivedIcon = element.shadowRoot?.querySelector('.bookmark-card:first-child .status-icon.archived');
+      expect(archivedIcon).toBeTruthy();
+      expect(archivedIcon?.textContent).toBe('archive');
+    });
+
+    it('should show cached icon for bookmarks with assets', async () => {
+      // Create non-archived bookmark
+      const cachedBookmark: LocalBookmark[] = [
+        {
+          ...mockBookmarks[1],
+          id: 4,
+          is_archived: false,
+        } as LocalBookmark
+      ];
+
+      element = new BookmarkList();
+      element.bookmarks = cachedBookmark;
+      element.isLoading = false;
+      element.bookmarksWithAssets = new Set([4]); // Mark bookmark as cached
+      element.faviconCache = new Map();
+      element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all' // Use all filter for non-archived bookmarks
+      };
+      
+      document.body.appendChild(element);
+      await element.updateComplete;
+      
+      // Should have cached icon
+      const cachedIcon = element.shadowRoot?.querySelector('.bookmark-card:first-child .status-icon.cached');
+      expect(cachedIcon).toBeTruthy();
+      expect(cachedIcon?.textContent).toBe('download_done');
     });
   });
 });
