@@ -243,7 +243,7 @@ describe('ContentFetcher', () => {
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
-      expect(sources).toHaveLength(3); // 2 assets + Readability
+      expect(sources).toHaveLength(3); // 2 assets + Live URL
       expect(sources[0]).toEqual({
         type: 'asset',
         label: 'Page Snapshot',
@@ -255,8 +255,8 @@ describe('ContentFetcher', () => {
         assetId: 2,
       });
       expect(sources[2]).toEqual({
-        type: 'readability',
-        label: 'Readability',
+        type: 'url',
+        label: 'Live URL',
       });
     });
 
@@ -265,7 +265,11 @@ describe('ContentFetcher', () => {
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
-      expect(sources).toHaveLength(0); // No assets, no readability
+      expect(sources).toHaveLength(1); // No assets, but still have Live URL
+      expect(sources[0]).toEqual({
+        type: 'url',
+        label: 'Live URL',
+      });
     });
 
     it('should handle assets with missing display name', async () => {
@@ -508,7 +512,7 @@ describe('ContentFetcher', () => {
 
       const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
 
-      expect(sources).toHaveLength(3); // 2 assets + Readability
+      expect(sources).toHaveLength(3); // 2 assets + Live URL
       expect(sources[0]).toEqual({
         type: 'asset',
         label: 'Page Snapshot (on-demand)',
@@ -520,8 +524,8 @@ describe('ContentFetcher', () => {
         assetId: 2,
       });
       expect(sources[2]).toEqual({
-        type: 'readability',
-        label: 'Readability',
+        type: 'url',
+        label: 'Live URL',
       });
     });
 

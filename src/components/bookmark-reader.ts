@@ -488,12 +488,12 @@ export class BookmarkReader extends LitElement {
         this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
         
         // Determine content source type (prefer saved artifacts if available)
-        const hasAssets = this.availableContentSources.some(source => source.type === 'asset');
-        this.contentSourceType = hasAssets ? 'saved' : 'live';
+        const assetSources = this.availableContentSources.filter(source => source.type === 'asset');
+        this.contentSourceType = assetSources.length > 0 ? 'saved' : 'live';
         
-        // Set default content source based on type
-        if (this.contentSourceType === 'saved') {
-          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'asset') || null;
+        // Set default content source - prefer first asset or URL
+        if (assetSources.length > 0) {
+          this.selectedContentSource = assetSources[0] || null;
         } else {
           this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
         }
@@ -666,24 +666,49 @@ export class BookmarkReader extends LitElement {
   // Remove the old handleReadingModeChange method since we now use handleProcessingModeToggle
 
   private async handleContentSourceChange(event: any) {
-    const selectedType = event.target.value as 'saved' | 'live';
+    const selectedValue = event.target.value;
     
-    if (selectedType !== this.contentSourceType) {
-      this.contentSourceType = selectedType;
+    // Check if it's a general type selection (saved/live) or specific source selection
+    if (selectedValue === 'saved' || selectedValue === 'live') {
+      // Handle type-based selection (for single asset case)
+      const selectedType = selectedValue as 'saved' | 'live';
+      if (selectedType !== this.contentSourceType) {
+        this.contentSourceType = selectedType;
+        
+        // Select appropriate content source based on type
+        if (selectedType === 'saved') {
+          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'asset') || null;
+        } else {
+          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
+        }
+        
+        if (this.selectedContentSource) {
+          await this.loadContent();
+          this.scrollPosition = 0;
+          this.saveProgress();
+        }
+      }
+    } else {
+      // Handle specific source selection (for multiple assets)
+      const sourceKey = selectedValue;
+      let newSource: ContentSourceOption | null = null;
       
-      // Select appropriate content source based on type
-      if (selectedType === 'saved') {
-        this.selectedContentSource = this.availableContentSources.find(source => source.type === 'asset') || null;
+      if (sourceKey === 'live') {
+        newSource = this.availableContentSources.find(source => source.type === 'url') || null;
+        this.contentSourceType = 'live';
       } else {
-        this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
+        // Parse asset ID from value like "asset-123"
+        const assetId = parseInt(sourceKey.replace('asset-', ''));
+        newSource = this.availableContentSources.find(source => 
+          source.type === 'asset' && source.assetId === assetId
+        ) || null;
+        this.contentSourceType = 'saved';
       }
       
-      if (this.selectedContentSource) {
+      if (newSource && newSource !== this.selectedContentSource) {
+        this.selectedContentSource = newSource;
         await this.loadContent();
-        
-        // Reset scroll position when changing content source
         this.scrollPosition = 0;
-        
         this.saveProgress();
       }
     }
@@ -759,6 +784,18 @@ export class BookmarkReader extends LitElement {
     }
     return 'Live URL';
   }
+  
+  private getCurrentSourceValue(): string {
+    if (this.selectedContentSource?.type === 'asset' && this.selectedContentSource.assetId) {
+      return `asset-${this.selectedContentSource.assetId}`;
+    }
+    return this.contentSourceType;
+  }
+  
+  private shouldShowIndividualAssets(): boolean {
+    const assetSources = this.availableContentSources.filter(s => s.type === 'asset');
+    return assetSources.length > 1;
+  }
 
   override render() {
     if (this.isLoading) {
@@ -786,14 +823,23 @@ export class BookmarkReader extends LitElement {
             <!-- Content Source Selection -->
             <md-outlined-select
               class="content-source-selector"
-              .value=${this.contentSourceType}
+              .value=${this.getCurrentSourceValue()}
               @change=${this.handleContentSourceChange}
             >
-              ${this.availableContentSources.some(s => s.type === 'asset') ? html`
-                <md-select-option value="saved">
-                  ${this.getContentSourceLabel('saved')}
-                </md-select-option>
-              ` : ''}
+              ${this.shouldShowIndividualAssets() ? 
+                // Show individual assets when multiple exist
+                this.availableContentSources.filter(s => s.type === 'asset').map(source => html`
+                  <md-select-option value="asset-${source.assetId}">
+                    ${source.label}
+                  </md-select-option>
+                `) :
+                // Show simple "Saved" option when only one asset
+                this.availableContentSources.some(s => s.type === 'asset') ? html`
+                  <md-select-option value="saved">
+                    ${this.getContentSourceLabel('saved')}
+                  </md-select-option>
+                ` : ''
+              }
               <md-select-option value="live">
                 ${this.getContentSourceLabel('live')}
               </md-select-option>

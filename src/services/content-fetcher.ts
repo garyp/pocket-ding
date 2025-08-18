@@ -381,13 +381,11 @@ export class ContentFetcher {
       });
     }
     
-    // Readability is available when there are assets to process
-    if (completedAssets.length > 0) {
-      sources.push({
-        type: 'readability',
-        label: 'Readability'
-      });
-    }
+    // Always add URL source as fallback
+    sources.push({
+      type: 'url',
+      label: 'Live URL'
+    });
     
     return sources;
   }
