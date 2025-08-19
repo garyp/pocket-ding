@@ -194,7 +194,7 @@ export class ContentFetcher {
       });
 
       const article = reader.parse();
-      let content = article?.content || html;
+      let content = article?.content || '';
       
       // Inject bookmark header for readability content
       if (bookmark && content) {
@@ -204,7 +204,7 @@ export class ContentFetcher {
       return content;
     } catch (error) {
       console.error('Failed to process with Readability:', error);
-      return html;
+      return '';
     }
   }
 
