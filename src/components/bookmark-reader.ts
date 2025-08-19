@@ -763,8 +763,6 @@ export class BookmarkReader extends LitElement {
       <secure-iframe
         class="secure-iframe"
         .content=${content}
-        .bookmark=${this.bookmark}
-        .isReadabilityMode=${this.readingMode === 'readability'}
         .scrollPosition=${this.scrollPosition}
         @progress-update=${this.handleIframeProgressUpdate}
         @content-loaded=${this.handleIframeContentLoaded}

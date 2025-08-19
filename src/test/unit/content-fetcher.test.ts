@@ -139,7 +139,9 @@ describe('ContentFetcher', () => {
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
       expect(result.content).toContain('Asset Content');
-      expect(result.readability_content).toBe('<p>Processed content</p>');
+      expect(result.readability_content).toContain('pocket-ding-header');
+      expect(result.readability_content).toContain('<p>Processed content</p>');
+      expect(result.readability_content).toContain('Test Article');
       expect(result.source).toBe('asset');
     });
 

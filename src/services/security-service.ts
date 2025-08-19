@@ -8,9 +8,7 @@ export class SecurityService {
    * Uses DOMParser approach as specified in requirements
    */
   static async prepareSingleFileContent(
-    singleFileHtml: string, 
-    bookmark?: { id: number; title: string; url: string; date_added: string },
-    isReadabilityMode: boolean = false
+    singleFileHtml: string
   ): Promise<string> {
     let contentToProcess = singleFileHtml;
     
@@ -40,11 +38,6 @@ export class SecurityService {
 
     // Add CSP meta tag to head
     this.injectCSP(doc);
-    
-    // Inject bookmark header if in readability mode
-    if (bookmark && isReadabilityMode) {
-      this.injectBookmarkHeader(doc, bookmark);
-    }
     
     // Add progress tracking script to body
     this.injectProgressTracking(doc);
@@ -204,67 +197,6 @@ export class SecurityService {
     doc.body.appendChild(progressScript);
   }
 
-  /**
-   * Injects bookmark header for readability mode only
-   * Uses inline styles to avoid CSS conflicts
-   */
-  private static injectBookmarkHeader(doc: Document, bookmark: { id: number; title: string; url: string; date_added: string }): void {
-    const headerHtml = `
-      <div class="pocket-ding-header" style="
-        margin: 0 0 2rem 0 !important;
-        padding: 1rem !important;
-        border-bottom: 1px solid #cac4d0 !important;
-        background: transparent !important;
-        font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        line-height: 1.5 !important;
-        position: relative !important;
-        z-index: 1000 !important;
-      ">
-        <h1 class="pocket-ding-title" style="
-          color: var(--md-sys-color-on-surface, #1d1b20) !important;
-          margin: 0 0 0.5rem 0 !important;
-          font-size: 1.75rem !important;
-          font-weight: 400 !important;
-          line-height: 2.25rem !important;
-          letter-spacing: 0 !important;
-          font-family: inherit !important;
-        ">${this.escapeHtml(bookmark.title)}</h1>
-        <div class="pocket-ding-meta" style="
-          display: flex !important;
-          align-items: center !important;
-          gap: 1rem !important;
-          flex-wrap: wrap !important;
-          font-size: 0.875rem !important;
-          line-height: 1.25rem !important;
-          color: var(--md-sys-color-on-surface-variant, #49454f) !important;
-          font-family: inherit !important;
-        ">
-          <a href="${this.escapeHtml(bookmark.url)}" target="_blank" style="
-            color: var(--md-sys-color-primary, #6750a4) !important;
-            text-decoration: none !important;
-            word-break: break-all !important;
-            font-family: inherit !important;
-          ">${this.escapeHtml(bookmark.url)}</a>
-          <span style="color: var(--md-sys-color-on-surface-variant, #49454f) !important;">•</span>
-          <span style="color: var(--md-sys-color-on-surface-variant, #49454f) !important; font-family: inherit !important;">
-            Added ${new Date(bookmark.date_added).toLocaleDateString()}
-          </span>
-        </div>
-      </div>
-    `;
-    
-    // Insert header at the beginning of body content
-    doc.body.insertAdjacentHTML('afterbegin', headerHtml);
-  }
-
-  /**
-   * Escapes HTML to prevent XSS attacks
-   */
-  private static escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
 
   /**
    * Applies minimal content sanitization on parsed DOM

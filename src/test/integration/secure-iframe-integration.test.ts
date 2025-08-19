@@ -60,7 +60,7 @@ describe('Secure Iframe Integration', () => {
       document.body.appendChild(iframe);
       await iframe.updateComplete;
       
-      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, undefined, false);
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent);
     });
 
     it('should create iframe with proper sandbox attributes', async () => {
@@ -271,7 +271,7 @@ describe('Secure Iframe Integration', () => {
       document.body.appendChild(iframe);
       await iframe.updateComplete;
       
-      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(maliciousContent, undefined, false);
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(maliciousContent);
     });
 
   });

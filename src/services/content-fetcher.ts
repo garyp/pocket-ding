@@ -54,7 +54,7 @@ export class ContentFetcher {
 
       // Convert ArrayBuffer to text for HTML content
       const textContent = this.arrayBufferToText(htmlAsset.content);
-      const readabilityContent = this.processWithReadability(textContent);
+      const readabilityContent = this.processWithReadability(textContent, bookmark);
       
       return {
         content: textContent,
@@ -98,7 +98,7 @@ export class ContentFetcher {
 
       // If asset has cached content, use it
       if (asset.content) {
-        return this.processAssetContent(asset);
+        return this.processAssetContent(asset, bookmark);
       }
 
       // For archived bookmarks or uncached assets, fetch on-demand
@@ -124,7 +124,7 @@ export class ContentFetcher {
 
           // Process the fetched content
           const tempAsset = { ...asset, content };
-          return this.processAssetContent(tempAsset);
+          return this.processAssetContent(tempAsset, bookmark);
         } catch (error) {
           console.error(`Failed to fetch asset ${assetId} on-demand:`, error);
           
@@ -144,7 +144,7 @@ export class ContentFetcher {
     }
   }
 
-  private static processAssetContent(asset: LocalAsset): { content: string; readability_content: string; source: ContentSource } | null {
+  private static processAssetContent(asset: LocalAsset, bookmark?: LocalBookmark): { content: string; readability_content: string; source: ContentSource } | null {
     if (!asset.content) return null;
 
     // Check if this content type is supported
@@ -158,7 +158,7 @@ export class ContentFetcher {
 
     // Convert ArrayBuffer to text for HTML content
     const textContent = this.arrayBufferToText(asset.content);
-    const readabilityContent = this.processWithReadability(textContent);
+    const readabilityContent = this.processWithReadability(textContent, bookmark);
     
     return {
       content: textContent,
@@ -176,7 +176,7 @@ export class ContentFetcher {
   }
 
 
-  private static processWithReadability(html: string): string {
+  static processWithReadability(html: string, bookmark?: LocalBookmark): string {
     try {
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
@@ -194,11 +194,80 @@ export class ContentFetcher {
       });
 
       const article = reader.parse();
-      return article?.content || html;
+      let content = article?.content || html;
+      
+      // Inject bookmark header for readability content
+      if (bookmark && content) {
+        content = this.injectBookmarkHeader(content, bookmark);
+      }
+      
+      return content;
     } catch (error) {
       console.error('Failed to process with Readability:', error);
       return html;
     }
+  }
+
+  /**
+   * Injects bookmark header into readability content
+   * Uses inline styles to avoid CSS conflicts
+   */
+  private static injectBookmarkHeader(content: string, bookmark: LocalBookmark): string {
+    const headerHtml = `
+      <div class="pocket-ding-header" style="
+        margin: 0 0 2rem 0 !important;
+        padding: 1rem !important;
+        border-bottom: 1px solid #cac4d0 !important;
+        background: transparent !important;
+        font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        line-height: 1.5 !important;
+        position: relative !important;
+        z-index: 1000 !important;
+      ">
+        <h1 class="pocket-ding-title" style="
+          color: var(--md-sys-color-on-surface, #1d1b20) !important;
+          margin: 0 0 0.5rem 0 !important;
+          font-size: 1.75rem !important;
+          font-weight: 400 !important;
+          line-height: 2.25rem !important;
+          letter-spacing: 0 !important;
+          font-family: inherit !important;
+        ">${this.escapeHtml(bookmark.title)}</h1>
+        <div class="pocket-ding-meta" style="
+          display: flex !important;
+          align-items: center !important;
+          gap: 1rem !important;
+          flex-wrap: wrap !important;
+          font-size: 0.875rem !important;
+          line-height: 1.25rem !important;
+          color: var(--md-sys-color-on-surface-variant, #49454f) !important;
+          font-family: inherit !important;
+        ">
+          <a href="${this.escapeHtml(bookmark.url)}" target="_blank" style="
+            color: var(--md-sys-color-primary, #6750a4) !important;
+            text-decoration: none !important;
+            word-break: break-all !important;
+            font-family: inherit !important;
+          ">${this.escapeHtml(bookmark.url)}</a>
+          <span style="color: var(--md-sys-color-on-surface-variant, #49454f) !important;">•</span>
+          <span style="color: var(--md-sys-color-on-surface-variant, #49454f) !important; font-family: inherit !important;">
+            Added ${new Date(bookmark.date_added).toLocaleDateString()}
+          </span>
+        </div>
+      </div>
+    `;
+    
+    // Prepend header to content
+    return headerHtml + content;
+  }
+
+  /**
+   * Escapes HTML to prevent XSS attacks
+   */
+  private static escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   private static createOfflineArchivedContent(bookmark: LocalBookmark, asset: LocalAsset, error: any): { content: string; readability_content: string; source: ContentSource } {
