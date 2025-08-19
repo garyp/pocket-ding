@@ -73,7 +73,7 @@ export interface AppSettings {
   theme_mode?: ThemeMode;
 }
 
-export type ContentSource = 'asset' | 'readability';
+export type ContentSource = 'asset' | 'readability' | 'url';
 
 export interface ContentSourceOption {
   type: ContentSource;

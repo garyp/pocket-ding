@@ -261,7 +261,7 @@ describe('BookmarkReader Dark Mode', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
+      const iconElement = element.shadowRoot?.querySelector('md-icon-button md-icon');
       expect(iconElement?.textContent).toBe('light_mode');
     });
 
@@ -274,7 +274,7 @@ describe('BookmarkReader Dark Mode', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
+      const iconElement = element.shadowRoot?.querySelector('md-icon-button md-icon');
       expect(iconElement?.textContent).toBe('dark_mode');
     });
 
@@ -291,7 +291,7 @@ describe('BookmarkReader Dark Mode', () => {
       element['updateReaderTheme']();
       await element.updateComplete;
 
-      const iconElement = element.shadowRoot?.querySelector('md-text-button md-icon');
+      const iconElement = element.shadowRoot?.querySelector('md-icon-button md-icon');
       expect(iconElement?.textContent).toBe('dark_mode');
     });
 
@@ -304,8 +304,8 @@ describe('BookmarkReader Dark Mode', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
-      const button = element.shadowRoot?.querySelector('md-text-button[title]');
-      expect(button?.getAttribute('title')).toBe('Follow System');
+      const button = element.shadowRoot?.querySelector('md-icon-button[title]');
+      expect(button?.getAttribute('title')).toBe('Follow System Theme');
     });
 
     it('should render correct button title for dark override', async () => {
@@ -320,8 +320,8 @@ describe('BookmarkReader Dark Mode', () => {
       element['darkModeOverride'] = 'dark';
       await element.updateComplete;
 
-      const button = element.shadowRoot?.querySelector('md-text-button[title]');
-      expect(button?.getAttribute('title')).toBe('Dark Mode');
+      const button = element.shadowRoot?.querySelector('md-icon-button[title]');
+      expect(button?.getAttribute('title')).toBe('Dark Mode Active');
     });
 
     it('should render correct button title for light override', async () => {
@@ -336,8 +336,8 @@ describe('BookmarkReader Dark Mode', () => {
       element['darkModeOverride'] = 'light';
       await element.updateComplete;
 
-      const button = element.shadowRoot?.querySelector('md-text-button[title]');
-      expect(button?.getAttribute('title')).toBe('Light Mode');
+      const button = element.shadowRoot?.querySelector('md-icon-button[title]');
+      expect(button?.getAttribute('title')).toBe('Light Mode Active');
     });
   });
 

@@ -325,23 +325,23 @@ describe('Dark Mode Integration', () => {
       // Check initial state - make sure the element is rendered
       expect(element.shadowRoot).toBeTruthy();
       
-      let triggerIcon = element.shadowRoot?.querySelector('md-text-button md-icon');
+      let triggerIcon = element.shadowRoot?.querySelector('md-icon-button md-icon');
       expect(triggerIcon?.textContent).toBe('light_mode');
       
-      let toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-text-button') || [])
+      let toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-icon-button') || [])
         .find(btn => btn.querySelector('md-icon')?.textContent === 'light_mode' || btn.querySelector('md-icon')?.textContent === 'dark_mode') as HTMLElement;
-      expect(toggleButton?.getAttribute('title')).toBe('Follow System');
+      expect(toggleButton?.getAttribute('title')).toBe('Follow System Theme');
       
       // Toggle to dark
       element['handleDarkModeToggle']();
       await element.updateComplete;
       
-      triggerIcon = element.shadowRoot?.querySelector('md-text-button md-icon');
+      triggerIcon = element.shadowRoot?.querySelector('md-icon-button md-icon');
       expect(triggerIcon?.textContent).toBe('dark_mode');
       
-      toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-text-button') || [])
+      toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-icon-button') || [])
         .find(btn => btn.querySelector('md-icon')?.textContent === 'light_mode' || btn.querySelector('md-icon')?.textContent === 'dark_mode') as HTMLElement;
-      expect(toggleButton?.getAttribute('title')).toBe('Dark Mode');
+      expect(toggleButton?.getAttribute('title')).toBe('Dark Mode Active');
     });
   });
 

@@ -7,6 +7,8 @@ import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types'
 import './secure-iframe';
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
+import '@material/web/iconbutton/icon-button.js';
+import '@material/web/iconbutton/filled-icon-button.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/circular-progress.js';
 import '@material/web/progress/linear-progress.js';
@@ -28,6 +30,7 @@ export class BookmarkReader extends LitElement {
   @state() private currentContent = '';
   @state() private currentReadabilityContent = '';
   @state() private isLoadingContent = false;
+  @state() private contentSourceType: 'saved' | 'live' = 'saved';
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
 
@@ -67,8 +70,22 @@ export class BookmarkReader extends LitElement {
     }
 
     .content-source-selector {
-      min-width: 120px;
-      max-width: 200px;
+      min-width: 80px;
+      max-width: 120px;
+    }
+
+    .processing-mode-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .processing-mode-button {
+      --md-icon-button-icon-size: 20px;
+    }
+
+    .toolbar-section md-icon-button {
+      --md-icon-button-icon-size: 20px;
     }
 
     .toolbar-section {
@@ -334,8 +351,20 @@ export class BookmarkReader extends LitElement {
       }
       
       .content-source-selector {
-        min-width: 80px;
-        max-width: 140px;
+        min-width: 60px;
+        max-width: 80px;
+      }
+      
+      .processing-mode-toggle {
+        gap: 0.125rem;
+      }
+      
+      .toolbar-section md-icon-button {
+        --md-icon-button-icon-size: 18px;
+      }
+      
+      .processing-mode-button {
+        --md-icon-button-icon-size: 18px;
       }
       
       .progress-section {
@@ -458,9 +487,16 @@ export class BookmarkReader extends LitElement {
         // Load available content sources
         this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
         
-        // Set default content source (prefer first asset if available, otherwise URL)
-        const firstAsset = this.availableContentSources.find(source => source.type === 'asset');
-        this.selectedContentSource = firstAsset || this.availableContentSources[0] || null;
+        // Determine content source type (prefer saved artifacts if available)
+        const assetSources = this.availableContentSources.filter(source => source.type === 'asset');
+        this.contentSourceType = assetSources.length > 0 ? 'saved' : 'live';
+        
+        // Set default content source - prefer first asset or URL
+        if (assetSources.length > 0) {
+          this.selectedContentSource = assetSources[0] || null;
+        } else {
+          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
+        }
         
         // Load content with preferred source
         await this.loadContent();
@@ -627,31 +663,60 @@ export class BookmarkReader extends LitElement {
 
   // Debug method removed to protect user data
 
-  private handleReadingModeChange(mode: 'original' | 'readability') {
-    this.readingMode = mode;
-    this.saveProgress();
-  }
+  // Remove the old handleReadingModeChange method since we now use handleProcessingModeToggle
 
   private async handleContentSourceChange(event: any) {
     const selectedValue = event.target.value;
     
-    // Parse the value which contains both type and optional assetId
-    const [type, assetIdStr] = selectedValue.split(':');
-    const assetId = assetIdStr ? parseInt(assetIdStr, 10) : undefined;
-    
-    const newSource = this.availableContentSources.find(source => 
-      source.type === type && source.assetId === assetId
-    );
-    
-    if (newSource && newSource !== this.selectedContentSource) {
-      this.selectedContentSource = newSource;
-      await this.loadContent();
+    // Check if it's a general type selection (saved/live) or specific source selection
+    if (selectedValue === 'saved' || selectedValue === 'live') {
+      // Handle type-based selection (for single asset case)
+      const selectedType = selectedValue as 'saved' | 'live';
+      if (selectedType !== this.contentSourceType) {
+        this.contentSourceType = selectedType;
+        
+        // Select appropriate content source based on type
+        if (selectedType === 'saved') {
+          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'asset') || null;
+        } else {
+          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
+        }
+        
+        if (this.selectedContentSource) {
+          await this.loadContent();
+          this.scrollPosition = 0;
+          this.saveProgress();
+        }
+      }
+    } else {
+      // Handle specific source selection (for multiple assets)
+      const sourceKey = selectedValue;
+      let newSource: ContentSourceOption | null = null;
       
-      // Reset scroll position when changing content source
-      this.scrollPosition = 0;
+      if (sourceKey === 'live') {
+        newSource = this.availableContentSources.find(source => source.type === 'url') || null;
+        this.contentSourceType = 'live';
+      } else {
+        // Parse asset ID from value like "asset-123"
+        const assetId = parseInt(sourceKey.replace('asset-', ''));
+        newSource = this.availableContentSources.find(source => 
+          source.type === 'asset' && source.assetId === assetId
+        ) || null;
+        this.contentSourceType = 'saved';
+      }
       
-      this.saveProgress();
+      if (newSource && newSource !== this.selectedContentSource) {
+        this.selectedContentSource = newSource;
+        await this.loadContent();
+        this.scrollPosition = 0;
+        this.saveProgress();
+      }
     }
+  }
+
+  private handleProcessingModeToggle() {
+    this.readingMode = this.readingMode === 'readability' ? 'original' : 'readability';
+    this.saveProgress();
   }
 
   private handleOpenOriginal() {
@@ -712,8 +777,24 @@ export class BookmarkReader extends LitElement {
     `;
   }
 
-  private getSourceValue(source: ContentSourceOption): string {
-    return source.assetId ? `${source.type}:${source.assetId}` : source.type;
+  private getContentSourceLabel(type: 'saved' | 'live'): string {
+    if (type === 'saved') {
+      const assetCount = this.availableContentSources.filter(s => s.type === 'asset').length;
+      return assetCount > 1 ? `Saved (${assetCount})` : 'Saved';
+    }
+    return 'Live URL';
+  }
+  
+  private getCurrentSourceValue(): string {
+    if (this.selectedContentSource?.type === 'asset' && this.selectedContentSource.assetId) {
+      return `asset-${this.selectedContentSource.assetId}`;
+    }
+    return this.contentSourceType;
+  }
+  
+  private shouldShowIndividualAssets(): boolean {
+    const assetSources = this.availableContentSources.filter(s => s.type === 'asset');
+    return assetSources.length > 1;
   }
 
   override render() {
@@ -739,53 +820,59 @@ export class BookmarkReader extends LitElement {
       <div class="reader-container">
         <div class="reader-toolbar">
           <div class="toolbar-section">
+            <!-- Content Source Selection -->
             <md-outlined-select
               class="content-source-selector"
-              .value=${this.selectedContentSource ? this.getSourceValue(this.selectedContentSource) : ''}
+              .value=${this.getCurrentSourceValue()}
               @change=${this.handleContentSourceChange}
             >
-              ${this.availableContentSources.map(source => html`
-                <md-select-option value=${this.getSourceValue(source)}>
-                  ${source.label}
-                </md-select-option>
-              `)}
+              ${this.shouldShowIndividualAssets() ? 
+                // Show individual assets when multiple exist
+                this.availableContentSources.filter(s => s.type === 'asset').map(source => html`
+                  <md-select-option value="asset-${source.assetId}">
+                    ${source.label}
+                  </md-select-option>
+                `) :
+                // Show simple "Saved" option when only one asset
+                this.availableContentSources.some(s => s.type === 'asset') ? html`
+                  <md-select-option value="saved">
+                    ${this.getContentSourceLabel('saved')}
+                  </md-select-option>
+                ` : ''
+              }
+              <md-select-option value="live">
+                ${this.getContentSourceLabel('live')}
+              </md-select-option>
             </md-outlined-select>
             
-            <div class="reading-mode-toggle">
+            <!-- Processing Mode Toggle -->
+            <div class="processing-mode-toggle">
               ${this.readingMode === 'readability' ? html`
-                <md-filled-button
-                  @click=${() => this.handleReadingModeChange('readability')}
+                <md-filled-icon-button
+                  class="processing-mode-button"
+                  @click=${this.handleProcessingModeToggle}
+                  title="Readable view (click for raw)"
                 >
-                  Reader
-                </md-filled-button>
+                  <md-icon>auto_stories</md-icon>
+                </md-filled-icon-button>
               ` : html`
-                <md-text-button
-                  @click=${() => this.handleReadingModeChange('readability')}
+                <md-icon-button
+                  class="processing-mode-button"
+                  @click=${this.handleProcessingModeToggle}
+                  title="Raw view (click for readable)"
                 >
-                  Reader
-                </md-text-button>
-              `}
-              ${this.readingMode === 'original' ? html`
-                <md-filled-button
-                  @click=${() => this.handleReadingModeChange('original')}
-                >
-                  Original
-                </md-filled-button>
-              ` : html`
-                <md-text-button
-                  @click=${() => this.handleReadingModeChange('original')}
-                >
-                  Original
-                </md-text-button>
+                  <md-icon>code</md-icon>
+                </md-icon-button>
               `}
             </div>
             
-            <md-text-button
+            <!-- Dark Mode Toggle -->
+            <md-icon-button
               @click=${this.handleDarkModeToggle}
-              title=${this.darkModeOverride === null ? 'Follow System' : this.darkModeOverride === 'dark' ? 'Dark Mode' : 'Light Mode'}
+              title=${this.darkModeOverride === null ? 'Follow System Theme' : this.darkModeOverride === 'dark' ? 'Dark Mode Active' : 'Light Mode Active'}
             >
-              <md-icon slot="icon">${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'dark_mode' : 'light_mode'}</md-icon>
-            </md-text-button>
+              <md-icon>${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'dark_mode' : 'light_mode'}</md-icon>
+            </md-icon-button>
           </div>
           
           <div class="progress-section">
@@ -798,12 +885,13 @@ export class BookmarkReader extends LitElement {
             ></md-linear-progress>
           </div>
           
-          <md-text-button
+          <!-- Open External Link -->
+          <md-icon-button
             @click=${this.handleOpenOriginal}
-            title="Open original"
+            title="Open original website"
           >
-            <md-icon slot="icon">open_in_new</md-icon>
-          </md-text-button>
+            <md-icon>open_in_new</md-icon>
+          </md-icon-button>
         </div>
         
         <div class="reader-content">
