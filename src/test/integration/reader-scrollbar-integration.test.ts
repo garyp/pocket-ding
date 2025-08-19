@@ -185,7 +185,7 @@ describe('Reader View Scrollbar Integration', () => {
   });
 
   describe('bookmark-reader scrollbar behavior', () => {
-    it('should allow scrolling within the bookmark reader content area', async () => {
+    it('should not have internal scrolling with unified scrolling architecture', async () => {
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
       (bookmarkReader as any).bookmarkId = 1;
       container.appendChild(bookmarkReader);
@@ -201,10 +201,13 @@ describe('Reader View Scrollbar Integration', () => {
       const styles = (bookmarkReader.constructor as typeof BookmarkReader).styles;
       const cssText = Array.isArray(styles) ? styles.map(s => s.cssText).join('') : styles?.cssText || '';
 
-      // Reader content should have overflow-y: auto for scrolling
+      // With unified scrolling, reader content should NOT have overflow-y: auto
       expect(cssText).toContain('.reader-content');
-      expect(cssText).toContain('overflow-y: auto');
+      expect(cssText).not.toContain('overflow-y: auto');
       expect(cssText).toContain('flex: 1');
+      
+      // Reader should be constrained to viewport height
+      expect(cssText).toContain('height: 100vh');
     });
 
     it('should handle long content without breaking layout', async () => {
