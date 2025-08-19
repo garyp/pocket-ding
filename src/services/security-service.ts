@@ -7,7 +7,9 @@ export class SecurityService {
    * Prepares SingleFile HTML content for secure iframe rendering
    * Uses DOMParser approach as specified in requirements
    */
-  static async prepareSingleFileContent(singleFileHtml: string): Promise<string> {
+  static async prepareSingleFileContent(
+    singleFileHtml: string
+  ): Promise<string> {
     let contentToProcess = singleFileHtml;
     
     // Check if input contains basic HTML structure, if not, wrap it
@@ -194,6 +196,7 @@ export class SecurityService {
     
     doc.body.appendChild(progressScript);
   }
+
 
   /**
    * Applies minimal content sanitization on parsed DOM

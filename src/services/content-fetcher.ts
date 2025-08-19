@@ -54,7 +54,7 @@ export class ContentFetcher {
 
       // Convert ArrayBuffer to text for HTML content
       const textContent = this.arrayBufferToText(htmlAsset.content);
-      const readabilityContent = this.processWithReadability(textContent);
+      const readabilityContent = this.processWithReadability(textContent, bookmark);
       
       return {
         content: textContent,
@@ -98,7 +98,7 @@ export class ContentFetcher {
 
       // If asset has cached content, use it
       if (asset.content) {
-        return this.processAssetContent(asset);
+        return this.processAssetContent(asset, bookmark);
       }
 
       // For archived bookmarks or uncached assets, fetch on-demand
@@ -124,7 +124,7 @@ export class ContentFetcher {
 
           // Process the fetched content
           const tempAsset = { ...asset, content };
-          return this.processAssetContent(tempAsset);
+          return this.processAssetContent(tempAsset, bookmark);
         } catch (error) {
           console.error(`Failed to fetch asset ${assetId} on-demand:`, error);
           
@@ -144,7 +144,7 @@ export class ContentFetcher {
     }
   }
 
-  private static processAssetContent(asset: LocalAsset): { content: string; readability_content: string; source: ContentSource } | null {
+  private static processAssetContent(asset: LocalAsset, bookmark?: LocalBookmark): { content: string; readability_content: string; source: ContentSource } | null {
     if (!asset.content) return null;
 
     // Check if this content type is supported
@@ -158,7 +158,7 @@ export class ContentFetcher {
 
     // Convert ArrayBuffer to text for HTML content
     const textContent = this.arrayBufferToText(asset.content);
-    const readabilityContent = this.processWithReadability(textContent);
+    const readabilityContent = this.processWithReadability(textContent, bookmark);
     
     return {
       content: textContent,
@@ -176,7 +176,7 @@ export class ContentFetcher {
   }
 
 
-  private static processWithReadability(html: string): string {
+  static processWithReadability(html: string, bookmark?: LocalBookmark): string {
     try {
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
@@ -194,11 +194,74 @@ export class ContentFetcher {
       });
 
       const article = reader.parse();
-      return article?.content || html;
+      
+      // Only return readability content if parsing was successful
+      if (!article?.content) {
+        console.warn('Readability failed to extract content');
+        return '';
+      }
+      
+      // Inject bookmark header for readability content
+      let content = article.content;
+      if (bookmark) {
+        content = this.injectBookmarkHeader(content, bookmark);
+      }
+      
+      return content;
     } catch (error) {
       console.error('Failed to process with Readability:', error);
-      return html;
+      return '';
     }
+  }
+
+  /**
+   * Injects bookmark header into readability content
+   * Uses simple CSS since we control readability content
+   */
+  private static injectBookmarkHeader(content: string, bookmark: LocalBookmark): string {
+    const headerHtml = `
+      <div class="pocket-ding-header" style="
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--md-sys-color-outline-variant);
+        font-family: Roboto, sans-serif;
+      ">
+        <h1 style="
+          color: var(--md-sys-color-on-surface);
+          margin: 0 0 0.5rem 0;
+          font-size: 1.75rem;
+          font-weight: 400;
+          line-height: 1.3;
+        ">${this.escapeHtml(bookmark.title)}</h1>
+        <div style="
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          flex-wrap: wrap;
+          font-size: 0.875rem;
+          color: var(--md-sys-color-on-surface-variant);
+        ">
+          <a href="${this.escapeHtml(bookmark.url)}" target="_blank" style="
+            color: var(--md-sys-color-primary);
+            text-decoration: none;
+            word-break: break-all;
+          ">${this.escapeHtml(bookmark.url)}</a>
+          <span>•</span>
+          <span>Added ${new Date(bookmark.date_added).toLocaleDateString()}</span>
+        </div>
+      </div>
+    `;
+    
+    return headerHtml + content;
+  }
+
+  /**
+   * Escapes HTML to prevent XSS attacks
+   */
+  private static escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   private static createOfflineArchivedContent(bookmark: LocalBookmark, asset: LocalAsset, error: any): { content: string; readability_content: string; source: ContentSource } {

@@ -485,7 +485,7 @@ export class AppRoot extends LitElement {
   }
 
   override render() {
-    const contentClasses = this.currentView === 'reader' ? 'app-content no-scroll' : 'app-content';
+    const contentClasses = 'app-content'; // Remove no-scroll for unified scrolling in reader
     
     return html`
       <div class="app-container">

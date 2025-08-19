@@ -138,7 +138,9 @@ export class SecureIframe extends LitElement {
     }
 
     try {
-      this.secureContent = await SecurityService.prepareSingleFileContent(this.content);
+      this.secureContent = await SecurityService.prepareSingleFileContent(
+        this.content
+      );
       await this.updateComplete;
       this.setupIframe();
     } catch (error) {

@@ -16,6 +16,7 @@ import '@material/web/select/outlined-select.js';
 import '@material/web/select/select-option.js';
 import '@material/web/menu/menu.js';
 import '@material/web/menu/menu-item.js';
+import '@material/web/dialog/dialog.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
@@ -33,6 +34,7 @@ export class BookmarkReader extends LitElement {
   @state() private contentSourceType: 'saved' | 'live' = 'saved';
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
+  @state() private showInfoModal = false;
 
   private progressSaveTimeout: number | null = null;
   private readMarkTimeout: number | null = null;
@@ -115,7 +117,6 @@ export class BookmarkReader extends LitElement {
       flex: 1;
       min-height: 0;
       position: relative;
-      overflow-y: auto;
     }
 
     .secure-iframe {
@@ -172,21 +173,6 @@ export class BookmarkReader extends LitElement {
       color: var(--md-sys-color-on-surface);
     }
 
-    :host(.reader-dark-mode) .bookmark-header {
-      border-bottom-color: var(--md-sys-color-outline-variant);
-    }
-
-    :host(.reader-dark-mode) .bookmark-title {
-      color: var(--md-sys-color-on-surface);
-    }
-
-    :host(.reader-dark-mode) .bookmark-meta {
-      color: var(--md-sys-color-on-surface-variant);
-    }
-
-    :host(.reader-dark-mode) .bookmark-url {
-      color: var(--md-sys-color-primary);
-    }
 
     .content-container h1,
     .content-container h2,
@@ -243,42 +229,6 @@ export class BookmarkReader extends LitElement {
       font-size: 0.875rem;
     }
 
-    .bookmark-header {
-      margin-bottom: 2rem;
-      padding: 1rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid var(--md-sys-color-outline-variant);
-    }
-
-    .bookmark-title {
-      color: var(--md-sys-color-on-surface);
-      margin: 0 0 0.5rem 0;
-      font-size: 1.75rem; /* 28px - Material Design headline-small */
-      font-weight: 400;
-      line-height: 2.25rem; /* 36px */
-      letter-spacing: 0;
-    }
-
-    .bookmark-meta {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-      font-size: 0.875rem; /* 14px - Material Design body-medium */
-      line-height: 1.25rem; /* 20px */
-      letter-spacing: 0.015625rem; /* 0.25px */
-      color: var(--md-sys-color-on-surface-variant);
-    }
-
-    .bookmark-url {
-      color: var(--md-sys-color-primary);
-      text-decoration: none;
-      word-break: break-all;
-    }
-
-    .bookmark-url:hover {
-      text-decoration: underline;
-    }
 
     .loading-container {
       display: flex;
@@ -383,23 +333,69 @@ export class BookmarkReader extends LitElement {
       .reading-mode-toggle {
         gap: 0.125rem;
       }
-      
-      .bookmark-header {
-        padding: 0.75rem;
-        margin-bottom: 1.5rem;
-      }
-      
-      .bookmark-title {
-        font-size: 1.5rem; /* 24px - smaller on mobile */
-        line-height: 2rem; /* 32px */
-        margin-bottom: 0.375rem;
-      }
-      
-      .bookmark-meta {
-        font-size: 0.75rem; /* 12px - smaller on mobile */
-        line-height: 1rem; /* 16px */
-        gap: 0.75rem;
-      }
+    }
+
+    /* Info Modal styles */
+    .info-modal-content {
+      padding: 0;
+      max-width: 600px;
+    }
+
+    .info-modal-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--md-sys-color-outline-variant);
+    }
+
+    .info-modal-title {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--md-sys-color-on-surface);
+      line-height: 1.5;
+    }
+
+    .info-modal-body {
+      padding: 1.5rem;
+    }
+
+    .info-field {
+      margin-bottom: 1.5rem;
+    }
+
+    .info-field:last-child {
+      margin-bottom: 0;
+    }
+
+    .info-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--md-sys-color-on-surface-variant);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .info-value {
+      font-size: 1rem;
+      color: var(--md-sys-color-on-surface);
+      line-height: 1.5;
+      word-break: break-all;
+    }
+
+    .info-url {
+      color: var(--md-sys-color-primary);
+      text-decoration: none;
+    }
+
+    .info-url:hover {
+      text-decoration: underline;
+    }
+
+    .info-modal-actions {
+      padding: 0 1.5rem 1.5rem 1.5rem;
+      display: flex;
+      justify-content: flex-end;
     }
 
     /* Utility classes */
@@ -725,6 +721,14 @@ export class BookmarkReader extends LitElement {
     }
   }
 
+  private handleInfoClick() {
+    this.showInfoModal = true;
+  }
+
+  private handleInfoModalClose() {
+    this.showInfoModal = false;
+  }
+
   private renderContent() {
     if (!this.bookmark) return '';
 
@@ -756,16 +760,6 @@ export class BookmarkReader extends LitElement {
     }
 
     return html`
-      <div class="bookmark-header">
-        <h1 class="bookmark-title md-typescale-headline-medium">${this.bookmark.title}</h1>
-        <div class="bookmark-meta">
-          <a href="${this.bookmark.url}" target="_blank" class="bookmark-url">
-            ${this.bookmark.url}
-          </a>
-          <span>•</span>
-          <span>Added ${new Date(this.bookmark.date_added).toLocaleDateString()}</span>
-        </div>
-      </div>
       <secure-iframe
         class="secure-iframe"
         .content=${content}
@@ -866,13 +860,22 @@ export class BookmarkReader extends LitElement {
               `}
             </div>
             
-            <!-- Dark Mode Toggle -->
-            <md-icon-button
-              @click=${this.handleDarkModeToggle}
-              title=${this.darkModeOverride === null ? 'Follow System Theme' : this.darkModeOverride === 'dark' ? 'Dark Mode Active' : 'Light Mode Active'}
-            >
-              <md-icon>${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'dark_mode' : 'light_mode'}</md-icon>
-            </md-icon-button>
+            <!-- Dark Mode Toggle (readability only) OR Info Button (non-readability) -->
+            ${this.readingMode === 'readability' ? html`
+              <md-icon-button
+                @click=${this.handleDarkModeToggle}
+                title=${this.darkModeOverride === null ? 'Follow System Theme' : this.darkModeOverride === 'dark' ? 'Dark Mode Active' : 'Light Mode Active'}
+              >
+                <md-icon>${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'dark_mode' : 'light_mode'}</md-icon>
+              </md-icon-button>
+            ` : html`
+              <md-icon-button
+                @click=${this.handleInfoClick}
+                title="Show bookmark info"
+              >
+                <md-icon>info</md-icon>
+              </md-icon-button>
+            `}
           </div>
           
           <div class="progress-section">
@@ -898,6 +901,61 @@ export class BookmarkReader extends LitElement {
           ${this.renderContent()}
         </div>
       </div>
+      
+      <!-- Info Modal -->
+      <md-dialog 
+        ?open=${this.showInfoModal}
+        @close=${this.handleInfoModalClose}
+      >
+        <div class="info-modal-content">
+          <div class="info-modal-header">
+            <h2 class="info-modal-title">Bookmark Information</h2>
+          </div>
+          <div class="info-modal-body">
+            ${this.bookmark ? html`
+              <div class="info-field">
+                <span class="info-label">Title</span>
+                <div class="info-value">${this.bookmark.title}</div>
+              </div>
+              <div class="info-field">
+                <span class="info-label">URL</span>
+                <div class="info-value">
+                  <a href="${this.bookmark.url}" target="_blank" class="info-url">
+                    ${this.bookmark.url}
+                  </a>
+                </div>
+              </div>
+              <div class="info-field">
+                <span class="info-label">Date Added</span>
+                <div class="info-value">
+                  ${new Date(this.bookmark.date_added).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric'
+                  })}
+                </div>
+              </div>
+              ${this.bookmark.description ? html`
+                <div class="info-field">
+                  <span class="info-label">Description</span>
+                  <div class="info-value">${this.bookmark.description}</div>
+                </div>
+              ` : ''}
+              ${this.bookmark.tag_names && this.bookmark.tag_names.length > 0 ? html`
+                <div class="info-field">
+                  <span class="info-label">Tags</span>
+                  <div class="info-value">${this.bookmark.tag_names.join(', ')}</div>
+                </div>
+              ` : ''}
+            ` : ''}
+          </div>
+          <div class="info-modal-actions">
+            <md-text-button @click=${this.handleInfoModalClose}>
+              Close
+            </md-text-button>
+          </div>
+        </div>
+      </md-dialog>
     `;
   }
 }
