@@ -69,14 +69,14 @@ describe('AppRoot Scroll Behavior', () => {
     expect(appContent?.classList.contains('app-content')).toBe(true);
   });
 
-  it('applies no-scroll class for reader view', async () => {
+  it('allows scrolling for reader view for unified scrolling', async () => {
     // Force the view to reader
     (appRoot as any).currentView = 'reader';
     await appRoot.updateComplete;
     
     const appContent = appRoot.shadowRoot?.querySelector('.app-content');
     expect(appContent).toBeTruthy();
-    expect(appContent?.classList.contains('no-scroll')).toBe(true);
+    expect(appContent?.classList.contains('no-scroll')).toBe(false);
     expect(appContent?.classList.contains('app-content')).toBe(true);
   });
 

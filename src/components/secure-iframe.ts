@@ -8,6 +8,8 @@ export class SecureIframe extends LitElement {
   @property({ type: Boolean }) isLoading = false;
   @property({ type: Function }) onContentLoad: () => void = () => {};
   @property({ type: Function }) onContentError: (error: string) => void = () => {};
+  @property({ type: Object }) bookmark: { id: number; title: string; url: string; date_added: string } | null = null;
+  @property({ type: Boolean }) isReadabilityMode = false;
 
   @property({ type: Number }) scrollPosition = 0;
 
@@ -138,7 +140,11 @@ export class SecureIframe extends LitElement {
     }
 
     try {
-      this.secureContent = await SecurityService.prepareSingleFileContent(this.content);
+      this.secureContent = await SecurityService.prepareSingleFileContent(
+        this.content,
+        this.bookmark || undefined,
+        this.isReadabilityMode
+      );
       await this.updateComplete;
       this.setupIframe();
     } catch (error) {

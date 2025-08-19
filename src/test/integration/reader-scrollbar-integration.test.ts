@@ -223,13 +223,13 @@ describe('Reader View Scrollbar Integration', () => {
       const styles = (bookmarkReader.constructor as typeof BookmarkReader).styles;
       const cssText = Array.isArray(styles) ? styles.map(s => s.cssText).join('') : styles?.cssText || '';
 
-      // Reader should be constrained to viewport height with internal scrolling
+      // Reader should be constrained to viewport height with unified scrolling (no internal overflow)
       expect(cssText).toContain(':host');
       expect(cssText).toContain('height: 100vh');
       expect(cssText).toContain('.reader-container');
       expect(cssText).toContain('height: 100vh');
       expect(cssText).toContain('.reader-content');
-      expect(cssText).toContain('overflow-y: auto');
+      expect(cssText).not.toContain('overflow-y: auto'); // No longer has internal scrolling
       expect(cssText).toContain('flex: 1');
     });
   });
