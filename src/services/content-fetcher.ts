@@ -194,10 +194,16 @@ export class ContentFetcher {
       });
 
       const article = reader.parse();
-      let content = article?.content || '';
+      
+      // Only return readability content if parsing was successful
+      if (!article?.content) {
+        console.warn('Readability failed to extract content');
+        return '';
+      }
       
       // Inject bookmark header for readability content
-      if (bookmark && content) {
+      let content = article.content;
+      if (bookmark) {
         content = this.injectBookmarkHeader(content, bookmark);
       }
       
@@ -210,54 +216,42 @@ export class ContentFetcher {
 
   /**
    * Injects bookmark header into readability content
-   * Uses inline styles to avoid CSS conflicts
+   * Uses simple CSS since we control readability content
    */
   private static injectBookmarkHeader(content: string, bookmark: LocalBookmark): string {
     const headerHtml = `
       <div class="pocket-ding-header" style="
-        margin: 0 0 2rem 0 !important;
-        padding: 1rem !important;
-        border-bottom: 1px solid #cac4d0 !important;
-        background: transparent !important;
-        font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        line-height: 1.5 !important;
-        position: relative !important;
-        z-index: 1000 !important;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--md-sys-color-outline-variant);
+        font-family: Roboto, sans-serif;
       ">
-        <h1 class="pocket-ding-title" style="
-          color: var(--md-sys-color-on-surface, #1d1b20) !important;
-          margin: 0 0 0.5rem 0 !important;
-          font-size: 1.75rem !important;
-          font-weight: 400 !important;
-          line-height: 2.25rem !important;
-          letter-spacing: 0 !important;
-          font-family: inherit !important;
+        <h1 style="
+          color: var(--md-sys-color-on-surface);
+          margin: 0 0 0.5rem 0;
+          font-size: 1.75rem;
+          font-weight: 400;
+          line-height: 1.3;
         ">${this.escapeHtml(bookmark.title)}</h1>
-        <div class="pocket-ding-meta" style="
-          display: flex !important;
-          align-items: center !important;
-          gap: 1rem !important;
-          flex-wrap: wrap !important;
-          font-size: 0.875rem !important;
-          line-height: 1.25rem !important;
-          color: var(--md-sys-color-on-surface-variant, #49454f) !important;
-          font-family: inherit !important;
+        <div style="
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          flex-wrap: wrap;
+          font-size: 0.875rem;
+          color: var(--md-sys-color-on-surface-variant);
         ">
           <a href="${this.escapeHtml(bookmark.url)}" target="_blank" style="
-            color: var(--md-sys-color-primary, #6750a4) !important;
-            text-decoration: none !important;
-            word-break: break-all !important;
-            font-family: inherit !important;
+            color: var(--md-sys-color-primary);
+            text-decoration: none;
+            word-break: break-all;
           ">${this.escapeHtml(bookmark.url)}</a>
-          <span style="color: var(--md-sys-color-on-surface-variant, #49454f) !important;">•</span>
-          <span style="color: var(--md-sys-color-on-surface-variant, #49454f) !important; font-family: inherit !important;">
-            Added ${new Date(bookmark.date_added).toLocaleDateString()}
-          </span>
+          <span>•</span>
+          <span>Added ${new Date(bookmark.date_added).toLocaleDateString()}</span>
         </div>
       </div>
     `;
     
-    // Prepend header to content
     return headerHtml + content;
   }
 
