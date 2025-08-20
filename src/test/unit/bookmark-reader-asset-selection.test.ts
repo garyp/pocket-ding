@@ -108,6 +108,18 @@ describe('BookmarkReader - Asset Selection', () => {
       // Access private property for testing
       expect(element['contentSourceType']).toBe('saved');
     });
+
+    it('should have correct select value for single asset case', async () => {
+      element.bookmarkId = 1;
+      await element.updateComplete;
+      
+      // Wait for async operations and DOM updates
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await element.updateComplete;
+
+      // Verify that getCurrentSourceValue returns the correct value for single asset
+      expect(element['getCurrentSourceValue']()).toBe('saved');
+    });
   });
 
   describe('Multiple Assets', () => {
@@ -170,6 +182,18 @@ describe('BookmarkReader - Asset Selection', () => {
       // Access private property for testing
       expect(element['contentSourceType']).toBe('saved');
       expect(element['selectedContentSource']?.assetId).toBe(1);
+    });
+
+    it('should have correct select value for multiple assets case', async () => {
+      element.bookmarkId = 1;
+      await element.updateComplete;
+      
+      // Wait for async operations and DOM updates
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await element.updateComplete;
+
+      // Verify that getCurrentSourceValue returns the correct value for multiple assets
+      expect(element['getCurrentSourceValue']()).toBe('asset-1');
     });
 
     it('should load content from first asset by default', async () => {

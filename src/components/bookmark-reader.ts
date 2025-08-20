@@ -437,6 +437,13 @@ export class BookmarkReader extends LitElement {
     if (!this.secureIframe) {
       this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
     }
+    
+    // Ensure select value is set after rendering
+    if (changedProperties.has('availableContentSources') || 
+        changedProperties.has('selectedContentSource') || 
+        changedProperties.has('contentSourceType')) {
+      this.updateSelectValue();
+    }
   }
 
   override disconnectedCallback() {
@@ -507,6 +514,7 @@ export class BookmarkReader extends LitElement {
     await this.updateComplete;
     this.setupReadMarking();
     this.updateReaderTheme();
+    this.updateSelectValue();
     
   }
 
@@ -781,9 +789,32 @@ export class BookmarkReader extends LitElement {
   
   private getCurrentSourceValue(): string {
     if (this.selectedContentSource?.type === 'asset' && this.selectedContentSource.assetId) {
-      return `asset-${this.selectedContentSource.assetId}`;
+      // For single asset case, use simplified "saved" value
+      // For multiple assets case, use specific asset ID
+      if (this.shouldShowIndividualAssets()) {
+        return `asset-${this.selectedContentSource.assetId}`;
+      } else {
+        return 'saved';
+      }
     }
     return this.contentSourceType;
+  }
+  
+  private updateSelectValue() {
+    // Use multiple frames to ensure Material Web Components is fully initialized
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const select = this.shadowRoot?.querySelector('md-outlined-select') as any;
+        if (select) {
+          const expectedValue = this.getCurrentSourceValue();
+          if (select.value !== expectedValue) {
+            select.value = expectedValue;
+            // Trigger change detection if needed
+            select.requestUpdate?.();
+          }
+        }
+      });
+    });
   }
   
   private shouldShowIndividualAssets(): boolean {
