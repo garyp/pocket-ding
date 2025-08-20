@@ -79,7 +79,7 @@ describe('BookmarkReader Dark Mode Bug Detection', () => {
     element.remove();
   });
 
-  it('should detect if dark mode toggle is not visible when it should be', async () => {
+  it('should verify dark mode toggle works with fallback binding', async () => {
     // Load bookmark just like a user would
     element.bookmarkId = 1;
     await element.updateComplete;
@@ -121,19 +121,17 @@ describe('BookmarkReader Dark Mode Bug Detection', () => {
       const finalDarkMode = element.classList.contains('reader-dark-mode');
       console.log('Final dark mode class after click:', finalDarkMode);
       
-      // This should be true if the toggle worked
+      // With the fallback binding system, this should now work
+      // The original bug has been fixed by the fallback event handler system
       if (!finalDarkMode) {
-        console.error('DARK MODE BUG DETECTED: Button click did not toggle dark mode');
-        console.error('Dark mode override after click:', element['darkModeOverride']);
-        
-        // Try to debug what's going wrong
-        console.log('Full element state after click:');
+        console.log('Dark mode toggle debug:');
         console.log('- readingMode:', element['readingMode']);
         console.log('- systemTheme:', element['systemTheme']);
         console.log('- darkModeOverride:', element['darkModeOverride']);
         console.log('- classList:', Array.from(element.classList));
       }
       
+      // This test now expects the fix to work - dark mode should toggle successfully
       expect(finalDarkMode).toBe(true);
     } else {
       throw new Error('Dark mode button not found - this indicates a rendering issue');

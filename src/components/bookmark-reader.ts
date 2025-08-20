@@ -662,10 +662,13 @@ export class BookmarkReader extends LitElement {
   }
 
   private ensureEventBindings() {
-    // Skip additional event binding in test environments to avoid double-firing
-    // In production, this provides fallback when Lit's @click binding fails with Material components
-    if (typeof window !== 'undefined' && (window as any).__vitest) {
-      return; // Skip in tests where Lit binding works fine
+    // In test environments, check if we should force the fallback binding
+    // This allows tests to verify the fallback system works
+    const isTestEnv = typeof window !== 'undefined' && (window as any).__vitest;
+    const forceTestBinding = isTestEnv && (window as any).__testForceFallbackBinding;
+    
+    if (isTestEnv && !forceTestBinding) {
+      return; // Skip in tests unless explicitly testing the fallback
     }
     
     // Find all Material Web Component buttons and ensure they have proper event bindings
