@@ -36,8 +36,8 @@ export class BookmarkReader extends LitElement {
   @state() private systemTheme: 'light' | 'dark' = 'light';
   @state() private showInfoModal = false;
 
-  private progressSaveTimeout: number | null = null;
-  private readMarkTimeout: number | null = null;
+  private progressSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readMarkTimeout: ReturnType<typeof setTimeout> | null = null;
   private hasBeenMarkedAsRead = false;
   private secureIframe: any = null;
 
@@ -547,7 +547,7 @@ export class BookmarkReader extends LitElement {
     `;
   }
 
-  private handleIframeProgressUpdate(event: CustomEvent) {
+  private handleIframeProgressUpdate = (event: CustomEvent) => {
     const { progress, scrollPosition } = event.detail;
     
     this.readProgress = progress;
@@ -556,12 +556,12 @@ export class BookmarkReader extends LitElement {
     this.scheduleProgressSave();
   }
 
-  private handleIframeContentLoaded(_event: CustomEvent) {
+  private handleIframeContentLoaded = (_event: CustomEvent) => {
     // Content loaded in iframe, no additional action needed
     console.log('Iframe content loaded successfully');
   }
 
-  private handleIframeContentError(event: CustomEvent) {
+  private handleIframeContentError = (event: CustomEvent) => {
     const { error } = event.detail;
     console.error('Iframe content error:', error);
   }
@@ -572,7 +572,7 @@ export class BookmarkReader extends LitElement {
       clearTimeout(this.progressSaveTimeout);
     }
     
-    this.progressSaveTimeout = window.setTimeout(() => {
+    this.progressSaveTimeout = setTimeout(() => {
       this.saveProgress();
     }, 1000);
   }
@@ -587,7 +587,7 @@ export class BookmarkReader extends LitElement {
     }
   }
 
-  private handleDarkModeToggle() {
+  private handleDarkModeToggle = () => {
     if (this.darkModeOverride === null) {
       // No override set, set to opposite of system
       this.darkModeOverride = this.systemTheme === 'dark' ? 'light' : 'dark';
@@ -632,7 +632,7 @@ export class BookmarkReader extends LitElement {
   private setupReadMarking() {
     // Mark bookmark as read after 3 seconds of viewing
     if (this.bookmark && this.bookmark.unread && !this.hasBeenMarkedAsRead) {
-      this.readMarkTimeout = window.setTimeout(async () => {
+      this.readMarkTimeout = setTimeout(async () => {
         if (this.bookmark && this.bookmark.unread) {
           try {
             await DatabaseService.markBookmarkAsRead(this.bookmark.id);
@@ -661,7 +661,7 @@ export class BookmarkReader extends LitElement {
 
   // Remove the old handleReadingModeChange method since we now use handleProcessingModeToggle
 
-  private async handleContentSourceChange(event: any) {
+  private handleContentSourceChange = async (event: any) => {
     const selectedValue = event.target.value;
     
     // Check if it's a general type selection (saved/live) or specific source selection
@@ -710,22 +710,22 @@ export class BookmarkReader extends LitElement {
     }
   }
 
-  private handleProcessingModeToggle() {
+  private handleProcessingModeToggle = () => {
     this.readingMode = this.readingMode === 'readability' ? 'original' : 'readability';
     this.saveProgress();
   }
 
-  private handleOpenOriginal() {
+  private handleOpenOriginal = () => {
     if (this.bookmark) {
       window.open(this.bookmark.url, '_blank');
     }
   }
 
-  private handleInfoClick() {
+  private handleInfoClick = () => {
     this.showInfoModal = true;
   }
 
-  private handleInfoModalClose() {
+  private handleInfoModalClose = () => {
     this.showInfoModal = false;
   }
 
