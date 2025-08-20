@@ -36,8 +36,8 @@ export class BookmarkReader extends LitElement {
   @state() private systemTheme: 'light' | 'dark' = 'light';
   @state() private showInfoModal = false;
 
-  private progressSaveTimeout: number | null = null;
-  private readMarkTimeout: number | null = null;
+  private progressSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readMarkTimeout: ReturnType<typeof setTimeout> | null = null;
   private hasBeenMarkedAsRead = false;
   private secureIframe: any = null;
 
@@ -572,7 +572,7 @@ export class BookmarkReader extends LitElement {
       clearTimeout(this.progressSaveTimeout);
     }
     
-    this.progressSaveTimeout = window.setTimeout(() => {
+    this.progressSaveTimeout = setTimeout(() => {
       this.saveProgress();
     }, 1000);
   }
@@ -632,7 +632,7 @@ export class BookmarkReader extends LitElement {
   private setupReadMarking() {
     // Mark bookmark as read after 3 seconds of viewing
     if (this.bookmark && this.bookmark.unread && !this.hasBeenMarkedAsRead) {
-      this.readMarkTimeout = window.setTimeout(async () => {
+      this.readMarkTimeout = setTimeout(async () => {
         if (this.bookmark && this.bookmark.unread) {
           try {
             await DatabaseService.markBookmarkAsRead(this.bookmark.id);

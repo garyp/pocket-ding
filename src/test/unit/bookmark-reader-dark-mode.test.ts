@@ -249,6 +249,32 @@ describe('BookmarkReader Dark Mode', () => {
         })
       );
     });
+
+    it('should properly handle button click events with arrow functions', async () => {
+      element['systemTheme'] = 'light';
+      element['darkModeOverride'] = null;
+      await element.updateComplete;
+
+      // Find the dark mode toggle button
+      const button = element.shadowRoot?.querySelector('md-icon-button[title*="System Theme"], md-icon-button[title*="Mode Active"]');
+      expect(button).toBeTruthy();
+      
+      // Simulate button click
+      const clickEvent = new MouseEvent('click', { bubbles: true });
+      button?.dispatchEvent(clickEvent);
+      await element.updateComplete;
+
+      // Verify the toggle worked (should set dark override when system is light)
+      expect(element['darkModeOverride']).toBe('dark');
+      expect(element.classList.contains('reader-dark-mode')).toBe(true);
+      
+      // Verify progress was saved with the new override
+      expect(DatabaseService.saveReadProgress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dark_mode_override: 'dark'
+        })
+      );
+    });
   });
 
   describe('theme rendering', () => {
