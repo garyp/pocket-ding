@@ -48,11 +48,11 @@ describe('BookmarkReader - Asset Selection', () => {
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
     
-    vi.mocked(ContentFetcher.fetchBookmarkContent).mockImplementation(async (_bookmark, source) => {
+    vi.mocked(ContentFetcher.fetchBookmarkContent).mockImplementation(async (bookmark, source) => {
       if (source === 'url') {
         return {
-          content: '<div>Live URL content</div>',
-          readability_content: '<div>Live readable content</div>',
+          content: `<div class="live-url-content"><iframe src="${bookmark.url}"></iframe></div>`,
+          readability_content: '', // No readability content for iframe
           source: 'url'
         };
       }

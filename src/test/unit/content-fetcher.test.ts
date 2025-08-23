@@ -564,138 +564,87 @@ describe('ContentFetcher', () => {
   });
 
   describe('Live URL Content Fetching', () => {
-    const mockAppFetch = appFetch as any;
-
     beforeEach(() => {
       vi.clearAllMocks();
     });
 
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it('should fetch live URL content successfully', async () => {
-      const mockHtml = '<html><body><h1>Live Content</h1><p>Fresh from the web</p></body></html>';
-      mockAppFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (name: string) => name === 'content-type' ? 'text/html; charset=utf-8' : null
-        },
-        text: () => Promise.resolve(mockHtml),
-      });
-
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
-
-      expect(mockAppFetch).toHaveBeenCalledWith(mockBookmark.url, {
-        mode: 'cors',
-        credentials: 'omit'
-      });
-      expect(result.source).toBe('url');
-      expect(result.content).toBe(mockHtml);
-      expect(result.readability_content).toContain('pocket-ding-header');
-      expect(result.readability_content).toContain('<p>Processed content</p>');
-    });
-
-    it('should handle HTTP error responses', async () => {
-      mockAppFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      });
-
+    it('should create iframe-based content for Live URL', async () => {
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
       expect(result.source).toBe('url');
-      expect(result.content).toContain('Live URL Content Unavailable');
-      expect(result.content).toContain('HTTP 404: Not Found');
-      expect(result.content).toContain('Open Original Website');
-      expect(result.readability_content).toBe(''); // No readability for error cases
+      expect(result.content).toContain('<iframe');
+      expect(result.content).toContain(`src="${mockBookmark.url}"`);
+      expect(result.content).toContain('Live Website');
+      expect(result.content).toContain('You\'re viewing the live website directly');
+      expect(result.content).toContain('Open in New Tab');
+      expect(result.readability_content).toBe(''); // No readability for iframe content
     });
 
-    it('should handle CORS errors with helpful message', async () => {
-      const corsError = new TypeError('Failed to fetch');
-      mockAppFetch.mockRejectedValue(corsError);
-
+    it('should include bookmark title in iframe content', async () => {
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('CORS (Cross-Origin Resource Sharing) restrictions');
-      expect(result.content).toContain('website blocks direct content loading');
-      expect(result.content).toContain('Open the link directly');
-      expect(result.readability_content).toBe(''); // No readability for error cases
+      expect(result.content).toContain(mockBookmark.title);
+      expect(result.content).toContain('Test Article'); // Bookmark title should be escaped and displayed
     });
 
-    it('should handle network errors', async () => {
-      const networkError = new TypeError('NetworkError when attempting to fetch resource');
-      mockAppFetch.mockRejectedValue(networkError);
-
+    it('should include proper iframe security attributes', async () => {
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('network connectivity issues');
-      expect(result.content).toContain('No internet connection');
-      expect(result.readability_content).toBe(''); // No readability for error cases
+      expect(result.content).toContain('sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-navigation"');
+      expect(result.content).toContain('referrerpolicy="no-referrer-when-downgrade"');
+      expect(result.content).toContain('loading="lazy"');
     });
 
-    it('should handle browser-supported content types with embedded data', async () => {
-      const mockPdfData = new Uint8Array([37, 80, 68, 70]); // Simple %PDF header
-      mockAppFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (name: string) => name === 'content-type' ? 'application/pdf' : null
-        },
-        arrayBuffer: () => Promise.resolve(mockPdfData.buffer),
-      });
-
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
-
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('<embed');
-      expect(result.content).toContain('data:application/pdf;base64,');
-      expect(result.content).toContain('application/pdf Content');
-      expect(result.content).toContain('Content type: <strong>application/pdf</strong>');
-      expect(result.readability_content).toBe(''); // No readability for non-HTML content
-    });
-
-    it('should handle truly unsupported content types', async () => {
-      mockAppFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (name: string) => name === 'content-type' ? 'application/octet-stream' : null
-        },
-        text: () => Promise.resolve('Binary content'),
-      });
-
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
-
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('Unsupported Content Type');
-      expect(result.content).toContain('application/octet-stream');
-      expect(result.content).toContain('cannot be displayed inline');
-      expect(result.readability_content).toBe(''); // No readability for error cases
-    });
-
-    it('should include web archive link in error messages when available', async () => {
+    it('should include web archive link when available', async () => {
       const bookmarkWithArchive = {
         ...mockBookmark,
         web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
       };
 
-      mockAppFetch.mockRejectedValue(new Error('Generic error'));
-
       const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive, 'url');
 
-      expect(result.content).toContain('Try Web Archive Version');
+      expect(result.content).toContain('View Archive Version');
       expect(result.content).toContain('web.archive.org');
     });
 
     it('should not include web archive link when not available', async () => {
-      mockAppFetch.mockRejectedValue(new Error('Generic error'));
-
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
-      expect(result.content).not.toContain('Try Web Archive Version');
+      expect(result.content).not.toContain('View Archive Version');
       expect(result.content).not.toContain('web.archive.org');
+    });
+
+    it('should properly escape HTML in bookmark URL and title', async () => {
+      const bookmarkWithSpecialChars = {
+        ...mockBookmark,
+        title: 'Test "Article" with <script>alert("xss")</script>',
+        url: 'https://example.com?param=<script>alert("xss")</script>',
+      };
+
+      const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithSpecialChars, 'url');
+
+      // Should escape dangerous HTML entities in title and URL
+      expect(result.content).not.toContain('<script>alert("xss")</script>');
+      expect(result.content).toContain('&lt;script&gt;alert("xss")&lt;/script&gt;');
+      expect(result.content).toContain('Test "Article" with'); // Quotes in title are preserved (not dangerous)
+    });
+
+    it('should include responsive CSS styles for mobile devices', async () => {
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      expect(result.content).toContain('@media (max-width: 768px)');
+      expect(result.content).toContain('height: 70vh !important');
+      expect(result.content).toContain('flex-direction: column');
+    });
+
+    it('should work without relying on fetch or network requests', async () => {
+      // This test ensures iframe approach doesn't depend on network calls
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      // The appFetch mock should not have been called since we're using iframe approach
+      expect(appFetch).not.toHaveBeenCalled();
+      expect(result.source).toBe('url');
+      expect(result.content).toContain('<iframe');
     });
   });
 });

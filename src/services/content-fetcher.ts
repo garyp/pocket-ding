@@ -1,7 +1,6 @@
 import { Readability } from '@mozilla/readability';
 import { DatabaseService } from './database';
 import { createLinkdingAPI } from './linkding-api';
-import { appFetch } from '../utils/fetch-helper';
 import type { LocalBookmark, ContentSource, ContentSourceOption, LocalAsset } from '../types';
 
 export class ContentFetcher {
@@ -77,145 +76,7 @@ export class ContentFetcher {
     return contentType?.startsWith('text/html') || contentType?.startsWith('text/plain');
   }
 
-  /**
-   * Checks if content type can be displayed by browser (in iframe or directly)
-   */
-  private static isBrowserSupportedContent(contentType: string): boolean {
-    if (!contentType) return false;
-    
-    // Text content
-    if (contentType.startsWith('text/')) return true;
-    
-    // Images
-    if (contentType.startsWith('image/')) return true;
-    
-    // Video
-    if (contentType.startsWith('video/')) return true;
-    
-    // Audio 
-    if (contentType.startsWith('audio/')) return true;
-    
-    // PDF
-    if (contentType.includes('application/pdf')) return true;
-    
-    // JSON, XML
-    if (contentType.includes('application/json') || 
-        contentType.includes('application/xml') ||
-        contentType.includes('application/xhtml+xml')) return true;
-    
-    return false;
-  }
 
-  /**
-   * Creates embedded content using actual server response data
-   */
-  private static createEmbeddedContent(bookmark: LocalBookmark, contentType: string, dataUrl: string): string {
-    let mediaElement = '';
-    
-    if (contentType.startsWith('image/')) {
-      mediaElement = `<img src="${dataUrl}" alt="${this.escapeHtml(bookmark.title)}" style="max-width: 100%; height: auto; border-radius: 8px;" />`;
-    } else if (contentType.startsWith('video/')) {
-      mediaElement = `<video controls style="max-width: 100%; border-radius: 8px;"><source src="${dataUrl}" type="${contentType}"></video>`;
-    } else if (contentType.startsWith('audio/')) {
-      mediaElement = `<audio controls style="width: 100%;"><source src="${dataUrl}" type="${contentType}"></audio>`;
-    } else if (contentType.includes('application/pdf')) {
-      mediaElement = `<embed src="${dataUrl}" type="application/pdf" style="width: 100%; height: 70vh; border-radius: 8px;" />`;
-    } else if (contentType.includes('text/') || contentType.includes('application/json') || contentType.includes('application/xml')) {
-      // For text-based content, we can display it directly
-      mediaElement = `<iframe src="${dataUrl}" style="width: 100%; height: 70vh; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px;"></iframe>`;
-    } else {
-      // Fallback to generic embed
-      mediaElement = `<embed src="${dataUrl}" style="width: 100%; height: 70vh; border-radius: 8px;" />`;
-    }
-
-    return `
-      <div class="embedded-content">
-        <div class="content-header">
-          <h2 style="color: var(--md-sys-color-secondary); margin-bottom: 1rem;">${contentType} Content</h2>
-          <p class="bookmark-title"><strong>${this.escapeHtml(bookmark.title)}</strong></p>
-          <p class="content-message">Content loaded from live URL.</p>
-        </div>
-        
-        <div class="media-container" style="margin: 1rem 0; text-align: center;">
-          ${mediaElement}
-        </div>
-        <p style="text-align: center; color: var(--md-sys-color-on-surface-variant); font-size: 0.875rem;">
-          Content type: <strong>${contentType}</strong>
-        </p>
-        
-        <div class="content-actions">
-          <a href="${this.escapeHtml(bookmark.url)}" target="_blank" rel="noopener noreferrer" class="primary-button">
-            Open Original Website
-          </a>
-          ${bookmark.web_archive_snapshot_url ? `
-            <a href="${this.escapeHtml(bookmark.web_archive_snapshot_url)}" target="_blank" rel="noopener noreferrer" class="secondary-button">
-              Try Web Archive Version
-            </a>
-          ` : ''}
-        </div>
-      </div>
-      
-      <style>
-        .embedded-content {
-          padding: 2rem;
-          max-width: 800px;
-          margin: 0 auto;
-          text-align: center;
-        }
-        
-        .content-header h2 {
-          margin-bottom: 1rem;
-        }
-        
-        .bookmark-title {
-          margin-bottom: 1rem;
-          color: var(--md-sys-color-on-surface);
-        }
-        
-        .content-message {
-          color: var(--md-sys-color-on-surface-variant);
-          margin-bottom: 1rem;
-          line-height: 1.5;
-        }
-        
-        .content-actions {
-          display: flex;
-          gap: 0.5rem;
-          justify-content: center;
-          flex-wrap: wrap;
-          margin-top: 1.5rem;
-        }
-        
-        .primary-button, .secondary-button {
-          padding: 0.75rem 1.5rem;
-          border-radius: 24px;
-          text-decoration: none;
-          font-weight: 500;
-          transition: background-color 0.2s ease;
-        }
-        
-        .primary-button {
-          background: var(--md-sys-color-primary);
-          color: var(--md-sys-color-on-primary);
-        }
-        
-        .primary-button:hover {
-          background: var(--md-sys-color-primary-container);
-          color: var(--md-sys-color-on-primary-container);
-        }
-        
-        .secondary-button {
-          background: var(--md-sys-color-secondary-container);
-          color: var(--md-sys-color-on-secondary-container);
-        }
-        
-        .secondary-button:hover {
-          background: var(--md-sys-color-secondary);
-          color: var(--md-sys-color-on-secondary);
-        }
-      </style>
-    `;
-  }
 
 
   private static createUnsupportedContentMessage(asset: LocalAsset): string {
@@ -237,20 +98,6 @@ export class ContentFetcher {
     return decoder.decode(buffer);
   }
 
-  /**
-   * Converts ArrayBuffer to base64 string
-   */
-  private static arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      const byte = bytes[i];
-      if (byte !== undefined) {
-        binary += String.fromCharCode(byte);
-      }
-    }
-    return btoa(binary);
-  }
 
   private static async tryGetSpecificAssetContent(bookmark: LocalBookmark, assetId: number): Promise<{ content: string; readability_content: string; source: ContentSource } | null> {
     try {
@@ -438,14 +285,6 @@ export class ContentFetcher {
            !navigator.onLine;
   }
 
-  /**
-   * Checks if error is CORS-related
-   */
-  private static isCorsError(error: any): boolean {
-    return error?.message?.includes('CORS') || 
-           error?.message?.includes('cors') ||
-           (error?.name === 'TypeError' && error?.message?.includes('Failed to fetch'));
-  }
 
   /**
    * Generates consistent error content with shared styling and structure
@@ -625,120 +464,161 @@ export class ContentFetcher {
   }
 
   private static async tryGetLiveUrlContent(bookmark: LocalBookmark): Promise<{ content: string; readability_content: string; source: ContentSource }> {
-    try {
-      // Attempt to fetch the live URL content using our app's fetch helper
-      const response = await appFetch(bookmark.url, {
-        mode: 'cors',
-        credentials: 'omit'
-      });
+    // For Live URL content, create an iframe that points directly to the URL
+    // This bypasses CORS restrictions that prevent JavaScript fetch()
+    const iframeContent = this.createLiveUrlIframeContent(bookmark);
+    
+    return {
+      content: iframeContent,
+      readability_content: '', // No readability processing for live iframe content
+      source: 'url'
+    };
+  }
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      
-      // Handle HTML content with Readability processing
-      if (contentType.includes('text/html')) {
-        const html = await response.text();
-        const readabilityContent = this.processWithReadability(html, bookmark);
+  /**
+   * Creates an iframe-based live URL content that bypasses CORS restrictions
+   */
+  private static createLiveUrlIframeContent(bookmark: LocalBookmark): string {
+    return `
+      <div class="live-url-content">
+        <div class="live-url-header">
+          <h2 style="color: var(--md-sys-color-primary); margin-bottom: 1rem;">Live Website</h2>
+          <p class="bookmark-title"><strong>${this.escapeHtml(bookmark.title)}</strong></p>
+          <p class="live-url-message">
+            You're viewing the live website directly. Content may differ from when it was bookmarked.
+          </p>
+          <div class="live-url-actions">
+            <a href="${this.escapeHtml(bookmark.url)}" target="_blank" rel="noopener noreferrer" class="primary-button">
+              Open in New Tab
+            </a>
+            ${bookmark.web_archive_snapshot_url ? `
+              <a href="${this.escapeHtml(bookmark.web_archive_snapshot_url)}" target="_blank" rel="noopener noreferrer" class="secondary-button">
+                View Archive Version
+              </a>
+            ` : ''}
+          </div>
+        </div>
         
-        return {
-          content: html,
-          readability_content: readabilityContent,
-          source: 'url'
-        };
-      }
+        <div class="live-iframe-container">
+          <iframe 
+            src="${this.escapeHtml(bookmark.url)}"
+            style="
+              width: 100%; 
+              height: 80vh; 
+              border: 1px solid var(--md-sys-color-outline-variant); 
+              border-radius: 8px;
+              background: var(--md-sys-color-surface);
+            "
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-navigation"
+            referrerpolicy="no-referrer-when-downgrade"
+            loading="lazy"
+          ></iframe>
+        </div>
+      </div>
       
-      // For other browser-supported content types, embed the actual response data
-      if (this.isBrowserSupportedContent(contentType)) {
-        const responseData = await response.arrayBuffer();
-        const base64Data = this.arrayBufferToBase64(responseData);
-        const dataUrl = `data:${contentType};base64,${base64Data}`;
-        const embeddedContent = this.createEmbeddedContent(bookmark, contentType, dataUrl);
-        return {
-          content: embeddedContent,
-          readability_content: '', // No readability processing for non-HTML content
-          source: 'url'
-        };
-      }
-      
-      // For unsupported content types, provide helpful message
-      return this.createUnsupportedLiveContentMessage(bookmark, contentType);
-    } catch (error) {
-      console.error('Failed to fetch live URL content:', error);
-      return this.createLiveUrlErrorContent(bookmark, error);
-    }
+      <style>
+        .live-url-content {
+          padding: 1rem;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+        
+        .live-url-header {
+          text-align: center;
+          margin-bottom: 1.5rem;
+          padding: 1.5rem;
+          background: var(--md-sys-color-surface-container);
+          border-radius: 8px;
+        }
+        
+        .live-url-header h2 {
+          margin-bottom: 1rem;
+        }
+        
+        .bookmark-title {
+          margin-bottom: 1rem;
+          color: var(--md-sys-color-on-surface);
+          font-size: 1.125rem;
+        }
+        
+        .live-url-message {
+          color: var(--md-sys-color-on-surface-variant);
+          margin-bottom: 1.5rem;
+          line-height: 1.5;
+          font-size: 0.9rem;
+        }
+        
+        .live-url-actions {
+          display: flex;
+          gap: 0.75rem;
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        
+        .live-iframe-container {
+          margin: 0;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        
+        .primary-button, .secondary-button {
+          padding: 0.75rem 1.5rem;
+          border-radius: 24px;
+          text-decoration: none;
+          font-weight: 500;
+          transition: background-color 0.2s ease;
+          font-size: 0.9rem;
+        }
+        
+        .primary-button {
+          background: var(--md-sys-color-primary);
+          color: var(--md-sys-color-on-primary);
+        }
+        
+        .primary-button:hover {
+          background: var(--md-sys-color-primary-container);
+          color: var(--md-sys-color-on-primary-container);
+        }
+        
+        .secondary-button {
+          background: var(--md-sys-color-secondary-container);
+          color: var(--md-sys-color-on-secondary-container);
+        }
+        
+        .secondary-button:hover {
+          background: var(--md-sys-color-secondary);
+          color: var(--md-sys-color-on-secondary);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+          .live-url-content {
+            padding: 0.5rem;
+          }
+          
+          .live-url-header {
+            padding: 1rem;
+            margin-bottom: 1rem;
+          }
+          
+          .live-iframe-container iframe {
+            height: 70vh !important;
+          }
+          
+          .live-url-actions {
+            flex-direction: column;
+            align-items: center;
+          }
+          
+          .primary-button, .secondary-button {
+            min-width: 150px;
+            text-align: center;
+          }
+        }
+      </style>
+    `;
   }
 
-  private static createUnsupportedLiveContentMessage(bookmark: LocalBookmark, contentType: string): { content: string; readability_content: string; source: ContentSource } {
-    const content = this.generateErrorContent({
-      title: 'Unsupported Content Type',
-      message: `The live URL contains <strong>${contentType}</strong> content which cannot be displayed inline.`,
-      bookmark,
-      variant: 'info',
-      showTechnicalDetails: false,
-      customContent: '<p>Please open the link directly to view this content.</p>'
-    });
-    
-    return {
-      content,
-      readability_content: '', // No readability content for error cases
-      source: 'url'
-    };
-  }
-
-  private static createLiveUrlErrorContent(bookmark: LocalBookmark, error: any): { content: string; readability_content: string; source: ContentSource } {
-    const isNetworkError = this.isNetworkError(error);
-    const isCorsError = this.isCorsError(error);
-
-    let errorMessage = 'Failed to load content from the live URL.';
-    let troubleshooting = '';
-    
-    if (isCorsError) {
-      errorMessage = 'Cannot load content due to CORS (Cross-Origin Resource Sharing) restrictions.';
-      troubleshooting = `
-        <h4>Why this happens:</h4>
-        <p>The website blocks direct content loading from other apps for security reasons.</p>
-        <h4>Solutions:</h4>
-        <ul>
-          <li>Open the link directly in a new tab</li>
-          <li>Ask your Linkding administrator to enable content archiving</li>
-          <li>Use the bookmarklet to save content when adding bookmarks</li>
-        </ul>
-      `;
-    } else if (isNetworkError) {
-      errorMessage = 'Cannot load content due to network connectivity issues.';
-      troubleshooting = `
-        <h4>Possible causes:</h4>
-        <ul>
-          <li>No internet connection</li>
-          <li>Website is temporarily unavailable</li>
-          <li>Network firewall blocking the request</li>
-        </ul>
-      `;
-    } else {
-      troubleshooting = `
-        <h4>Error details:</h4>
-        <p><code>${error?.message || 'Unknown error'}</code></p>
-      `;
-    }
-
-    const content = this.generateErrorContent({
-      title: 'Live URL Content Unavailable',
-      message: errorMessage,
-      bookmark,
-      variant: 'error',
-      showTechnicalDetails: true,
-      technicalDetails: troubleshooting
-    });
-
-    return {
-      content,
-      readability_content: '', // No readability content for error cases
-      source: 'url'
-    };
-  }
 
   private static createFallbackContent(bookmark: LocalBookmark): { content: string; readability_content: string; source: ContentSource } {
     const content = this.generateErrorContent({
