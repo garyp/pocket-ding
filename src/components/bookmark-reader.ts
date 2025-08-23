@@ -102,6 +102,7 @@ export class BookmarkReader extends LitElement {
       gap: 0.5rem;
       flex: 1;
       min-width: 0;
+      max-width: 200px; /* Prevent progress section from expanding too wide */
     }
 
     .progress-text {
@@ -324,6 +325,7 @@ export class BookmarkReader extends LitElement {
         /* margin-top: 0.5rem; */
         flex: 1;
         min-width: 0;
+        max-width: 150px; /* Smaller max-width on mobile */
       }
       
       .toolbar-section {
