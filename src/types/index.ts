@@ -81,6 +81,32 @@ export interface ContentSourceOption {
   assetId?: number;
 }
 
+// Content fetcher result types - structured data instead of HTML
+export interface ContentResult {
+  source: ContentSource;
+  content_type: 'html' | 'iframe' | 'error' | 'unsupported';
+  html_content?: string;
+  readability_content?: string | null;
+  iframe_url?: string;
+  error?: ContentError;
+  metadata?: ContentMetadata;
+}
+
+export interface ContentError {
+  type: 'cors' | 'network' | 'not_found' | 'unsupported' | 'server_error';
+  message: string;
+  details?: string;
+  suggestions?: string[];
+}
+
+export interface ContentMetadata {
+  content_type?: string;
+  file_size?: number;
+  asset_id?: number;
+  display_name?: string;
+  url?: string;
+}
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 // BookmarkList Container/Presentation Component Types

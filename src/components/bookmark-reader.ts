@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { ContentFetcher } from '../services/content-fetcher';
 import { ThemeService } from '../services/theme-service';
-import type { LocalBookmark, ReadProgress, ContentSourceOption } from '../types';
+import type { LocalBookmark, ReadProgress, ContentSourceOption, ContentError, ContentResult } from '../types';
 import './secure-iframe';
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
@@ -28,9 +28,8 @@ export class BookmarkReader extends LitElement {
   @state() private scrollPosition = 0;
   @state() private selectedContentSource: ContentSourceOption | null = null;
   @state() private availableContentSources: ContentSourceOption[] = [];
-  @state() private currentContent = '';
-  @state() private currentReadabilityContent = '';
   @state() private isLoadingContent = false;
+  @state() private contentResult: ContentResult | null = null;
   @state() private contentSourceType: 'saved' | 'live' = 'saved';
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
@@ -378,6 +377,150 @@ export class BookmarkReader extends LitElement {
       text-decoration: underline;
     }
 
+    /* Error content styles */
+    .error-content {
+      padding: 2rem;
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .error-header h2 {
+      margin-bottom: 1rem;
+    }
+
+    .error-title {
+      color: var(--md-sys-color-error);
+    }
+
+    .warning-title {
+      color: var(--md-sys-color-tertiary);
+    }
+
+    .bookmark-title {
+      margin-bottom: 1rem;
+      color: var(--md-sys-color-on-surface);
+      font-size: 1rem;
+    }
+
+    .error-message {
+      color: var(--md-sys-color-on-surface-variant);
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+
+    .error-details {
+      text-align: left;
+      margin: 1.5rem 0;
+      padding: 1rem;
+      background: var(--md-sys-color-surface-container);
+      border-radius: 8px;
+    }
+
+    .error-details summary {
+      cursor: pointer;
+      font-weight: 500;
+      color: var(--md-sys-color-on-surface);
+      margin-bottom: 0.5rem;
+    }
+
+    .details-content {
+      margin-top: 0.5rem;
+    }
+
+    .details-content p {
+      color: var(--md-sys-color-on-surface-variant);
+      margin: 0.5rem 0;
+      line-height: 1.5;
+    }
+
+    .error-suggestions {
+      text-align: left;
+      margin: 1.5rem 0;
+    }
+
+    .error-suggestions h4 {
+      color: var(--md-sys-color-on-surface);
+      margin: 0 0 0.5rem 0;
+    }
+
+    .error-suggestions ul {
+      color: var(--md-sys-color-on-surface-variant);
+      margin: 0.5rem 0;
+    }
+
+    .error-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+
+    .primary-button, .secondary-button {
+      padding: 0.75rem 1.5rem;
+      border-radius: 24px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: background-color 0.2s ease;
+    }
+
+    .primary-button {
+      background: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+    }
+
+    .primary-button:hover {
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+    }
+
+    .secondary-button {
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+    }
+
+    .secondary-button:hover {
+      background: var(--md-sys-color-secondary);
+      color: var(--md-sys-color-on-secondary);
+    }
+
+    /* Iframe content styles */
+    .iframe-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .iframe-header {
+      padding: 0.5rem 1rem;
+      background: var(--md-sys-color-surface-container);
+      border-bottom: 1px solid var(--md-sys-color-outline-variant);
+    }
+
+    .iframe-message {
+      color: var(--md-sys-color-on-surface-variant);
+      font-size: 0.875rem;
+      margin: 0;
+    }
+
+    .iframe-message a {
+      color: var(--md-sys-color-primary);
+      text-decoration: none;
+    }
+
+    .iframe-message a:hover {
+      text-decoration: underline;
+    }
+
+    .live-iframe {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background: white;
+    }
+
     /* Utility classes */
     .circular-progress-24 {
       width: 24px;
@@ -504,36 +647,64 @@ export class BookmarkReader extends LitElement {
     try {
       this.isLoadingContent = true;
       
-      // Content now comes only from assets through ContentFetcher
-
       // Fetch content using the selected source
       const result = await ContentFetcher.fetchBookmarkContent(
         this.bookmark, 
         this.selectedContentSource.type, 
         this.selectedContentSource.assetId
       );
-      this.currentContent = result.content;
-      this.currentReadabilityContent = result.readability_content;
+      
+      // Store the content result for template rendering
+      this.contentResult = result;
+      
+      // Switch to original mode if readability is not available but user is in readability mode
+      if (!result.readability_content && this.readingMode === 'readability') {
+        this.readingMode = 'original';
+      }
       
       console.log(`Loaded content from source: ${result.source}${this.selectedContentSource.assetId ? ` (asset ${this.selectedContentSource.assetId})` : ''}`);
     } catch (error) {
       console.error('Failed to load content:', error);
-      this.currentContent = this.createErrorContent();
-      this.currentReadabilityContent = this.currentContent;
+      // Create a generic error result for template rendering
+      this.contentResult = {
+        source: 'asset',
+        content_type: 'error',
+        error: {
+          type: 'server_error',
+          message: 'Failed to load content from the selected source.',
+          suggestions: ['Try selecting a different content source', 'Read online']
+        }
+      };
+      // Switch to original mode if readability is not available but user is in readability mode
+      if (!this.contentResult?.readability_content && this.readingMode === 'readability') {
+        this.readingMode = 'original';
+      }
     } finally {
       this.isLoadingContent = false;
     }
   }
 
-  private createErrorContent(): string {
-    return `
-      <div class="fallback-content">
-        <h1>Content Unavailable</h1>
-        <p>Failed to load content from the selected source.</p>
-        <p>Try selecting a different content source or <a href="${this.bookmark?.url}" target="_blank">read online</a>.</p>
-      </div>
-    `;
+
+
+  private getErrorTitle(type: ContentError['type']): string {
+    switch (type) {
+      case 'cors': return 'CORS Restriction';
+      case 'network': return 'Network Error';
+      case 'not_found': return 'Content Not Available';
+      case 'unsupported': return 'Unsupported Content';
+      case 'server_error': return 'Server Error';
+      default: return 'Error';
+    }
   }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
 
   private handleIframeProgressUpdate = (event: CustomEvent) => {
     const { progress, scrollPosition } = event.detail;
@@ -791,33 +962,159 @@ export class BookmarkReader extends LitElement {
       `;
     }
 
-    const content = this.readingMode === 'original' 
-      ? this.currentContent 
-      : this.currentReadabilityContent;
+    // Handle error and unsupported content with Lit templates
+    if (this.contentResult?.content_type === 'error') {
+      return this.renderErrorContent(this.contentResult.error!, this.bookmark);
+    }
+    
+    if (this.contentResult?.content_type === 'unsupported') {
+      return this.renderUnsupportedContent(this.contentResult.error!, this.contentResult.metadata!, this.bookmark);
+    }
 
-    if (!content) {
+    // Handle iframe content directly to avoid nested iframes
+    if (this.contentResult?.content_type === 'iframe') {
+      return this.renderIframeContent(this.contentResult.iframe_url!);
+    }
+
+    // Handle HTML content based on reading mode
+    if (this.contentResult?.content_type === 'html') {
+      const content = this.readingMode === 'original' 
+        ? this.contentResult.html_content
+        : this.contentResult.readability_content;
+
+      if (!content) {
+        return html`
+          <div class="fallback-content">
+            <h1>${this.bookmark.title}</h1>
+            <p>Content is not available for offline reading.</p>
+            <p>
+              <a href="${this.bookmark.url}" target="_blank">
+                Read online
+              </a>
+            </p>
+          </div>
+        `;
+      }
+
       return html`
-        <div class="fallback-content">
-          <h1>${this.bookmark.title}</h1>
-          <p>Content is not available for offline reading.</p>
-          <p>
-            <a href="${this.bookmark.url}" target="_blank">
-              Read online
-            </a>
-          </p>
-        </div>
+        <secure-iframe
+          class="secure-iframe"
+          .content=${content}
+          .scrollPosition=${this.scrollPosition}
+          @progress-update=${this.handleIframeProgressUpdate}
+          @content-loaded=${this.handleIframeContentLoaded}
+          @content-error=${this.handleIframeContentError}
+        ></secure-iframe>
       `;
     }
 
+    // Fallback for any other cases
     return html`
-      <secure-iframe
-        class="secure-iframe"
-        .content=${content}
-        .scrollPosition=${this.scrollPosition}
-        @progress-update=${this.handleIframeProgressUpdate}
-        @content-loaded=${this.handleIframeContentLoaded}
-        @content-error=${this.handleIframeContentError}
-      ></secure-iframe>
+      <div class="fallback-content">
+        <h1>${this.bookmark.title}</h1>
+        <p>Content is not available for offline reading.</p>
+        <p>
+          <a href="${this.bookmark.url}" target="_blank">
+            Read online
+          </a>
+        </p>
+      </div>
+    `;
+  }
+
+  private renderIframeContent(url: string) {
+    return html`
+      <div class="iframe-content">
+        <div class="iframe-header">
+          <p class="iframe-message">Loading live content from: <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>
+        </div>
+        <iframe 
+          src="${url}" 
+          class="live-iframe"
+          sandbox="allow-scripts allow-same-origin"
+          referrerpolicy="no-referrer-when-downgrade">
+        </iframe>
+      </div>
+    `;
+  }
+
+  private renderErrorContent(error: ContentError, bookmark: LocalBookmark) {
+    return html`
+      <div class="error-content">
+        <div class="error-header">
+          <h2 class="error-title">${this.getErrorTitle(error.type)}</h2>
+          <p class="bookmark-title"><strong>${bookmark.title}</strong></p>
+          <p class="error-message">${error.message}</p>
+        </div>
+        
+        ${error.details ? html`
+          <details class="error-details">
+            <summary>Technical Details</summary>
+            <div class="details-content">
+              <p>${error.details}</p>
+            </div>
+          </details>
+        ` : ''}
+        
+        ${error.suggestions ? html`
+          <div class="error-suggestions">
+            <h4>Suggested Solutions:</h4>
+            <ul>
+              ${error.suggestions.map(suggestion => html`<li>${suggestion}</li>`)}
+            </ul>
+          </div>
+        ` : ''}
+        
+        <div class="error-actions">
+          <a href="${bookmark.url}" target="_blank" rel="noopener noreferrer" class="primary-button">
+            Open Original Website
+          </a>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderUnsupportedContent(error: ContentError, metadata: any, bookmark: LocalBookmark) {
+    return html`
+      <div class="unsupported-content">
+        <div class="unsupported-header">
+          <h2 class="unsupported-title">Content Type Not Supported</h2>
+          <p class="bookmark-title"><strong>${bookmark.title}</strong></p>
+          <p class="unsupported-message">${error.message}</p>
+        </div>
+        
+        ${metadata ? html`
+          <div class="content-metadata">
+            <h4>Content Information:</h4>
+            <ul class="metadata-list">
+              ${metadata.content_type ? html`<li><strong>Type:</strong> ${metadata.content_type}</li>` : ''}
+              ${metadata.file_size ? html`<li><strong>Size:</strong> ${this.formatFileSize(metadata.file_size)}</li>` : ''}
+              ${metadata.display_name ? html`<li><strong>File:</strong> ${metadata.display_name}</li>` : ''}
+            </ul>
+          </div>
+        ` : ''}
+        
+        ${error.details ? html`
+          <div class="error-details-small">
+            <p>${error.details}</p>
+          </div>
+        ` : ''}
+        
+        ${error.suggestions ? html`
+          <div class="error-suggestions">
+            <h4>What you can do:</h4>
+            <ul>
+              ${error.suggestions.map(suggestion => html`<li>${suggestion}</li>`)}
+            </ul>
+          </div>
+        ` : ''}
+        
+        <div class="error-actions">
+          <a href="${bookmark.url}" target="_blank" rel="noopener noreferrer" class="primary-button">
+            Open Original Website
+          </a>
+        </div>
+      </div>
     `;
   }
 
@@ -921,6 +1218,7 @@ export class BookmarkReader extends LitElement {
                   class="processing-mode-button"
                   @click=${this.handleProcessingModeToggle}
                   title="Readable view (click for raw)"
+                  ?disabled=${!this.contentResult?.readability_content}
                 >
                   <md-icon>auto_stories</md-icon>
                 </md-filled-icon-button>
@@ -928,7 +1226,8 @@ export class BookmarkReader extends LitElement {
                 <md-icon-button
                   class="processing-mode-button"
                   @click=${this.handleProcessingModeToggle}
-                  title="Raw view (click for readable)"
+                  title=${this.contentResult?.readability_content ? "Raw view (click for readable)" : "Raw view (readable mode not available)"}
+                  ?disabled=${!this.contentResult?.readability_content}
                 >
                   <md-icon>code</md-icon>
                 </md-icon-button>

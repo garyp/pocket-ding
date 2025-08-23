@@ -51,15 +51,17 @@ describe('BookmarkReader - Asset Selection', () => {
     vi.mocked(ContentFetcher.fetchBookmarkContent).mockImplementation(async (_bookmark, source) => {
       if (source === 'url') {
         return {
-          content: '<div>Live URL content</div>',
-          readability_content: '<div>Live readable content</div>',
-          source: 'url'
+          source: 'url',
+          content_type: 'html',
+          html_content: '<div>Live URL content</div>',
+          readability_content: '<div>Live readable content</div>'
         };
       }
       return {
-        content: '<div>Test content</div>',
-        readability_content: '<div>Readable content</div>',
-        source: 'asset'
+        source: 'asset',
+        content_type: 'html',
+        html_content: '<div>Test content</div>',
+        readability_content: '<div>Readable content</div>'
       };
     });
 
