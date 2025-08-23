@@ -141,6 +141,41 @@ if (!HTMLElement.prototype.attachInternals) {
   };
 }
 
+// Mock Web Animations API for Material Dialog components
+if (!Element.prototype.animate) {
+  Element.prototype.animate = function(_keyframes: any, _options?: any) {
+    // Return a basic Animation-like object
+    return {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      cancel: () => {},
+      finish: () => {},
+      pause: () => {},
+      play: () => {},
+      reverse: () => {},
+      updatePlaybackRate: () => {},
+      currentTime: 0,
+      effect: null,
+      finished: Promise.resolve(),
+      id: '',
+      pending: false,
+      playState: 'finished' as AnimationPlayState,
+      playbackRate: 1,
+      ready: Promise.resolve(),
+      replaceState: 'active' as AnimationReplaceState,
+      startTime: null,
+      timeline: null,
+      // Mock event listener methods
+      oncancel: null,
+      onfinish: null,
+      onremove: null,
+      // Additional methods that may be called
+      commitStyles: () => {},
+      persist: () => {},
+    } as any;
+  };
+}
+
 beforeEach(() => {
   // Clear specific mocks but don't touch IntersectionObserver since it uses persistent implementations
   if (global.fetch && vi.isMockFunction(global.fetch)) {
