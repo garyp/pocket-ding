@@ -1,6 +1,7 @@
 import { createLinkdingAPI, type LinkdingAPI } from './linkding-api';
 import { DatabaseService } from './database';
 import { FaviconService } from './favicon-service';
+import { DebugService } from './debug-service';
 import type { LocalBookmark, AppSettings, LocalAsset } from '../types';
 
 export interface SyncEvents {
@@ -76,6 +77,10 @@ export class SyncService extends EventTarget {
       const syncStartTime = new Date().toISOString();
       
       console.log(lastSyncTimestamp ? `Incremental sync since: ${lastSyncTimestamp}` : 'Full sync');
+      DebugService.log('info', 'sync', 'start', lastSyncTimestamp ? 'Starting incremental sync' : 'Starting full sync', {
+        lastSyncTimestamp,
+        syncStartTime
+      });
       
       const remoteBookmarks = await api.getAllBookmarks(lastSyncTimestamp || undefined);
       const localBookmarks = await DatabaseService.getAllBookmarks();
@@ -83,6 +88,11 @@ export class SyncService extends EventTarget {
       // Debug logging for archived bookmarks
       const archivedCount = remoteBookmarks.filter(b => b.is_archived).length;
       console.log(`Remote bookmarks: ${remoteBookmarks.length} total, ${archivedCount} archived`);
+      DebugService.log('info', 'sync', 'fetched', 'Retrieved remote bookmarks', {
+        total: remoteBookmarks.length,
+        archived: archivedCount,
+        local: localBookmarks.length
+      });
       
       // Create a map of local bookmarks for efficient lookup
       const localBookmarksMap = new Map(localBookmarks.map(b => [b.id, b]));
@@ -99,6 +109,7 @@ export class SyncService extends EventTarget {
         detail: { total }
       }));
       
+      DebugService.logSyncStart(total);
       onProgress?.(processed, total);
 
       for (const remoteBookmark of remoteBookmarks) {
@@ -170,8 +181,10 @@ export class SyncService extends EventTarget {
       }));
       
       console.log(`Sync completed: ${processed} bookmarks processed`);
+      DebugService.logSyncComplete(processed);
     } catch (error) {
       console.error('Sync failed:', error);
+      DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)));
       
       // Emit sync error event
       syncInstance.dispatchEvent(new CustomEvent('sync-error', {
@@ -183,17 +196,23 @@ export class SyncService extends EventTarget {
   }
 
   static async backgroundSync(settings: AppSettings): Promise<void> {
-    if (!settings.auto_sync) return;
+    if (!settings.auto_sync) {
+      DebugService.log('info', 'sync', 'background', 'Background sync skipped - auto sync disabled');
+      return;
+    }
     
     try {
+      DebugService.log('info', 'sync', 'background', 'Starting background sync');
       await this.syncBookmarks(settings);
     } catch (error) {
       console.error('Background sync failed:', error);
+      DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { type: 'background' });
     }
   }
 
   static async fullSync(settings: AppSettings, onProgress?: (current: number, total: number) => void): Promise<void> {
     // Clear last sync timestamp to force full sync
+    DebugService.log('info', 'sync', 'fullSync', 'Starting full sync - clearing last sync timestamp');
     await DatabaseService.setLastSyncTimestamp('');
     await this.syncBookmarks(settings, onProgress);
   }

@@ -219,6 +219,10 @@ export class DatabaseService {
     await db.assets.put(asset);
   }
 
+  static async getAllAssets(): Promise<LocalAsset[]> {
+    return await db.assets.toArray();
+  }
+
   static async getAssetsByBookmarkId(bookmarkId: number): Promise<LocalAsset[]> {
     return await db.assets.where('bookmark_id').equals(bookmarkId).toArray();
   }
