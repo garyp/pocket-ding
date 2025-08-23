@@ -838,6 +838,29 @@ export class BookmarkReader extends LitElement {
           <h3>Bookmark not found</h3>
           <p>The requested bookmark could not be loaded.</p>
         </div>
+        
+        <!-- Info Modal (always rendered for proper state handling) -->
+        <md-dialog 
+          ?open=${this.showInfoModal}
+          @close=${this.handleInfoModalClose}
+        >
+          <div class="info-modal-content">
+            <div class="info-modal-header">
+              <h2 class="info-modal-title">Bookmark Information</h2>
+            </div>
+            <div class="info-modal-body">
+              <div class="loading-container">
+                <md-circular-progress indeterminate class="circular-progress-24"></md-circular-progress>
+                <p>Loading bookmark information...</p>
+              </div>
+            </div>
+            <div class="info-modal-actions">
+              <md-text-button @click=${this.handleInfoModalClose}>
+                Close
+              </md-text-button>
+            </div>
+          </div>
+        </md-dialog>
       `;
     }
 
@@ -978,7 +1001,12 @@ export class BookmarkReader extends LitElement {
                   <div class="info-value">${this.bookmark.tag_names.join(', ')}</div>
                 </div>
               ` : ''}
-            ` : ''}
+            ` : html`
+              <div class="loading-container">
+                <md-circular-progress indeterminate class="circular-progress-24"></md-circular-progress>
+                <p>Loading bookmark information...</p>
+              </div>
+            `}
           </div>
           <div class="info-modal-actions">
             <md-text-button @click=${this.handleInfoModalClose}>
