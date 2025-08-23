@@ -48,10 +48,19 @@ describe('BookmarkReader - Asset Selection', () => {
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
     
-    vi.mocked(ContentFetcher.fetchBookmarkContent).mockResolvedValue({
-      content: '<div>Test content</div>',
-      readability_content: '<div>Readable content</div>',
-      source: 'asset'
+    vi.mocked(ContentFetcher.fetchBookmarkContent).mockImplementation(async (_bookmark, source) => {
+      if (source === 'url') {
+        return {
+          content: '<div>Live URL content</div>',
+          readability_content: '<div>Live readable content</div>',
+          source: 'url'
+        };
+      }
+      return {
+        content: '<div>Test content</div>',
+        readability_content: '<div>Readable content</div>',
+        source: 'asset'
+      };
     });
 
     // Create element
