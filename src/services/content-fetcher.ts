@@ -10,6 +10,11 @@ export class ContentFetcher {
     readability_content: string; 
     source: ContentSource;
   }> {
+    // Handle live URL content fetching
+    if (preferredSource === 'url') {
+      return await this.tryGetLiveUrlContent(bookmark);
+    }
+
     // Try to get content from specific asset if requested
     if (preferredSource === 'asset' && assetId) {
       const assetContent = await this.tryGetSpecificAssetContent(bookmark, assetId);
@@ -351,6 +356,236 @@ export class ContentFetcher {
       content: offlineContent,
       readability_content: offlineContent,
       source: 'asset'
+    };
+  }
+
+  private static async tryGetLiveUrlContent(bookmark: LocalBookmark): Promise<{ content: string; readability_content: string; source: ContentSource }> {
+    try {
+      // Attempt to fetch the live URL content
+      const response = await fetch(bookmark.url, {
+        mode: 'cors',
+        credentials: 'omit',
+        headers: {
+          'User-Agent': 'PocketDing/1.0 (Progressive Web App)'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      
+      // Only handle HTML content for live URLs
+      if (!contentType.includes('text/html')) {
+        return this.createUnsupportedLiveContentMessage(bookmark, contentType);
+      }
+
+      const html = await response.text();
+      const readabilityContent = this.processWithReadability(html, bookmark);
+      
+      return {
+        content: html,
+        readability_content: readabilityContent,
+        source: 'url'
+      };
+    } catch (error) {
+      console.error('Failed to fetch live URL content:', error);
+      return this.createLiveUrlErrorContent(bookmark, error);
+    }
+  }
+
+  private static createUnsupportedLiveContentMessage(bookmark: LocalBookmark, contentType: string): { content: string; readability_content: string; source: ContentSource } {
+    const content = `
+      <div class="unsupported-live-content">
+        <h2>Unsupported Content Type</h2>
+        <p>The live URL contains <strong>${contentType}</strong> content which cannot be displayed inline.</p>
+        <p><strong>URL:</strong> <a href="${bookmark.url}" target="_blank">${bookmark.url}</a></p>
+        <p>Please open the link directly to view this content.</p>
+      </div>
+      
+      <style>
+        .unsupported-live-content {
+          text-align: center;
+          padding: 2rem;
+          background: var(--md-sys-color-surface-container);
+          border: 2px dashed var(--md-sys-color-outline-variant);
+          border-radius: 8px;
+          margin: 2rem 0;
+        }
+        
+        .unsupported-live-content h2 {
+          color: var(--md-sys-color-secondary);
+          margin-bottom: 1rem;
+        }
+        
+        .unsupported-live-content p {
+          color: var(--md-sys-color-on-surface-variant);
+          margin-bottom: 0.5rem;
+        }
+        
+        .unsupported-live-content a {
+          color: var(--md-sys-color-primary);
+          text-decoration: none;
+          word-break: break-all;
+        }
+        
+        .unsupported-live-content a:hover {
+          text-decoration: underline;
+        }
+      </style>
+    `;
+    
+    return {
+      content,
+      readability_content: content,
+      source: 'url'
+    };
+  }
+
+  private static createLiveUrlErrorContent(bookmark: LocalBookmark, error: any): { content: string; readability_content: string; source: ContentSource } {
+    const isNetworkError = error?.message?.includes('fetch') || 
+                          error?.name === 'TypeError' || 
+                          error?.name === 'NetworkError' ||
+                          !navigator.onLine;
+
+    const isCorsError = error?.message?.includes('CORS') || 
+                       error?.message?.includes('cors') ||
+                       (error?.name === 'TypeError' && error?.message?.includes('Failed to fetch'));
+
+    let errorMessage = 'Failed to load content from the live URL.';
+    let troubleshooting = '';
+    
+    if (isCorsError) {
+      errorMessage = 'Cannot load content due to CORS (Cross-Origin Resource Sharing) restrictions.';
+      troubleshooting = `
+        <h4>Why this happens:</h4>
+        <p>The website blocks direct content loading from other apps for security reasons.</p>
+        <h4>Solutions:</h4>
+        <ul>
+          <li>Open the link directly in a new tab</li>
+          <li>Ask your Linkding administrator to enable content archiving</li>
+          <li>Use the bookmarklet to save content when adding bookmarks</li>
+        </ul>
+      `;
+    } else if (isNetworkError) {
+      errorMessage = 'Cannot load content due to network connectivity issues.';
+      troubleshooting = `
+        <h4>Possible causes:</h4>
+        <ul>
+          <li>No internet connection</li>
+          <li>Website is temporarily unavailable</li>
+          <li>Network firewall blocking the request</li>
+        </ul>
+      `;
+    } else {
+      troubleshooting = `
+        <h4>Error details:</h4>
+        <p><code>${error?.message || 'Unknown error'}</code></p>
+      `;
+    }
+
+    const content = `
+      <div class="live-url-error">
+        <h2>Live URL Content Unavailable</h2>
+        <p><strong>${bookmark.title}</strong></p>
+        <p>${errorMessage}</p>
+        
+        ${troubleshooting}
+        
+        <div class="error-actions">
+          <a href="${bookmark.url}" target="_blank" rel="noopener noreferrer" class="primary-button">
+            Open Original Website
+          </a>
+          ${bookmark.web_archive_snapshot_url ? `
+            <a href="${bookmark.web_archive_snapshot_url}" target="_blank" rel="noopener noreferrer" class="secondary-button">
+              Try Web Archive Version
+            </a>
+          ` : ''}
+        </div>
+      </div>
+      
+      <style>
+        .live-url-error {
+          padding: 2rem;
+          max-width: 600px;
+          margin: 0 auto;
+          text-align: center;
+        }
+        
+        .live-url-error h2 {
+          color: var(--md-sys-color-error);
+          margin-bottom: 1rem;
+        }
+        
+        .live-url-error h4 {
+          color: var(--md-sys-color-on-surface);
+          margin: 1.5rem 0 0.5rem 0;
+          text-align: left;
+        }
+        
+        .live-url-error p {
+          color: var(--md-sys-color-on-surface-variant);
+          margin-bottom: 1rem;
+          line-height: 1.5;
+        }
+        
+        .live-url-error ul {
+          text-align: left;
+          color: var(--md-sys-color-on-surface-variant);
+          margin: 0.5rem 0;
+        }
+        
+        .live-url-error code {
+          background: var(--md-sys-color-surface-container-high);
+          padding: 0.25rem 0.5rem;
+          border-radius: 4px;
+          font-family: 'Roboto Mono', monospace;
+          font-size: 0.875rem;
+        }
+        
+        .error-actions {
+          display: flex;
+          gap: 0.5rem;
+          justify-content: center;
+          flex-wrap: wrap;
+          margin-top: 1.5rem;
+        }
+        
+        .primary-button, .secondary-button {
+          padding: 0.75rem 1.5rem;
+          border-radius: 24px;
+          text-decoration: none;
+          font-weight: 500;
+          transition: background-color 0.2s ease;
+        }
+        
+        .primary-button {
+          background: var(--md-sys-color-primary);
+          color: var(--md-sys-color-on-primary);
+        }
+        
+        .primary-button:hover {
+          background: var(--md-sys-color-primary-container);
+          color: var(--md-sys-color-on-primary-container);
+        }
+        
+        .secondary-button {
+          background: var(--md-sys-color-secondary-container);
+          color: var(--md-sys-color-on-secondary-container);
+        }
+        
+        .secondary-button:hover {
+          background: var(--md-sys-color-secondary);
+          color: var(--md-sys-color-on-secondary);
+        }
+      </style>
+    `;
+
+    return {
+      content,
+      readability_content: content,
+      source: 'url'
     };
   }
 

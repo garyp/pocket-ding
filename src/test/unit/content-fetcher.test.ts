@@ -555,4 +555,120 @@ describe('ContentFetcher', () => {
       expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
     });
   });
+
+  describe('Live URL Content Fetching', () => {
+    let mockFetch: any;
+
+    beforeEach(() => {
+      mockFetch = vi.fn();
+      global.fetch = mockFetch;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should fetch live URL content successfully', async () => {
+      const mockHtml = '<html><body><h1>Live Content</h1><p>Fresh from the web</p></body></html>';
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'text/html; charset=utf-8' : null
+        },
+        text: () => Promise.resolve(mockHtml),
+      });
+
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      expect(mockFetch).toHaveBeenCalledWith(mockBookmark.url, {
+        mode: 'cors',
+        credentials: 'omit',
+        headers: {
+          'User-Agent': 'PocketDing/1.0 (Progressive Web App)'
+        }
+      });
+      expect(result.source).toBe('url');
+      expect(result.content).toBe(mockHtml);
+      expect(result.readability_content).toContain('pocket-ding-header');
+      expect(result.readability_content).toContain('<p>Processed content</p>');
+    });
+
+    it('should handle HTTP error responses', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      });
+
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      expect(result.source).toBe('url');
+      expect(result.content).toContain('Live URL Content Unavailable');
+      expect(result.content).toContain('HTTP 404: Not Found');
+      expect(result.content).toContain('Open Original Website');
+    });
+
+    it('should handle CORS errors with helpful message', async () => {
+      const corsError = new TypeError('Failed to fetch');
+      mockFetch.mockRejectedValue(corsError);
+
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      expect(result.source).toBe('url');
+      expect(result.content).toContain('CORS (Cross-Origin Resource Sharing) restrictions');
+      expect(result.content).toContain('website blocks direct content loading');
+      expect(result.content).toContain('Open the link directly');
+    });
+
+    it('should handle network errors', async () => {
+      const networkError = new TypeError('NetworkError when attempting to fetch resource');
+      mockFetch.mockRejectedValue(networkError);
+
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      expect(result.source).toBe('url');
+      expect(result.content).toContain('network connectivity issues');
+      expect(result.content).toContain('No internet connection');
+    });
+
+    it('should handle unsupported content types', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/pdf' : null
+        },
+        text: () => Promise.resolve('PDF content'),
+      });
+
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      expect(result.source).toBe('url');
+      expect(result.content).toContain('Unsupported Content Type');
+      expect(result.content).toContain('application/pdf');
+      expect(result.content).toContain('cannot be displayed inline');
+    });
+
+    it('should include web archive link in error messages when available', async () => {
+      const bookmarkWithArchive = {
+        ...mockBookmark,
+        web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
+      };
+
+      mockFetch.mockRejectedValue(new Error('Generic error'));
+
+      const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive, 'url');
+
+      expect(result.content).toContain('Try Web Archive Version');
+      expect(result.content).toContain('web.archive.org');
+    });
+
+    it('should not include web archive link when not available', async () => {
+      mockFetch.mockRejectedValue(new Error('Generic error'));
+
+      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
+
+      expect(result.content).not.toContain('Try Web Archive Version');
+      expect(result.content).not.toContain('web.archive.org');
+    });
+  });
 });
