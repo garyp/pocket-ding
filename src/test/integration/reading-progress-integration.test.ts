@@ -92,9 +92,10 @@ describe('Reading Progress Integration Tests', () => {
 
   const createElementWithContent = async (content: string) => {
     vi.mocked(ContentFetcher.fetchBookmarkContent).mockResolvedValue({
-      content,
-      readability_content: content,
-      source: 'asset'
+      source: 'asset',
+      content_type: 'html',
+      html_content: content,
+      readability_content: content
     });
 
     element = new BookmarkReader();
@@ -544,9 +545,13 @@ describe('Reading Progress Integration Tests', () => {
         </div>
       `;
       
-      // Update the component's content directly
-      (element as any).currentContent = content;
-      (element as any).currentReadabilityContent = content;
+      // Update the component's content directly via contentResult
+      (element as any).contentResult = {
+        source: 'asset' as const,
+        content_type: 'html' as const,
+        html_content: content,
+        readability_content: content
+      };
       
       // Trigger re-render
       await element.updateComplete;
@@ -606,9 +611,10 @@ describe('Reading Progress Integration Tests', () => {
       
       // Create element manually without using createElementWithContent to avoid the error in setup
       vi.mocked(ContentFetcher.fetchBookmarkContent).mockResolvedValue({
-        content,
-        readability_content: content,
-        source: 'asset'
+        source: 'asset',
+        content_type: 'html',
+        html_content: content,
+        readability_content: content
       });
 
       element = new BookmarkReader();
@@ -658,9 +664,10 @@ describe('Reading Progress Integration Tests', () => {
       `;
 
       vi.mocked(ContentFetcher.fetchBookmarkContent).mockResolvedValue({
-        content: originalContent,
-        readability_content: readabilityContent,
-        source: 'asset'
+        source: 'asset',
+        content_type: 'html',
+        html_content: originalContent,
+        readability_content: readabilityContent
       });
 
       await createElementWithContent(originalContent);

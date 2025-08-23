@@ -62,9 +62,10 @@ describe('BookmarkReader - Info Modal', () => {
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
     vi.mocked(ContentFetcher.getAvailableContentSources).mockResolvedValue(contentSources);
     vi.mocked(ContentFetcher.fetchBookmarkContent).mockResolvedValue({
-      content: '<div>Test content</div>',
-      readability_content: '<div>Readable content</div>',
-      source: 'asset'
+      source: 'asset',
+      content_type: 'html',
+      html_content: '<div>Test content</div>',
+      readability_content: '<div>Readable content</div>'
     });
 
     // Create element

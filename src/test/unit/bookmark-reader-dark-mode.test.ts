@@ -60,9 +60,10 @@ describe('BookmarkReader Dark Mode', () => {
       { type: 'asset', label: 'Cached Content', assetId: 1 }
     ]);
     vi.mocked(ContentFetcher.fetchBookmarkContent).mockResolvedValue({
-      content: '<p>Test content</p>',
-      readability_content: '<p>Readability content</p>',
-      source: 'asset'
+      source: 'asset',
+      content_type: 'html',
+      html_content: '<p>Test content</p>',
+      readability_content: '<p>Readability content</p>'
     });
 
     // Mock ThemeService

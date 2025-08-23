@@ -5,11 +5,7 @@ import { createLinkdingAPI } from '../../services/linkding-api';
 import type { LocalBookmark } from '../../types';
 
 // Mock the fetch helper
-vi.mock('../../utils/fetch-helper', () => ({
-  appFetch: vi.fn(),
-}));
 
-import { appFetch } from '../../utils/fetch-helper';
 
 // Mock @mozilla/readability
 vi.mock('@mozilla/readability', () => ({
@@ -77,10 +73,11 @@ describe('ContentFetcher', () => {
   it('should return fallback content when no assets available', async () => {
     const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-    expect(result.content).toContain('Test Article');
-    expect(result.content).toContain('Open Original Website');
-    expect(result.readability_content).toBe(''); // No readability for fallback content
     expect(result.source).toBe('asset');
+    expect(result.content_type).toBe('error');
+    expect(result.error?.type).toBe('not_found');
+    expect(result.error?.message).toContain('No cached content available');
+    expect(result.error?.suggestions).toContain('Ask your Linkding administrator to enable content archiving');
   });
 
   it('should handle bookmarks without description gracefully', async () => {
@@ -88,14 +85,14 @@ describe('ContentFetcher', () => {
     const bookmarkWithoutDescription = { ...mockBookmark, description: '' };
     const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithoutDescription);
 
-    expect(result.content).toContain('No cached content available');
-    expect(result.content).toContain(bookmarkWithoutDescription.title);
-    expect(result.content).toContain('Open Original Website');
-    expect(result.readability_content).toBe(''); // No readability for fallback content
     expect(result.source).toBe('asset');
+    expect(result.content_type).toBe('error');
+    expect(result.error?.type).toBe('not_found');
+    expect(result.error?.message).toContain('No cached content available');
+    expect(result.error?.details).toBe(''); // Empty description
   });
 
-  it('should show web archive link when available', async () => {
+  it('should include web archive URL in error when available', async () => {
     const bookmarkWithArchive = {
       ...mockBookmark,
       web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
@@ -103,9 +100,10 @@ describe('ContentFetcher', () => {
 
     const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive);
 
-    expect(result.content).toContain('Try Web Archive Version');
-    expect(result.content).toContain('web.archive.org');
     expect(result.source).toBe('asset');
+    expect(result.content_type).toBe('error');
+    expect(result.error?.type).toBe('not_found');
+    // The component will handle showing the web archive link based on bookmark data
   });
 
   describe('Asset Content Handling', () => {
@@ -145,11 +143,14 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-      expect(result.content).toContain('Asset Content');
+      expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('html');
+      expect(result.html_content).toContain('Asset Content');
       expect(result.readability_content).toContain('pocket-ding-header');
       expect(result.readability_content).toContain('<p>Processed content</p>');
       expect(result.readability_content).toContain('Test Article');
-      expect(result.source).toBe('asset');
+      expect(result.metadata?.asset_id).toBe(1);
+      expect(result.metadata?.content_type).toBe('text/html');
     });
 
     it('should show unsupported content message for PDF asset', async () => {
@@ -157,11 +158,13 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-      expect(result.content).toContain('Unsupported Content Type');
-      expect(result.content).toContain('application/pdf');
-      expect(result.content).toContain('Document.pdf');
-      expect(result.content).toContain('53.05 KB'); // 54321 bytes formatted
       expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('unsupported');
+      expect(result.error?.type).toBe('unsupported');
+      expect(result.error?.message).toContain('application/pdf');
+      expect(result.metadata?.display_name).toBe('Document.pdf');
+      expect(result.metadata?.file_size).toBe(54321);
+      expect(result.metadata?.asset_id).toBe(2);
     });
 
     it('should prefer HTML asset over PDF asset', async () => {
@@ -169,8 +172,10 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-      expect(result.content).toContain('Asset Content');
       expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('html');
+      expect(result.html_content).toContain('Asset Content');
+      expect(result.metadata?.asset_id).toBe(1); // HTML asset was chosen
     });
 
     it('should fetch specific asset by id', async () => {
@@ -179,8 +184,10 @@ describe('ContentFetcher', () => {
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'asset', 1);
 
       expect((DatabaseService.getAsset as any)).toHaveBeenCalledWith(1);
-      expect(result.content).toContain('Asset Content');
       expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('html');
+      expect(result.html_content).toContain('Asset Content');
+      expect(result.metadata?.asset_id).toBe(1);
     });
 
     it('should handle specific asset not found', async () => {
@@ -188,9 +195,10 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'asset', 999);
 
-      expect(result.content).toContain('No cached content available');
-      expect(result.content).toContain('Open Original Website');
       expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('error');
+      expect(result.error?.type).toBe('not_found');
+      expect(result.error?.message).toContain('No cached content available');
     });
 
     it('should fallback when no assets available', async () => {
@@ -198,12 +206,13 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-      expect(result.content).toContain('No cached content available');
-      expect(result.content).toContain('Open Original Website');
       expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('error');
+      expect(result.error?.type).toBe('not_found');
+      expect(result.error?.message).toContain('No cached content available');
     });
 
-    it('should show web archive link when no assets available', async () => {
+    it('should return error when no assets available (web archive handled by component)', async () => {
       const bookmarkWithArchive = {
         ...mockBookmark,
         web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
@@ -213,9 +222,10 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive);
 
-      expect(result.content).toContain('Try Web Archive Version');
-      expect(result.content).toContain('web.archive.org');
       expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('error');
+      expect(result.error?.type).toBe('not_found');
+      // Component will show web archive link based on bookmark.web_archive_snapshot_url
     });
   });
 
@@ -305,7 +315,7 @@ describe('ContentFetcher', () => {
   });
 
   describe('Content Type Support', () => {
-    it('should format file sizes correctly', async () => {
+    it('should include file size in metadata for unsupported content', async () => {
       const testAsset = {
         id: 1,
         bookmark_id: 1,
@@ -323,7 +333,11 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark);
 
-      expect(result.content).toContain('1 MB');
+      expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('unsupported');
+      expect(result.metadata?.file_size).toBe(1048576);
+      expect(result.metadata?.display_name).toBe('Large Document.pdf');
+      // Component will format file size: 1048576 bytes -> "1 MB"
     });
 
   });
@@ -382,7 +396,7 @@ describe('ContentFetcher', () => {
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
       expect(mockApi.downloadAsset).toHaveBeenCalledWith(1, 1);
-      expect(result.content).toContain('On-demand content'); // Content should be processed
+      expect(result.html_content).toContain('On-demand content'); // Content should be processed
       expect(result.source).toBe('asset');
     });
 
@@ -431,10 +445,11 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
-      expect(result.content).toContain('Content Unavailable');
-      expect(result.content).toContain('archived bookmark requires an internet connection');
-      expect(result.content).toContain('Content Unavailable');
       expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('error');
+      expect(result.error?.message).toContain('archived bookmark requires an internet connection');
+      expect(result.error?.details).toContain('Page Snapshot');
+      expect(result.metadata?.asset_id).toBe(1);
     });
 
     it('should include technical details in offline message', async () => {
@@ -446,9 +461,10 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
-      expect(result.content).toContain('Technical Details');
-      expect(result.content).toContain('Page Snapshot');
-      expect(result.content).toContain('offline or network connection failed');
+      expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('error');
+      expect(result.error?.details).toContain('Page Snapshot');
+      expect(result.error?.details).toContain('offline or network connection failed');
     });
 
     it('should include alternative access buttons in offline message', async () => {
@@ -465,23 +481,24 @@ describe('ContentFetcher', () => {
 
       const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive, 'asset', 1);
 
-      expect(result.content).toContain('Open Original Website');
-      expect(result.content).toContain('Web Archive');
-      expect(result.content).toContain(bookmarkWithArchive.url);
-      expect(result.content).toContain(bookmarkWithArchive.web_archive_snapshot_url);
+      expect(result.source).toBe('asset');
+      expect(result.content_type).toBe('error');
+      expect(result.error?.type).toBe('server_error'); // Non-network error
+      // Component will show action buttons based on bookmark properties
     });
 
     it('should handle missing settings gracefully', async () => {
-      // Override settings for this specific test
+      // Override settings for this specific test and ensure empty assets
       (DatabaseService.getSettings as any).mockResolvedValue(null);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
 
       // Should gracefully handle missing settings by showing appropriate content
       expect(result).not.toBeNull();
       expect(result.source).toBe('asset');
-      // Could be fallback content or unsupported content depending on asset state
-      expect(result.content.length).toBeGreaterThan(0);
+      expect(result.content_type).toBe('error');
+      // Returns fallback error when settings are missing
     });
   });
 
@@ -564,138 +581,38 @@ describe('ContentFetcher', () => {
   });
 
   describe('Live URL Content Fetching', () => {
-    const mockAppFetch = appFetch as any;
 
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it('should fetch live URL content successfully', async () => {
-      const mockHtml = '<html><body><h1>Live Content</h1><p>Fresh from the web</p></body></html>';
-      mockAppFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (name: string) => name === 'content-type' ? 'text/html; charset=utf-8' : null
-        },
-        text: () => Promise.resolve(mockHtml),
-      });
-
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
-
-      expect(mockAppFetch).toHaveBeenCalledWith(mockBookmark.url, {
-        mode: 'cors',
-        credentials: 'omit'
-      });
-      expect(result.source).toBe('url');
-      expect(result.content).toBe(mockHtml);
-      expect(result.readability_content).toContain('pocket-ding-header');
-      expect(result.readability_content).toContain('<p>Processed content</p>');
-    });
-
-    it('should handle HTTP error responses', async () => {
-      mockAppFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      });
-
+    it('should return iframe content for live URLs to bypass CORS issues', async () => {
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
       expect(result.source).toBe('url');
-      expect(result.content).toContain('Live URL Content Unavailable');
-      expect(result.content).toContain('HTTP 404: Not Found');
-      expect(result.content).toContain('Open Original Website');
-      expect(result.readability_content).toBe(''); // No readability for error cases
+      expect(result.content_type).toBe('iframe');
+      expect(result.iframe_url).toBe(mockBookmark.url);
+      expect(result.metadata?.url).toBe(mockBookmark.url);
     });
 
-    it('should handle CORS errors with helpful message', async () => {
-      const corsError = new TypeError('Failed to fetch');
-      mockAppFetch.mockRejectedValue(corsError);
+    it('should handle all URL types with iframe approach', async () => {
+      const testUrls = [
+        'https://example.com/page.html',
+        'https://example.com/doc.pdf',
+        'https://example.com/data.json'
+      ];
 
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
-
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('CORS (Cross-Origin Resource Sharing) restrictions');
-      expect(result.content).toContain('website blocks direct content loading');
-      expect(result.content).toContain('Open the link directly');
-      expect(result.readability_content).toBe(''); // No readability for error cases
+      for (const url of testUrls) {
+        const testBookmark = { ...mockBookmark, url };
+        const result = await ContentFetcher.fetchBookmarkContent(testBookmark, 'url');
+        
+        expect(result.source).toBe('url');
+        expect(result.content_type).toBe('iframe');
+        expect(result.iframe_url).toBe(url);
+        expect(result.metadata?.url).toBe(url);
+      }
     });
 
-    it('should handle network errors', async () => {
-      const networkError = new TypeError('NetworkError when attempting to fetch resource');
-      mockAppFetch.mockRejectedValue(networkError);
 
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('network connectivity issues');
-      expect(result.content).toContain('No internet connection');
-      expect(result.readability_content).toBe(''); // No readability for error cases
-    });
 
-    it('should handle browser-supported content types with embedded data', async () => {
-      const mockPdfData = new Uint8Array([37, 80, 68, 70]); // Simple %PDF header
-      mockAppFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (name: string) => name === 'content-type' ? 'application/pdf' : null
-        },
-        arrayBuffer: () => Promise.resolve(mockPdfData.buffer),
-      });
 
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('<embed');
-      expect(result.content).toContain('data:application/pdf;base64,');
-      expect(result.content).toContain('application/pdf Content');
-      expect(result.content).toContain('Content type: <strong>application/pdf</strong>');
-      expect(result.readability_content).toBe(''); // No readability for non-HTML content
-    });
-
-    it('should handle truly unsupported content types', async () => {
-      mockAppFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (name: string) => name === 'content-type' ? 'application/octet-stream' : null
-        },
-        text: () => Promise.resolve('Binary content'),
-      });
-
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
-
-      expect(result.source).toBe('url');
-      expect(result.content).toContain('Unsupported Content Type');
-      expect(result.content).toContain('application/octet-stream');
-      expect(result.content).toContain('cannot be displayed inline');
-      expect(result.readability_content).toBe(''); // No readability for error cases
-    });
-
-    it('should include web archive link in error messages when available', async () => {
-      const bookmarkWithArchive = {
-        ...mockBookmark,
-        web_archive_snapshot_url: 'https://web.archive.org/web/20240101/https://example.com',
-      };
-
-      mockAppFetch.mockRejectedValue(new Error('Generic error'));
-
-      const result = await ContentFetcher.fetchBookmarkContent(bookmarkWithArchive, 'url');
-
-      expect(result.content).toContain('Try Web Archive Version');
-      expect(result.content).toContain('web.archive.org');
-    });
-
-    it('should not include web archive link when not available', async () => {
-      mockAppFetch.mockRejectedValue(new Error('Generic error'));
-
-      const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
-
-      expect(result.content).not.toContain('Try Web Archive Version');
-      expect(result.content).not.toContain('web.archive.org');
-    });
   });
 });
