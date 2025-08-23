@@ -94,14 +94,16 @@ export class BookmarkReader extends LitElement {
       display: flex;
       align-items: center;
       gap: 0.75rem;
+      flex-shrink: 0;
     }
 
     .progress-section {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      flex: 1;
+      flex: 1 1 0;
       min-width: 0;
+      overflow: hidden;
     }
 
     .progress-text {
@@ -111,6 +113,7 @@ export class BookmarkReader extends LitElement {
       color: var(--md-sys-color-on-surface-variant);
       white-space: nowrap;
       font-weight: 500;
+      flex-shrink: 0;
     }
 
     .reader-content {
@@ -322,8 +325,9 @@ export class BookmarkReader extends LitElement {
         /* order: 3; */
         /* flex-basis: 100%; */
         /* margin-top: 0.5rem; */
-        flex: 1;
+        flex: 1 1 0;
         min-width: 0;
+        overflow: hidden;
       }
       
       .toolbar-section {
@@ -920,12 +924,14 @@ export class BookmarkReader extends LitElement {
           </div>
           
           <!-- Open External Link -->
-          <md-icon-button
-            @click=${this.handleOpenOriginal}
-            title="Open original website"
-          >
-            <md-icon>open_in_new</md-icon>
-          </md-icon-button>
+          <div style="flex-shrink: 0;">
+            <md-icon-button
+              @click=${this.handleOpenOriginal}
+              title="Open original website"
+            >
+              <md-icon>open_in_new</md-icon>
+            </md-icon-button>
+          </div>
         </div>
         
         <div class="reader-content">
