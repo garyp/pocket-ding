@@ -294,13 +294,14 @@ describe('BookmarkReader - Info Modal', () => {
     element['bookmark'] = mockBookmark;
     await element.updateComplete;
 
-    // Now modal should show bookmark content
-    const titleField = Array.from(modalBody?.querySelectorAll('.info-field') || [])
+    // Now modal should show bookmark content - get fresh reference to modal body
+    const updatedModalBody = element.shadowRoot?.querySelector('.info-modal-body');
+    const titleField = Array.from(updatedModalBody?.querySelectorAll('.info-field') || [])
       .find(field => field.querySelector('.info-label')?.textContent?.trim() === 'Title');
     expect(titleField).toBeTruthy();
     expect(titleField?.querySelector('.info-value')?.textContent?.trim()).toBe('Test Article');
 
     // Loading container should be gone
-    expect(modalBody?.querySelector('.loading-container')).toBeFalsy();
+    expect(updatedModalBody?.querySelector('.loading-container')).toBeFalsy();
   });
 });

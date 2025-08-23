@@ -737,6 +737,70 @@ export class BookmarkReader extends LitElement {
     this.showInfoModal = false;
   }
 
+  private renderInfoModal() {
+    return html`
+      <!-- Info Modal -->
+      <md-dialog 
+        ?open=${this.showInfoModal}
+        @close=${this.handleInfoModalClose}
+      >
+        <div class="info-modal-content">
+          <div class="info-modal-header">
+            <h2 class="info-modal-title">Bookmark Information</h2>
+          </div>
+          <div class="info-modal-body">
+            ${this.bookmark ? html`
+              <div class="info-field">
+                <span class="info-label">Title</span>
+                <div class="info-value">${this.bookmark.title}</div>
+              </div>
+              <div class="info-field">
+                <span class="info-label">URL</span>
+                <div class="info-value">
+                  <a href="${this.bookmark.url}" target="_blank" class="info-url">
+                    ${this.bookmark.url}
+                  </a>
+                </div>
+              </div>
+              <div class="info-field">
+                <span class="info-label">Date Added</span>
+                <div class="info-value">
+                  ${new Date(this.bookmark.date_added).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric'
+                  })}
+                </div>
+              </div>
+              ${this.bookmark.description ? html`
+                <div class="info-field">
+                  <span class="info-label">Description</span>
+                  <div class="info-value">${this.bookmark.description}</div>
+                </div>
+              ` : ''}
+              ${this.bookmark.tag_names && this.bookmark.tag_names.length > 0 ? html`
+                <div class="info-field">
+                  <span class="info-label">Tags</span>
+                  <div class="info-value">${this.bookmark.tag_names.join(', ')}</div>
+                </div>
+              ` : ''}
+            ` : html`
+              <div class="loading-container">
+                <md-circular-progress indeterminate class="circular-progress-24"></md-circular-progress>
+                <p>Loading bookmark information...</p>
+              </div>
+            `}
+          </div>
+          <div class="info-modal-actions">
+            <md-text-button @click=${this.handleInfoModalClose}>
+              Close
+            </md-text-button>
+          </div>
+        </div>
+      </md-dialog>
+    `;
+  }
+
   private renderContent() {
     if (!this.bookmark) return '';
 
@@ -829,6 +893,7 @@ export class BookmarkReader extends LitElement {
           <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
           <p>Loading article...</p>
         </div>
+        ${this.renderInfoModal()}
       `;
     }
 
@@ -838,29 +903,7 @@ export class BookmarkReader extends LitElement {
           <h3>Bookmark not found</h3>
           <p>The requested bookmark could not be loaded.</p>
         </div>
-        
-        <!-- Info Modal (always rendered for proper state handling) -->
-        <md-dialog 
-          ?open=${this.showInfoModal}
-          @close=${this.handleInfoModalClose}
-        >
-          <div class="info-modal-content">
-            <div class="info-modal-header">
-              <h2 class="info-modal-title">Bookmark Information</h2>
-            </div>
-            <div class="info-modal-body">
-              <div class="loading-container">
-                <md-circular-progress indeterminate class="circular-progress-24"></md-circular-progress>
-                <p>Loading bookmark information...</p>
-              </div>
-            </div>
-            <div class="info-modal-actions">
-              <md-text-button @click=${this.handleInfoModalClose}>
-                Close
-              </md-text-button>
-            </div>
-          </div>
-        </md-dialog>
+        ${this.renderInfoModal()}
       `;
     }
 
@@ -955,66 +998,7 @@ export class BookmarkReader extends LitElement {
           ${this.renderContent()}
         </div>
       </div>
-      
-      <!-- Info Modal -->
-      <md-dialog 
-        ?open=${this.showInfoModal}
-        @close=${this.handleInfoModalClose}
-      >
-        <div class="info-modal-content">
-          <div class="info-modal-header">
-            <h2 class="info-modal-title">Bookmark Information</h2>
-          </div>
-          <div class="info-modal-body">
-            ${this.bookmark ? html`
-              <div class="info-field">
-                <span class="info-label">Title</span>
-                <div class="info-value">${this.bookmark.title}</div>
-              </div>
-              <div class="info-field">
-                <span class="info-label">URL</span>
-                <div class="info-value">
-                  <a href="${this.bookmark.url}" target="_blank" class="info-url">
-                    ${this.bookmark.url}
-                  </a>
-                </div>
-              </div>
-              <div class="info-field">
-                <span class="info-label">Date Added</span>
-                <div class="info-value">
-                  ${new Date(this.bookmark.date_added).toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric'
-                  })}
-                </div>
-              </div>
-              ${this.bookmark.description ? html`
-                <div class="info-field">
-                  <span class="info-label">Description</span>
-                  <div class="info-value">${this.bookmark.description}</div>
-                </div>
-              ` : ''}
-              ${this.bookmark.tag_names && this.bookmark.tag_names.length > 0 ? html`
-                <div class="info-field">
-                  <span class="info-label">Tags</span>
-                  <div class="info-value">${this.bookmark.tag_names.join(', ')}</div>
-                </div>
-              ` : ''}
-            ` : html`
-              <div class="loading-container">
-                <md-circular-progress indeterminate class="circular-progress-24"></md-circular-progress>
-                <p>Loading bookmark information...</p>
-              </div>
-            `}
-          </div>
-          <div class="info-modal-actions">
-            <md-text-button @click=${this.handleInfoModalClose}>
-              Close
-            </md-text-button>
-          </div>
-        </div>
-      </md-dialog>
+      ${this.renderInfoModal()}
     `;
   }
 }
