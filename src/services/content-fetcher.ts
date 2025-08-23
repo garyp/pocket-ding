@@ -187,11 +187,19 @@ export class ContentFetcher {
         }
         
         .primary-button, .secondary-button {
+          display: inline-block;
           padding: 0.75rem 1.5rem;
           border-radius: 24px;
           text-decoration: none;
           font-weight: 500;
           transition: background-color 0.2s ease;
+          cursor: pointer;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          min-height: 44px;
+          min-width: 44px;
+          box-sizing: border-box;
         }
         
         .primary-button {
@@ -199,7 +207,7 @@ export class ContentFetcher {
           color: var(--md-sys-color-on-primary);
         }
         
-        .primary-button:hover {
+        .primary-button:hover, .primary-button:focus, .primary-button:active {
           background: var(--md-sys-color-primary-container);
           color: var(--md-sys-color-on-primary-container);
         }
@@ -209,7 +217,7 @@ export class ContentFetcher {
           color: var(--md-sys-color-on-secondary-container);
         }
         
-        .secondary-button:hover {
+        .secondary-button:hover, .secondary-button:focus, .secondary-button:active {
           background: var(--md-sys-color-secondary);
           color: var(--md-sys-color-on-secondary);
         }
@@ -574,11 +582,19 @@ export class ContentFetcher {
         }
         
         .primary-button, .secondary-button {
+          display: inline-block;
           padding: 0.75rem 1.5rem;
           border-radius: 24px;
           text-decoration: none;
           font-weight: 500;
           transition: background-color 0.2s ease;
+          cursor: pointer;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          min-height: 44px;
+          min-width: 44px;
+          box-sizing: border-box;
         }
         
         .primary-button {
@@ -586,7 +602,7 @@ export class ContentFetcher {
           color: var(--md-sys-color-on-primary);
         }
         
-        .primary-button:hover {
+        .primary-button:hover, .primary-button:focus, .primary-button:active {
           background: var(--md-sys-color-primary-container);
           color: var(--md-sys-color-on-primary-container);
         }
@@ -596,7 +612,7 @@ export class ContentFetcher {
           color: var(--md-sys-color-on-secondary-container);
         }
         
-        .secondary-button:hover {
+        .secondary-button:hover, .secondary-button:focus, .secondary-button:active {
           background: var(--md-sys-color-secondary);
           color: var(--md-sys-color-on-secondary);
         }
