@@ -151,7 +151,10 @@ describe('BookmarkReader - Info Modal', () => {
     element['showInfoModal'] = true;
     await element.updateComplete;
 
-    const modalBody = element.shadowRoot?.querySelector('.info-modal-body');
+    // Find the content slot within the dialog
+    const dialog = element.shadowRoot?.querySelector('md-dialog');
+    const contentSlot = dialog?.querySelector('div[slot="content"]');
+    const modalBody = contentSlot?.querySelector('.info-modal-body');
     expect(modalBody).toBeTruthy();
 
     // Check title field
@@ -205,7 +208,10 @@ describe('BookmarkReader - Info Modal', () => {
     element['showInfoModal'] = true;
     await element.updateComplete;
 
-    const modalBody = element.shadowRoot?.querySelector('.info-modal-body');
+    // Find the content slot within the dialog
+    const dialog = element.shadowRoot?.querySelector('md-dialog');
+    const contentSlot = dialog?.querySelector('div[slot="content"]');
+    const modalBody = contentSlot?.querySelector('.info-modal-body');
     expect(modalBody).toBeTruthy();
 
     // Description field should not be present
@@ -229,8 +235,10 @@ describe('BookmarkReader - Info Modal', () => {
     element['showInfoModal'] = true;
     await element.updateComplete;
 
-    // Find and click close button
-    const closeButton = element.shadowRoot?.querySelector('.info-modal-actions md-text-button') as HTMLElement;
+    // Find and click close button in the actions slot
+    const dialog = element.shadowRoot?.querySelector('md-dialog');
+    const actionsSlot = dialog?.querySelector('div[slot="actions"]');
+    const closeButton = actionsSlot?.querySelector('md-text-button') as HTMLElement;
     expect(closeButton).toBeTruthy();
     expect(closeButton.textContent?.trim()).toBe('Close');
     
@@ -240,8 +248,8 @@ describe('BookmarkReader - Info Modal', () => {
     // Modal should now be closed
     expect(element['showInfoModal']).toBe(false);
 
-    const dialog = element.shadowRoot?.querySelector('md-dialog') as any;
-    expect(dialog.open).toBe(false);
+    const dialogElement = element.shadowRoot?.querySelector('md-dialog') as any;
+    expect(dialogElement.open).toBe(false);
   });
 
   it('should show loading state when bookmark is null', async () => {
@@ -256,7 +264,10 @@ describe('BookmarkReader - Info Modal', () => {
     element['showInfoModal'] = true;
     await element.updateComplete;
 
-    const modalBody = element.shadowRoot?.querySelector('.info-modal-body');
+    // Find the content slot within the dialog
+    const dialog = element.shadowRoot?.querySelector('md-dialog');
+    const contentSlot = dialog?.querySelector('div[slot="content"]');
+    const modalBody = contentSlot?.querySelector('.info-modal-body');
     expect(modalBody).toBeTruthy();
 
     // Should show loading state when bookmark is null
@@ -286,8 +297,10 @@ describe('BookmarkReader - Info Modal', () => {
     element['showInfoModal'] = true;
     await element.updateComplete;
 
-    // Verify loading state
-    const modalBody = element.shadowRoot?.querySelector('.info-modal-body');
+    // Verify loading state - find the content slot within the dialog
+    const dialog = element.shadowRoot?.querySelector('md-dialog');
+    const contentSlot = dialog?.querySelector('div[slot="content"]');
+    const modalBody = contentSlot?.querySelector('.info-modal-body');
     expect(modalBody?.querySelector('.loading-container')).toBeTruthy();
 
     // Simulate bookmark loading
@@ -295,7 +308,9 @@ describe('BookmarkReader - Info Modal', () => {
     await element.updateComplete;
 
     // Now modal should show bookmark content - get fresh reference to modal body
-    const updatedModalBody = element.shadowRoot?.querySelector('.info-modal-body');
+    const updatedDialog = element.shadowRoot?.querySelector('md-dialog');
+    const updatedContentSlot = updatedDialog?.querySelector('div[slot="content"]');
+    const updatedModalBody = updatedContentSlot?.querySelector('.info-modal-body');
     const titleField = Array.from(updatedModalBody?.querySelectorAll('.info-field') || [])
       .find(field => field.querySelector('.info-label')?.textContent?.trim() === 'Title');
     expect(titleField).toBeTruthy();

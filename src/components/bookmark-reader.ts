@@ -340,24 +340,6 @@ export class BookmarkReader extends LitElement {
     }
 
     /* Info Modal styles */
-    .info-modal-content {
-      padding: 0;
-      max-width: 600px;
-    }
-
-    .info-modal-header {
-      padding: 1rem 1.5rem;
-      border-bottom: 1px solid var(--md-sys-color-outline-variant);
-    }
-
-    .info-modal-title {
-      margin: 0;
-      font-size: 1.25rem;
-      font-weight: 500;
-      color: var(--md-sys-color-on-surface);
-      line-height: 1.5;
-    }
-
     .info-modal-body {
       padding: 1.5rem;
     }
@@ -394,12 +376,6 @@ export class BookmarkReader extends LitElement {
 
     .info-url:hover {
       text-decoration: underline;
-    }
-
-    .info-modal-actions {
-      padding: 0 1.5rem 1.5rem 1.5rem;
-      display: flex;
-      justify-content: flex-end;
     }
 
     /* Utility classes */
@@ -748,10 +724,8 @@ export class BookmarkReader extends LitElement {
         ?open=${this.showInfoModal}
         @close=${this.handleInfoModalClose}
       >
-        <div class="info-modal-content">
-          <div class="info-modal-header">
-            <h2 class="info-modal-title">Bookmark Information</h2>
-          </div>
+        <div slot="headline">Bookmark Information</div>
+        <div slot="content">
           <div class="info-modal-body">
             ${this.bookmark ? html`
               <div class="info-field">
@@ -795,11 +769,11 @@ export class BookmarkReader extends LitElement {
               </div>
             `}
           </div>
-          <div class="info-modal-actions">
-            <md-text-button @click=${this.handleInfoModalClose}>
-              Close
-            </md-text-button>
-          </div>
+        </div>
+        <div slot="actions">
+          <md-text-button @click=${this.handleInfoModalClose}>
+            Close
+          </md-text-button>
         </div>
       </md-dialog>
     `;
