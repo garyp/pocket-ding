@@ -50,6 +50,7 @@ function transformUrlForProxy(url: string): string {
 
 /**
  * Enhanced fetch that automatically handles development proxy routing
+ * and sets consistent User-Agent header for all requests
  */
 export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let url: string;
@@ -65,11 +66,28 @@ export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Pr
 
   const transformedUrl = transformUrlForProxy(url);
   
+  // Merge headers with default User-Agent
+  const defaultHeaders = {
+    'User-Agent': 'PocketDing/1.0 (Progressive Web App)'
+  };
+  
+  const mergedInit = {
+    ...init,
+    headers: {
+      ...defaultHeaders,
+      ...init?.headers
+    }
+  };
+  
   // If input was a Request object, we need to create a new one with the transformed URL
   if (typeof input === 'object' && 'url' in input) {
     const newRequest = new Request(transformedUrl, {
       method: input.method,
-      headers: input.headers,
+      headers: {
+        ...defaultHeaders,
+        ...Object.fromEntries(input.headers.entries()),
+        ...init?.headers
+      },
       body: input.body,
       mode: input.mode,
       credentials: input.credentials,
@@ -77,12 +95,12 @@ export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       redirect: input.redirect,
       referrer: input.referrer,
       integrity: input.integrity,
-      ...init // Allow overrides
+      ...init // Allow overrides (excluding headers which we handled above)
     });
     return fetch(newRequest);
   }
 
-  return fetch(transformedUrl, init);
+  return fetch(transformedUrl, mergedInit);
 }
 
 /**

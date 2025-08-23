@@ -79,7 +79,7 @@ describe('ContentFetcher', () => {
 
     expect(result.content).toContain('Test Article');
     expect(result.content).toContain('Open Original Website');
-    expect(result.readability_content).toContain('Test Article');
+    expect(result.readability_content).toBe(''); // No readability for fallback content
     expect(result.source).toBe('asset');
   });
 
@@ -91,7 +91,7 @@ describe('ContentFetcher', () => {
     expect(result.content).toContain('No cached content available');
     expect(result.content).toContain(bookmarkWithoutDescription.title);
     expect(result.content).toContain('Open Original Website');
-    expect(result.readability_content).toContain('No cached content available');
+    expect(result.readability_content).toBe(''); // No readability for fallback content
     expect(result.source).toBe('asset');
   });
 
@@ -588,10 +588,7 @@ describe('ContentFetcher', () => {
 
       expect(mockAppFetch).toHaveBeenCalledWith(mockBookmark.url, {
         mode: 'cors',
-        credentials: 'omit',
-        headers: {
-          'User-Agent': 'PocketDing/1.0 (Progressive Web App)'
-        }
+        credentials: 'omit'
       });
       expect(result.source).toBe('url');
       expect(result.content).toBe(mockHtml);
@@ -612,6 +609,7 @@ describe('ContentFetcher', () => {
       expect(result.content).toContain('Live URL Content Unavailable');
       expect(result.content).toContain('HTTP 404: Not Found');
       expect(result.content).toContain('Open Original Website');
+      expect(result.readability_content).toBe(''); // No readability for error cases
     });
 
     it('should handle CORS errors with helpful message', async () => {
@@ -624,6 +622,7 @@ describe('ContentFetcher', () => {
       expect(result.content).toContain('CORS (Cross-Origin Resource Sharing) restrictions');
       expect(result.content).toContain('website blocks direct content loading');
       expect(result.content).toContain('Open the link directly');
+      expect(result.readability_content).toBe(''); // No readability for error cases
     });
 
     it('should handle network errors', async () => {
@@ -635,24 +634,27 @@ describe('ContentFetcher', () => {
       expect(result.source).toBe('url');
       expect(result.content).toContain('network connectivity issues');
       expect(result.content).toContain('No internet connection');
+      expect(result.readability_content).toBe(''); // No readability for error cases
     });
 
-    it('should handle browser-supported content types with iframe', async () => {
+    it('should handle browser-supported content types with embedded data', async () => {
+      const mockPdfData = new Uint8Array([37, 80, 68, 70]); // Simple %PDF header
       mockAppFetch.mockResolvedValue({
         ok: true,
         headers: {
           get: (name: string) => name === 'content-type' ? 'application/pdf' : null
         },
-        text: () => Promise.resolve('PDF content'),
+        arrayBuffer: () => Promise.resolve(mockPdfData.buffer),
       });
 
       const result = await ContentFetcher.fetchBookmarkContent(mockBookmark, 'url');
 
       expect(result.source).toBe('url');
-      expect(result.content).toContain('<iframe');
-      expect(result.content).toContain('src="https://example.com/article"');
+      expect(result.content).toContain('<embed');
+      expect(result.content).toContain('data:application/pdf;base64,');
       expect(result.content).toContain('application/pdf Content');
-      expect(result.content).toContain('Content loaded directly from: <strong>application/pdf</strong>');
+      expect(result.content).toContain('Content type: <strong>application/pdf</strong>');
+      expect(result.readability_content).toBe(''); // No readability for non-HTML content
     });
 
     it('should handle truly unsupported content types', async () => {
@@ -670,6 +672,7 @@ describe('ContentFetcher', () => {
       expect(result.content).toContain('Unsupported Content Type');
       expect(result.content).toContain('application/octet-stream');
       expect(result.content).toContain('cannot be displayed inline');
+      expect(result.readability_content).toBe(''); // No readability for error cases
     });
 
     it('should include web archive link in error messages when available', async () => {

@@ -53,7 +53,7 @@ export class ContentFetcher {
       if (!this.isSupportedContentType(htmlAsset.content_type)) {
         return {
           content: this.createUnsupportedContentMessage(htmlAsset),
-          readability_content: this.createUnsupportedContentMessage(htmlAsset),
+          readability_content: '', // No readability content for unsupported types
           source: 'asset'
         };
       }
@@ -107,35 +107,116 @@ export class ContentFetcher {
   }
 
   /**
-   * Creates iframe wrapper for browser-supported content
+   * Creates embedded content using actual server response data
    */
-  private static createIframeContent(bookmark: LocalBookmark, contentType: string): string {
-    return this.generateErrorContent({
-      title: `${contentType} Content`,
-      message: `Displaying ${contentType} content from live URL.`,
-      bookmark,
-      variant: 'info',
-      showTechnicalDetails: false,
-      customContent: `
-        <div class="iframe-container" style="margin: 1rem 0;">
-          <iframe 
-            src="${this.escapeHtml(bookmark.url)}" 
-            style="
-              width: 100%;
-              height: 70vh;
-              border: 1px solid var(--md-sys-color-outline-variant);
-              border-radius: 8px;
-            "
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-            loading="lazy"
-          ></iframe>
+  private static createEmbeddedContent(bookmark: LocalBookmark, contentType: string, dataUrl: string): string {
+    let mediaElement = '';
+    
+    if (contentType.startsWith('image/')) {
+      mediaElement = `<img src="${dataUrl}" alt="${this.escapeHtml(bookmark.title)}" style="max-width: 100%; height: auto; border-radius: 8px;" />`;
+    } else if (contentType.startsWith('video/')) {
+      mediaElement = `<video controls style="max-width: 100%; border-radius: 8px;"><source src="${dataUrl}" type="${contentType}"></video>`;
+    } else if (contentType.startsWith('audio/')) {
+      mediaElement = `<audio controls style="width: 100%;"><source src="${dataUrl}" type="${contentType}"></audio>`;
+    } else if (contentType.includes('application/pdf')) {
+      mediaElement = `<embed src="${dataUrl}" type="application/pdf" style="width: 100%; height: 70vh; border-radius: 8px;" />`;
+    } else if (contentType.includes('text/') || contentType.includes('application/json') || contentType.includes('application/xml')) {
+      // For text-based content, we can display it directly
+      mediaElement = `<iframe src="${dataUrl}" style="width: 100%; height: 70vh; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px;"></iframe>`;
+    } else {
+      // Fallback to generic embed
+      mediaElement = `<embed src="${dataUrl}" style="width: 100%; height: 70vh; border-radius: 8px;" />`;
+    }
+
+    return `
+      <div class="embedded-content">
+        <div class="content-header">
+          <h2 style="color: var(--md-sys-color-secondary); margin-bottom: 1rem;">${contentType} Content</h2>
+          <p class="bookmark-title"><strong>${this.escapeHtml(bookmark.title)}</strong></p>
+          <p class="content-message">Content loaded from live URL.</p>
+        </div>
+        
+        <div class="media-container" style="margin: 1rem 0; text-align: center;">
+          ${mediaElement}
         </div>
         <p style="text-align: center; color: var(--md-sys-color-on-surface-variant); font-size: 0.875rem;">
-          Content loaded directly from: <strong>${contentType}</strong>
+          Content type: <strong>${contentType}</strong>
         </p>
-      `
-    });
+        
+        <div class="content-actions">
+          <a href="${this.escapeHtml(bookmark.url)}" target="_blank" rel="noopener noreferrer" class="primary-button">
+            Open Original Website
+          </a>
+          ${bookmark.web_archive_snapshot_url ? `
+            <a href="${this.escapeHtml(bookmark.web_archive_snapshot_url)}" target="_blank" rel="noopener noreferrer" class="secondary-button">
+              Try Web Archive Version
+            </a>
+          ` : ''}
+        </div>
+      </div>
+      
+      <style>
+        .embedded-content {
+          padding: 2rem;
+          max-width: 800px;
+          margin: 0 auto;
+          text-align: center;
+        }
+        
+        .content-header h2 {
+          margin-bottom: 1rem;
+        }
+        
+        .bookmark-title {
+          margin-bottom: 1rem;
+          color: var(--md-sys-color-on-surface);
+        }
+        
+        .content-message {
+          color: var(--md-sys-color-on-surface-variant);
+          margin-bottom: 1rem;
+          line-height: 1.5;
+        }
+        
+        .content-actions {
+          display: flex;
+          gap: 0.5rem;
+          justify-content: center;
+          flex-wrap: wrap;
+          margin-top: 1.5rem;
+        }
+        
+        .primary-button, .secondary-button {
+          padding: 0.75rem 1.5rem;
+          border-radius: 24px;
+          text-decoration: none;
+          font-weight: 500;
+          transition: background-color 0.2s ease;
+        }
+        
+        .primary-button {
+          background: var(--md-sys-color-primary);
+          color: var(--md-sys-color-on-primary);
+        }
+        
+        .primary-button:hover {
+          background: var(--md-sys-color-primary-container);
+          color: var(--md-sys-color-on-primary-container);
+        }
+        
+        .secondary-button {
+          background: var(--md-sys-color-secondary-container);
+          color: var(--md-sys-color-on-secondary-container);
+        }
+        
+        .secondary-button:hover {
+          background: var(--md-sys-color-secondary);
+          color: var(--md-sys-color-on-secondary);
+        }
+      </style>
+    `;
   }
+
 
   private static createUnsupportedContentMessage(asset: LocalAsset): string {
     return this.generateErrorContent({
@@ -145,7 +226,7 @@ export class ContentFetcher {
       showTechnicalDetails: true,
       technicalDetails: `
         <p><strong>Asset:</strong> ${asset.display_name}</p>
-        <p><strong>Size:</strong> ${this.formatFileSize(asset.file_size)}</p>
+        <p><strong>Size:</strong> ${this.formatFileSize(asset.file_size || 0)}</p>
         <p>Support for this content type will be added in a future update.</p>
       `
     });
@@ -154,6 +235,18 @@ export class ContentFetcher {
   private static arrayBufferToText(buffer: ArrayBuffer): string {
     const decoder = new TextDecoder('utf-8');
     return decoder.decode(buffer);
+  }
+
+  /**
+   * Converts ArrayBuffer to base64 string
+   */
+  private static arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
   }
 
   private static async tryGetSpecificAssetContent(bookmark: LocalBookmark, assetId: number): Promise<{ content: string; readability_content: string; source: ContentSource } | null> {
@@ -219,7 +312,7 @@ export class ContentFetcher {
     if (!this.isSupportedContentType(asset.content_type)) {
       return {
         content: this.createUnsupportedContentMessage(asset),
-        readability_content: this.createUnsupportedContentMessage(asset),
+        readability_content: '', // No readability content for unsupported types
         source: 'asset'
       };
     }
@@ -523,7 +616,7 @@ export class ContentFetcher {
 
     return {
       content,
-      readability_content: content,
+      readability_content: '', // No readability content for error cases
       source: 'asset'
     };
   }
@@ -533,10 +626,7 @@ export class ContentFetcher {
       // Attempt to fetch the live URL content using our app's fetch helper
       const response = await appFetch(bookmark.url, {
         mode: 'cors',
-        credentials: 'omit',
-        headers: {
-          'User-Agent': 'PocketDing/1.0 (Progressive Web App)'
-        }
+        credentials: 'omit'
       });
 
       if (!response.ok) {
@@ -557,12 +647,15 @@ export class ContentFetcher {
         };
       }
       
-      // For other browser-supported content types, create iframe wrapper
+      // For other browser-supported content types, embed the actual response data
       if (this.isBrowserSupportedContent(contentType)) {
-        const iframeContent = this.createIframeContent(bookmark, contentType);
+        const responseData = await response.arrayBuffer();
+        const base64Data = this.arrayBufferToBase64(responseData);
+        const dataUrl = `data:${contentType};base64,${base64Data}`;
+        const embeddedContent = this.createEmbeddedContent(bookmark, contentType, dataUrl);
         return {
-          content: iframeContent,
-          readability_content: iframeContent,
+          content: embeddedContent,
+          readability_content: '', // No readability processing for non-HTML content
           source: 'url'
         };
       }
@@ -587,7 +680,7 @@ export class ContentFetcher {
     
     return {
       content,
-      readability_content: content,
+      readability_content: '', // No readability content for error cases
       source: 'url'
     };
   }
@@ -639,7 +732,7 @@ export class ContentFetcher {
 
     return {
       content,
-      readability_content: content,
+      readability_content: '', // No readability content for error cases
       source: 'url'
     };
   }
@@ -662,7 +755,7 @@ export class ContentFetcher {
     
     return {
       content,
-      readability_content: content,
+      readability_content: '', // No readability content for error cases
       source: 'asset'
     };
   }
