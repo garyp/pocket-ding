@@ -891,7 +891,7 @@ export class BookmarkReader extends LitElement {
               `}
             </div>
             
-            <!-- Dark Mode Toggle (readability only) OR Info Button (non-readability) -->
+            <!-- Dark Mode Toggle (readability mode) -->
             ${this.readingMode === 'readability' ? html`
               <md-icon-button
                 @click=${this.handleDarkModeToggle}
@@ -899,14 +899,15 @@ export class BookmarkReader extends LitElement {
               >
                 <md-icon>${this.darkModeOverride === 'dark' || (this.darkModeOverride === null && this.systemTheme === 'dark') ? 'dark_mode' : 'light_mode'}</md-icon>
               </md-icon-button>
-            ` : html`
-              <md-icon-button
-                @click=${this.handleInfoClick}
-                title="Show bookmark info"
-              >
-                <md-icon>info</md-icon>
-              </md-icon-button>
-            `}
+            ` : ''}
+
+            <!-- Info Button (always available) -->
+            <md-icon-button
+              @click=${this.handleInfoClick}
+              title="Show bookmark info"
+            >
+              <md-icon>info</md-icon>
+            </md-icon-button>
           </div>
           
           <div class="progress-section">
