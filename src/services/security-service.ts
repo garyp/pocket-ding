@@ -97,12 +97,17 @@ export class SecurityService {
       const handleScroll = () => {
         clearTimeout(scrollTimeout);
         scrollTimeout = setTimeout(() => {
-          const progress = this.calculateProgress();
-          
-          // Throttle updates to prevent excessive messaging
-          if (Math.abs(progress - this.lastProgress) > 0.5) {
-            this.lastProgress = progress;
-            this.sendProgressUpdate(progress);
+          try {
+            if (typeof window === 'undefined') return; // Guard against test environment teardown
+            const progress = this.calculateProgress();
+            
+            // Throttle updates to prevent excessive messaging
+            if (Math.abs(progress - this.lastProgress) > 0.5) {
+              this.lastProgress = progress;
+              this.sendProgressUpdate(progress);
+            }
+          } catch (error) {
+            // Silently ignore errors during test teardown
           }
         }, 50); // Debounce scroll events
       };
@@ -111,6 +116,7 @@ export class SecurityService {
     },
     
     calculateProgress() {
+      if (typeof window === 'undefined') return 0; // Guard against test environment teardown
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
       const scrollHeight = document.documentElement.scrollHeight;
       const clientHeight = window.innerHeight;
@@ -154,8 +160,13 @@ export class SecurityService {
         
         // Send initial progress after restoration
         setTimeout(() => {
-          const progress = this.calculateProgress();
-          this.sendProgressUpdate(progress);
+          try {
+            if (typeof window === 'undefined') return; // Guard against test environment teardown
+            const progress = this.calculateProgress();
+            this.sendProgressUpdate(progress);
+          } catch (error) {
+            // Silently ignore errors during test teardown
+          }
         }, 100);
       } catch (error) {
         console.warn('Failed to restore scroll position:', error);
