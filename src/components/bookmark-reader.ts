@@ -34,6 +34,7 @@ export class BookmarkReader extends LitElement {
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
   @state() private showInfoModal = false;
+  @state() private iframeLoadError = false;
 
   private progressSaveTimeout: ReturnType<typeof setTimeout> | null = null;
   private readMarkTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -485,38 +486,10 @@ export class BookmarkReader extends LitElement {
       color: var(--md-sys-color-on-secondary);
     }
 
-    /* Iframe content styles */
-    .iframe-content {
+    /* Live iframe styles */
+    .live-iframe {
       width: 100%;
       height: 100%;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .iframe-header {
-      padding: 0.5rem 1rem;
-      background: var(--md-sys-color-surface-container);
-      border-bottom: 1px solid var(--md-sys-color-outline-variant);
-    }
-
-    .iframe-message {
-      color: var(--md-sys-color-on-surface-variant);
-      font-size: 0.875rem;
-      margin: 0;
-    }
-
-    .iframe-message a {
-      color: var(--md-sys-color-primary);
-      text-decoration: none;
-    }
-
-    .iframe-message a:hover {
-      text-decoration: underline;
-    }
-
-    .live-iframe {
-      flex: 1;
-      width: 100%;
       border: none;
       background: white;
     }
@@ -591,6 +564,7 @@ export class BookmarkReader extends LitElement {
       // Reset progress state to prevent carryover from previous bookmarks
       this.readProgress = 0;
       this.scrollPosition = 0;
+      this.iframeLoadError = false;
       this.bookmark = await DatabaseService.getBookmark(this.bookmarkId) || null;
       
       if (this.bookmark) {
@@ -723,6 +697,18 @@ export class BookmarkReader extends LitElement {
   private handleIframeContentError = (event: CustomEvent) => {
     const { error } = event.detail;
     console.error('Iframe content error:', error);
+  }
+
+  private handleIframeLoad = (_event: Event) => {
+    console.log('Live URL iframe loaded successfully');
+    this.iframeLoadError = false;
+    // Note: We cannot detect HTTP errors within cross-origin iframes due to security restrictions
+  }
+
+  private handleIframeError = (_event: Event) => {
+    console.error('Live URL iframe failed to load');
+    this.iframeLoadError = true;
+    // Note: This event is limited and may not capture all loading failures for cross-origin content
   }
 
 
@@ -1023,18 +1009,29 @@ export class BookmarkReader extends LitElement {
   }
 
   private renderIframeContent(url: string) {
+    if (this.iframeLoadError) {
+      return this.renderErrorContent({
+        type: 'network',
+        message: 'Failed to load live content. This may be due to network issues or the website blocking embedded access.',
+        details: 'Some websites prevent their content from being displayed in iframes for security reasons.',
+        suggestions: [
+          'Check your internet connection',
+          'Try refreshing the page',
+          'Open the original website directly'
+        ]
+      }, this.bookmark!);
+    }
+
     return html`
-      <div class="iframe-content">
-        <div class="iframe-header">
-          <p class="iframe-message">Loading live content from: <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>
-        </div>
-        <iframe 
-          src="${url}" 
-          class="live-iframe"
-          sandbox="allow-scripts allow-same-origin"
-          referrerpolicy="no-referrer-when-downgrade">
-        </iframe>
-      </div>
+      <iframe 
+        src="${url}" 
+        class="live-iframe"
+        sandbox="allow-scripts allow-same-origin"
+        referrerpolicy="no-referrer-when-downgrade"
+        @load=${this.handleIframeLoad}
+        @error=${this.handleIframeError}
+        style="width: 100%; height: 100%; border: none; background: white;">
+      </iframe>
     `;
   }
 
@@ -1252,15 +1249,17 @@ export class BookmarkReader extends LitElement {
             `}
           </div>
           
-          <div class="progress-section">
-            <span class="progress-text">
-              ${Math.round(this.readProgress)}% read
-            </span>
-            <md-linear-progress 
-              .value=${this.readProgress / 100}
-              class="flex-1"
-            ></md-linear-progress>
-          </div>
+          ${this.contentResult?.content_type !== 'iframe' ? html`
+            <div class="progress-section">
+              <span class="progress-text">
+                ${Math.round(this.readProgress)}% read
+              </span>
+              <md-linear-progress 
+                .value=${this.readProgress / 100}
+                class="flex-1"
+              ></md-linear-progress>
+            </div>
+          ` : ''}
           
           <!-- Open External Link -->
           <div style="flex-shrink: 0;">
