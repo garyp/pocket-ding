@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContentFetcher } from '../../services/content-fetcher';
 import { DatabaseService } from '../../services/database';
 import { createLinkdingAPI } from '../../services/linkding-api';
+import { DebugService } from '../../services/debug-service';
 import type { LocalBookmark } from '../../types';
 
 // Mock the fetch helper
@@ -35,6 +36,16 @@ vi.mock('../../services/linkding-api', () => ({
   })),
 }));
 
+// Mock DebugService
+vi.mock('../../services/debug-service', () => ({
+  DebugService: {
+    logInfo: vi.fn(),
+    logError: vi.fn(),
+    logWarning: vi.fn(),
+  },
+}));
+
+
 describe('ContentFetcher', () => {
   const mockBookmark: LocalBookmark = {
     id: 1,
@@ -55,19 +66,28 @@ describe('ContentFetcher', () => {
     date_modified: '2024-01-01T10:00:00Z',
   };
 
-  let consoleErrorSpy: any;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock console.error to prevent cluttering test output
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Reset database service mocks to default values
+    (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
+    (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+    (DatabaseService.getAsset as any).mockResolvedValue(null);
+    (DatabaseService.getSettings as any).mockResolvedValue(null);
+    (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
+    
+    // Reset linkding API mock to default
+    (createLinkdingAPI as any).mockReturnValue({
+      downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
+    });
+    
+    // Clear DebugService mocks
+    (DebugService.logInfo as any).mockClear();
+    (DebugService.logError as any).mockClear();
+    (DebugService.logWarning as any).mockClear();
   });
 
   afterEach(() => {
-    // Restore console.error
-    if (consoleErrorSpy) {
-      consoleErrorSpy.mockRestore();
-    }
+    // Mocks are restored automatically after all tests
   });
 
   it('should return fallback content when no assets available', async () => {
@@ -258,7 +278,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should return available content sources with assets', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -280,7 +300,7 @@ describe('ContentFetcher', () => {
     });
 
     it('should return empty sources when no assets available', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -305,7 +325,7 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:30:00Z',
       };
 
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -534,7 +554,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should include on-demand label for archived bookmark assets', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
 
@@ -562,7 +582,7 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:00:00Z'
       }));
 
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
 
@@ -571,7 +591,7 @@ describe('ContentFetcher', () => {
     });
 
     it('should not add on-demand label for unarchived bookmarks', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -579,6 +599,7 @@ describe('ContentFetcher', () => {
       expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
     });
   });
+
 
   describe('Live URL Content Fetching', () => {
 

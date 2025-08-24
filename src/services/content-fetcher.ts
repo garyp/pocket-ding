@@ -3,7 +3,6 @@ import { DatabaseService } from './database';
 import { createLinkdingAPI } from './linkding-api';
 import { DebugService } from './debug-service';
 import type { LocalBookmark, ContentSource, ContentSourceOption, LocalAsset, ContentResult } from '../types';
-
 export class ContentFetcher {
 
   static async fetchBookmarkContent(bookmark: LocalBookmark, preferredSource?: ContentSource, assetId?: number): Promise<ContentResult> {
@@ -48,46 +47,56 @@ export class ContentFetcher {
       // Find the first HTML asset or fallback to the first asset
       const htmlAsset = assets.find(asset => asset.content_type?.startsWith('text/html')) || assets[0];
       
-      if (!htmlAsset || !htmlAsset.content) {
+      if (!htmlAsset) {
         return null;
       }
 
-      // Check if this content type is supported
-      if (!this.isSupportedContentType(htmlAsset.content_type)) {
-        return {
-          source: 'asset',
-          content_type: 'unsupported',
-          error: {
-            type: 'unsupported',
-            message: `This asset contains ${htmlAsset.content_type} content which is not yet supported for inline viewing.`,
-            details: 'Support for this content type will be added in a future update.',
-            suggestions: ['Try opening the original URL directly']
-          },
-          metadata: {
-            content_type: htmlAsset.content_type,
-            file_size: htmlAsset.file_size,
-            asset_id: htmlAsset.id,
-            display_name: htmlAsset.display_name
-          }
-        };
+      // If asset has cached content, use it directly
+      if (htmlAsset.content) {
+        return this.processAssetContent(htmlAsset, bookmark);
       }
 
-      // Convert ArrayBuffer to text for HTML content
-      const textContent = this.arrayBufferToText(htmlAsset.content);
-      const readabilityContent = this.processWithReadability(textContent, bookmark);
-      
-      return {
-        source: 'asset',
-        content_type: 'html',
-        html_content: textContent,
-        readability_content: readabilityContent,
-        metadata: {
-          content_type: htmlAsset.content_type,
-          file_size: htmlAsset.file_size,
+      // For assets without cached content (e.g., archived bookmarks), fetch on-demand
+      if (!htmlAsset.content && htmlAsset.status === 'complete') {
+        DebugService.logInfo('app', `Fetching asset ${htmlAsset.id} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`, {
           asset_id: htmlAsset.id,
-          display_name: htmlAsset.display_name
+          bookmark_id: bookmark.id,
+          bookmark_archived: bookmark.is_archived
+        });
+        const settings = await DatabaseService.getSettings();
+        if (!settings) {
+          DebugService.logError(new Error('No settings found for on-demand asset fetching'), 'app', 'Missing settings for asset fetching', { asset_id: htmlAsset.id, bookmark_id: bookmark.id });
+          return null;
         }
-      };
+
+        try {
+          const api = createLinkdingAPI(settings.linkding_url, settings.linkding_token);
+          const content = await api.downloadAsset(bookmark.id, htmlAsset.id);
+          
+          // For archived bookmarks, don't cache the content
+          if (!bookmark.is_archived) {
+            // Cache content for unarchived bookmarks
+            htmlAsset.content = content;
+            htmlAsset.cached_at = new Date().toISOString();
+            await DatabaseService.saveAsset(htmlAsset);
+          }
+
+          // Process the fetched content
+          const tempAsset = { ...htmlAsset, content };
+          return this.processAssetContent(tempAsset, bookmark);
+        } catch (error) {
+          DebugService.logError(error as Error, 'app', `Failed to fetch asset ${htmlAsset.id} on-demand`, { asset_id: htmlAsset.id, bookmark_id: bookmark.id, bookmark_archived: bookmark.is_archived });
+          
+          // Return a specific offline/network error message for archived bookmarks
+          if (bookmark.is_archived) {
+            return this.createOfflineArchivedContent(bookmark, htmlAsset, error);
+          }
+          
+          return null;
+        }
+      }
+
+      return null;
     } catch (error) {
       DebugService.logError(error as Error, 'app', 'Failed to get asset content', { bookmark_id: bookmark.id });
       return null;
@@ -352,10 +361,9 @@ export class ContentFetcher {
   static async getAvailableContentSources(bookmark: LocalBookmark): Promise<ContentSourceOption[]> {
     const sources: ContentSourceOption[] = [];
     
-    // Check for assets and add each one individually
+    // Check for completed assets and add each one individually
     // For archived bookmarks, include all assets even if not cached
-    const assets = await DatabaseService.getAssetsByBookmarkId(bookmark.id);
-    const completedAssets = assets.filter(asset => asset.status === 'complete');
+    const completedAssets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmark.id);
     
     for (const asset of completedAssets) {
       const label = asset.display_name || `Asset ${asset.id}`;
