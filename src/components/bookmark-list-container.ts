@@ -116,11 +116,13 @@ export class BookmarkListContainer extends LitElement {
     super.connectedCallback();
     // StateController automatically handles persistence via observedProperties
     void this.stateController; // Suppress TS6133: declared but never read warning
+    this.addEventListener('sync-requested', this.handleSyncRequested);
     this.loadBookmarks();
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    this.removeEventListener('sync-requested', this.handleSyncRequested);
   }
 
 
