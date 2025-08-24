@@ -252,4 +252,15 @@ export class DatabaseService {
       await this.saveAsset(asset);
     }
   }
+
+  static async deleteBookmark(bookmarkId: number): Promise<void> {
+    // Delete associated assets first
+    await this.deleteAssetsByBookmarkId(bookmarkId);
+    
+    // Delete the bookmark itself
+    await db.bookmarks.delete(bookmarkId);
+    
+    // Clean up any associated read progress
+    await db.readProgress.where('bookmark_id').equals(bookmarkId).delete();
+  }
 }

@@ -164,6 +164,9 @@ export class SyncService extends EventTarget {
         }
       }
 
+      // Handle bookmark deletions - remove local bookmarks that no longer exist remotely
+      await this.handleBookmarkDeletions(remoteBookmarks, localBookmarks);
+
       // Sync read status back to Linkding
       await this.syncReadStatusToLinkding(api);
 
@@ -329,6 +332,52 @@ export class SyncService extends EventTarget {
         DebugService.logError(new Error('API returned non-array response'), 'sync', 'Invalid API response format - expected array', { bookmark_id: bookmarkId, error_type: 'non_array_response' });
       }
       // Don't throw - continue with other bookmarks
+    }
+  }
+
+  private static async handleBookmarkDeletions(remoteBookmarks: any[], localBookmarks: LocalBookmark[]): Promise<void> {
+    try {
+      // Create a set of remote bookmark IDs for efficient lookup
+      const remoteBookmarkIds = new Set(remoteBookmarks.map(bookmark => bookmark.id));
+      
+      // Find local bookmarks that no longer exist remotely
+      const bookmarksToDelete = localBookmarks.filter(localBookmark => 
+        !remoteBookmarkIds.has(localBookmark.id)
+      );
+      
+      if (bookmarksToDelete.length === 0) {
+        DebugService.log('info', 'sync', 'deletions', 'No bookmarks to delete');
+        return;
+      }
+      
+      DebugService.log('info', 'sync', 'deletions', `Found ${bookmarksToDelete.length} bookmarks to delete`, {
+        bookmark_ids: bookmarksToDelete.map(b => b.id),
+        titles: bookmarksToDelete.map(b => b.title)
+      });
+      
+      // Delete each bookmark and its associated data
+      for (const bookmark of bookmarksToDelete) {
+        try {
+          await DatabaseService.deleteBookmark(bookmark.id);
+          DebugService.log('info', 'sync', 'deletion', `Successfully deleted bookmark ${bookmark.id}: "${bookmark.title}"`, {
+            bookmark_id: bookmark.id,
+            title: bookmark.title,
+            url: bookmark.url
+          });
+        } catch (error) {
+          DebugService.logError(error as Error, 'sync', `Failed to delete bookmark ${bookmark.id}: "${bookmark.title}"`, {
+            bookmark_id: bookmark.id,
+            title: bookmark.title,
+            url: bookmark.url
+          });
+          // Continue with other deletions even if one fails
+        }
+      }
+      
+      DebugService.log('info', 'sync', 'deletions', `Completed deletion processing for ${bookmarksToDelete.length} bookmarks`);
+    } catch (error) {
+      DebugService.logError(error as Error, 'sync', 'Failed to process bookmark deletions');
+      // Don't throw - deletion failures shouldn't break the entire sync
     }
   }
 }
