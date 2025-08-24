@@ -42,6 +42,7 @@ const consoleSpy = {
   warn: vi.spyOn(console, 'warn').mockImplementation(() => {}),
 };
 
+
 describe('ContentFetcher', () => {
   const mockBookmark: LocalBookmark = {
     id: 1,
