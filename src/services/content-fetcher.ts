@@ -351,10 +351,9 @@ export class ContentFetcher {
   static async getAvailableContentSources(bookmark: LocalBookmark): Promise<ContentSourceOption[]> {
     const sources: ContentSourceOption[] = [];
     
-    // Check for assets and add each one individually
+    // Check for completed assets and add each one individually
     // For archived bookmarks, include all assets even if not cached
-    const assets = await DatabaseService.getAssetsByBookmarkId(bookmark.id);
-    const completedAssets = assets.filter(asset => asset.status === 'complete');
+    const completedAssets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmark.id);
     
     for (const asset of completedAssets) {
       const label = asset.display_name || `Asset ${asset.id}`;

@@ -258,7 +258,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should return available content sources with assets', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -280,7 +280,7 @@ describe('ContentFetcher', () => {
     });
 
     it('should return empty sources when no assets available', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -305,7 +305,7 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:30:00Z',
       };
 
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
@@ -534,7 +534,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should include on-demand label for archived bookmark assets', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
 
@@ -562,7 +562,7 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:00:00Z'
       }));
 
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
 
@@ -571,7 +571,7 @@ describe('ContentFetcher', () => {
     });
 
     it('should not add on-demand label for unarchived bookmarks', async () => {
-      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
 
