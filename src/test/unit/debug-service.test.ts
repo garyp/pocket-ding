@@ -282,14 +282,14 @@ describe('DebugService', () => {
     it('should log API errors', () => {
       const error = new Error('Network error');
 
-      DebugService.logApiError('/api/bookmarks', error);
+      DebugService.logApiError(error, { url: '/api/bookmarks' });
 
       const logs = DebugService.getLogs();
       expect(logs[0]!).toMatchObject({
         level: 'error',
         category: 'api',
         operation: 'error',
-        message: 'API request failed: /api/bookmarks',
+        message: 'API request failed',
         details: { url: '/api/bookmarks' },
         error
       });

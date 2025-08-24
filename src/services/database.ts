@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { DebugService } from './debug-service';
 import type { LocalBookmark, ReadProgress, AppSettings, LocalAsset } from '../types';
 
 interface SyncMetadata {
@@ -104,7 +105,7 @@ export class DatabaseService {
     try {
       return await this.findBookmarkPage(anchorBookmarkId, filter, pageSize);
     } catch (error) {
-      console.warn('Failed to find anchor bookmark page, falling back to page', fallbackPage);
+      DebugService.logWarning('database', 'Failed to find anchor bookmark page, falling back to page ' + fallbackPage, { anchor_bookmark_id: anchorBookmarkId, fallback_page: fallbackPage, filter, page_size: pageSize });
       return fallbackPage;
     }
   }

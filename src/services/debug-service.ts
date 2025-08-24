@@ -159,8 +159,12 @@ export class DebugService {
     this.log('info', 'api', 'response', `${status} ${statusText || ''} for ${url}`, { url, status, statusText });
   }
 
-  static logApiError(url: string, error: Error): void {
-    this.log('error', 'api', 'error', `API request failed: ${url}`, { url }, error);
+  static logApiError(error: Error, context?: any): void {
+    this.log('error', 'api', 'error', 'API request failed', context, error);
+  }
+
+  static logApiSuccess(message: string, context?: any): void {
+    this.log('info', 'api', 'success', message, context);
   }
 
   static logDatabaseOperation(operation: string, table: string, details?: any): void {
@@ -173,5 +177,18 @@ export class DebugService {
 
   static logAppEvent(event: string, details?: any): void {
     this.log('info', 'app', event, `App event: ${event}`, details);
+  }
+
+  // Generic logging methods for convenience
+  static logError(error: Error, category: 'sync' | 'api' | 'database' | 'app', message: string, context?: any): void {
+    this.log('error', category, 'error', message, context, error);
+  }
+
+  static logWarning(category: 'sync' | 'api' | 'database' | 'app', message: string, context?: any): void {
+    this.log('warn', category, 'warning', message, context);
+  }
+
+  static logInfo(category: 'sync' | 'api' | 'database' | 'app', message: string, context?: any): void {
+    this.log('info', category, 'info', message, context);
   }
 }
