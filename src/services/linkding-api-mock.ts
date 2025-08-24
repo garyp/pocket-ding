@@ -2,7 +2,6 @@ import type { LinkdingBookmark, LinkdingResponse, LinkdingAsset } from '../types
 import type { LinkdingAPI } from './linkding-api';
 import { 
   mockBookmarks, 
-  mockAssets, 
   MOCK_URL 
 } from './mock-data';
 
@@ -87,9 +86,29 @@ export class MockLinkdingAPI implements LinkdingAPI {
     return bookmark;
   }
 
-  async getBookmarkAssets(_bookmarkId: number): Promise<LinkdingAsset[]> {
-    // Return mock assets for all bookmarks
-    return mockAssets;
+  async getBookmarkAssets(bookmarkId: number): Promise<LinkdingAsset[]> {
+    // Return unique mock assets for each bookmark to prevent database conflicts
+    // Generate assets with unique IDs based on the bookmark ID
+    return [
+      {
+        id: bookmarkId * 100 + 1,  // e.g., bookmark 3 gets asset 301
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'HTML Snapshot',
+        file_size: 45632,
+        status: 'complete',
+        date_created: '2024-01-01T10:15:00Z',
+      },
+      {
+        id: bookmarkId * 100 + 2,  // e.g., bookmark 3 gets asset 302
+        asset_type: 'pdf',
+        content_type: 'application/pdf',
+        display_name: 'PDF Version',
+        file_size: 156789,
+        status: 'complete',
+        date_created: '2024-01-02T11:45:00Z',
+      },
+    ];
   }
 
   async downloadAsset(bookmarkId: number, _assetId: number): Promise<ArrayBuffer> {
