@@ -554,7 +554,8 @@ describe('ContentFetcher', () => {
     ];
 
     it('should include on-demand label for archived bookmark assets', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
+      // For archived bookmarks, getAssetsByBookmarkId is used instead of getCompletedAssetsByBookmarkId
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
 
@@ -582,7 +583,8 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:00:00Z'
       }));
 
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
+      // For archived bookmarks, getAssetsByBookmarkId is used instead of getCompletedAssetsByBookmarkId
+      (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
 
       const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
 
