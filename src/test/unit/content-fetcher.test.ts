@@ -35,6 +35,15 @@ vi.mock('../../services/linkding-api', () => ({
   })),
 }));
 
+// Mock DebugService
+vi.mock('../../services/debug-service', () => ({
+  DebugService: {
+    logInfo: vi.fn(),
+    logError: vi.fn(),
+    logWarning: vi.fn(),
+  },
+}));
+
 describe('ContentFetcher', () => {
   const mockBookmark: LocalBookmark = {
     id: 1,

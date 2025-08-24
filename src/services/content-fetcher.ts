@@ -1,6 +1,7 @@
 import { Readability } from '@mozilla/readability';
 import { DatabaseService } from './database';
 import { createLinkdingAPI } from './linkding-api';
+import { DebugService } from './debug-service';
 import type { LocalBookmark, ContentSource, ContentSourceOption, LocalAsset, ContentResult } from '../types';
 
 export class ContentFetcher {
@@ -58,10 +59,10 @@ export class ContentFetcher {
 
       // For assets without cached content (e.g., archived bookmarks), fetch on-demand
       if (!htmlAsset.content && htmlAsset.status === 'complete') {
-        console.log(`Fetching asset ${htmlAsset.id} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`);
+        DebugService.logInfo('app', `Fetching asset ${htmlAsset.id} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`, { assetId: htmlAsset.id, bookmarkId: bookmark.id, isArchived: bookmark.is_archived });
         const settings = await DatabaseService.getSettings();
         if (!settings) {
-          console.error('No settings found for on-demand asset fetching');
+          DebugService.logError(new Error('No settings found'), 'app', 'No settings found for on-demand asset fetching', { bookmarkId: bookmark.id });
           return null;
         }
 
@@ -81,7 +82,7 @@ export class ContentFetcher {
           const tempAsset = { ...htmlAsset, content };
           return this.processAssetContent(tempAsset, bookmark);
         } catch (error) {
-          console.error(`Failed to fetch asset ${htmlAsset.id} on-demand:`, error);
+          DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', `Failed to fetch asset ${htmlAsset.id} on-demand`, { assetId: htmlAsset.id, bookmarkId: bookmark.id });
           
           // Return a specific offline/network error message for archived bookmarks
           if (bookmark.is_archived) {
@@ -94,7 +95,7 @@ export class ContentFetcher {
 
       return null;
     } catch (error) {
-      console.error('Failed to get asset content:', error);
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to get asset content', { bookmarkId: bookmark.id });
       return null;
     }
   }
@@ -127,10 +128,10 @@ export class ContentFetcher {
 
       // For archived bookmarks or uncached assets, fetch on-demand
       if (!asset.content && asset.status === 'complete') {
-        console.log(`Fetching asset ${assetId} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`);
+        DebugService.logInfo('app', `Fetching asset ${assetId} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`, { assetId, bookmarkId: bookmark.id, isArchived: bookmark.is_archived });
         const settings = await DatabaseService.getSettings();
         if (!settings) {
-          console.error('No settings found for on-demand asset fetching');
+          DebugService.logError(new Error('No settings found'), 'app', 'No settings found for on-demand asset fetching', { assetId, bookmarkId: bookmark.id });
           return null;
         }
 
@@ -150,7 +151,7 @@ export class ContentFetcher {
           const tempAsset = { ...asset, content };
           return this.processAssetContent(tempAsset, bookmark);
         } catch (error) {
-          console.error(`Failed to fetch asset ${assetId} on-demand:`, error);
+          DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', `Failed to fetch asset ${assetId} on-demand`, { assetId, bookmarkId: bookmark.id });
           
           // Return a specific offline/network error message for archived bookmarks
           if (bookmark.is_archived) {
@@ -163,7 +164,7 @@ export class ContentFetcher {
 
       return null;
     } catch (error) {
-      console.error('Failed to get specific asset content:', error);
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to get specific asset content', { assetId });
       return null;
     }
   }
@@ -232,7 +233,7 @@ export class ContentFetcher {
       
       // Only return readability content if parsing was successful
       if (!article?.content) {
-        console.warn('Readability failed to extract content');
+        DebugService.logWarning('app', 'Readability failed to extract content');
         return '';
       }
       
@@ -244,7 +245,7 @@ export class ContentFetcher {
       
       return content;
     } catch (error) {
-      console.error('Failed to process with Readability:', error);
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to process with Readability');
       return '';
     }
   }

@@ -71,6 +71,7 @@ export interface AppSettings {
   auto_sync: boolean;
   reading_mode: 'original' | 'readability';
   theme_mode?: ThemeMode;
+  debug_mode?: boolean;
 }
 
 export type ContentSource = 'asset' | 'readability' | 'url';
@@ -170,4 +171,41 @@ export interface BookmarkListContainerState {
   pageSize: number;
   filter: BookmarkFilter;
   anchorBookmarkId?: number;
+}
+
+// Debug Mode Types
+export interface DebugLogEntry {
+  id: string;
+  timestamp: string;
+  level: 'info' | 'warn' | 'error';
+  category: 'sync' | 'api' | 'database' | 'app';
+  operation: string;
+  message: string;
+  details?: any;
+  error?: Error;
+}
+
+export interface DebugAppState {
+  bookmarks: {
+    total: number;
+    unread: number;
+    archived: number;
+    withAssets: number;
+  };
+  sync: {
+    isInProgress: boolean;
+    lastSyncAt?: string;
+    currentProgress?: { current: number; total: number };
+    nextScheduledAt?: string;
+  };
+  api: {
+    isConnected?: boolean;
+    lastTestAt?: string;
+    baseUrl?: string;
+  };
+  storage: {
+    sizeEstimate?: number;
+    quotaUsed?: number;
+    quotaAvailable?: number;
+  };
 }
