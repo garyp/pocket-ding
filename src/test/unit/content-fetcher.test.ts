@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContentFetcher } from '../../services/content-fetcher';
 import { DatabaseService } from '../../services/database';
 import { createLinkdingAPI } from '../../services/linkding-api';
+import { DebugService } from '../../services/debug-service';
 import type { LocalBookmark } from '../../types';
 
 // Mock the fetch helper
@@ -35,12 +36,14 @@ vi.mock('../../services/linkding-api', () => ({
   })),
 }));
 
-// Mock console methods for tests
-const consoleSpy = {
-  log: vi.spyOn(console, 'log').mockImplementation(() => {}),
-  error: vi.spyOn(console, 'error').mockImplementation(() => {}),
-  warn: vi.spyOn(console, 'warn').mockImplementation(() => {}),
-};
+// Mock DebugService
+vi.mock('../../services/debug-service', () => ({
+  DebugService: {
+    logInfo: vi.fn(),
+    logError: vi.fn(),
+    logWarning: vi.fn(),
+  },
+}));
 
 
 describe('ContentFetcher', () => {
@@ -77,14 +80,14 @@ describe('ContentFetcher', () => {
       downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
     });
     
-    // Clear console spy mocks
-    consoleSpy.log.mockClear();
-    consoleSpy.error.mockClear();
-    consoleSpy.warn.mockClear();
+    // Clear DebugService mocks
+    (DebugService.logInfo as any).mockClear();
+    (DebugService.logError as any).mockClear();
+    (DebugService.logWarning as any).mockClear();
   });
 
   afterEach(() => {
-    // Console spies are restored automatically after all tests
+    // Mocks are restored automatically after all tests
   });
 
   it('should return fallback content when no assets available', async () => {

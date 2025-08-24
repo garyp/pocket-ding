@@ -1,6 +1,7 @@
 import { appFetch } from '../utils/fetch-helper';
 import type { LinkdingBookmark, LinkdingResponse, LinkdingAsset, LinkdingAssetResponse } from '../types';
 import type { LinkdingAPI } from './linkding-api';
+import { DebugService } from './debug-service';
 
 export class RealLinkdingAPI implements LinkdingAPI {
   private baseUrl: string;
@@ -13,6 +14,9 @@ export class RealLinkdingAPI implements LinkdingAPI {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}/api${endpoint}`;
+    const method = options.method || 'GET';
+    
+    DebugService.logApiRequest(url, method);
     
     const response = await appFetch(url, {
       ...options,
@@ -23,8 +27,12 @@ export class RealLinkdingAPI implements LinkdingAPI {
       },
     });
 
+    DebugService.logApiResponse(url, response.status, response.statusText);
+
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      const error = new Error(`API request failed: ${response.status} ${response.statusText}`);
+      DebugService.logApiError(error, { url, method, status: response.status, statusText: response.statusText });
+      throw error;
     }
 
     return await response.json();
@@ -106,14 +114,20 @@ export class RealLinkdingAPI implements LinkdingAPI {
   async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
     const url = `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
     
+    DebugService.logApiRequest(url, 'GET');
+    
     const response = await appFetch(url, {
       headers: {
         'Authorization': `Token ${this.token}`,
       },
     });
 
+    DebugService.logApiResponse(url, response.status, response.statusText);
+
     if (!response.ok) {
-      throw new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
+      const error = new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
+      DebugService.logApiError(error, { url, method: 'GET', bookmarkId, assetId, status: response.status, statusText: response.statusText });
+      throw error;
     }
 
     return await response.arrayBuffer();
@@ -122,9 +136,10 @@ export class RealLinkdingAPI implements LinkdingAPI {
   async testConnection(): Promise<boolean> {
     try {
       await this.getBookmarks(1);
+      DebugService.logApiSuccess('Connection test successful');
       return true;
     } catch (error) {
-      console.error('Connection test failed:', error);
+      DebugService.logApiError(error as Error, { context: 'connection_test' });
       return false;
     }
   }

@@ -250,7 +250,8 @@ export class SettingsPanel extends LitElement {
       sync_interval: this.settings?.sync_interval || 60,
       auto_sync: this.settings?.auto_sync ?? true,
       reading_mode: this.settings?.reading_mode || 'readability',
-      theme_mode: this.settings?.theme_mode || 'system'
+      theme_mode: this.settings?.theme_mode || 'system',
+      debug_mode: this.settings?.debug_mode ?? false
     };
   }
 
@@ -305,7 +306,8 @@ export class SettingsPanel extends LitElement {
         sync_interval: this.formData.sync_interval || 60,
         auto_sync: this.formData.auto_sync ?? true,
         reading_mode: this.formData.reading_mode || 'readability',
-        theme_mode: this.formData.theme_mode || 'system'
+        theme_mode: this.formData.theme_mode || 'system',
+        debug_mode: this.formData.debug_mode ?? false
       };
 
       await DatabaseService.saveSettings(settings);
@@ -509,6 +511,21 @@ export class SettingsPanel extends LitElement {
               <md-select-option value="light">Light</md-select-option>
               <md-select-option value="dark">Dark</md-select-option>
             </md-outlined-select>
+          </div>
+        </div>
+        
+        <div class="form-section">
+          <h3>Developer Options</h3>
+          
+          <div class="form-group">
+            <label for="debug-mode">Debug Mode</label>
+            <md-switch
+              id="debug-mode"
+              ?selected=${this.formData.debug_mode}
+              @change=${(e: any) => this.handleInputChange('debug_mode', e.target.selected)}
+            >
+              Enable debugging for sync troubleshooting
+            </md-switch>
           </div>
         </div>
         

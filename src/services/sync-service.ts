@@ -1,6 +1,7 @@
 import { createLinkdingAPI, type LinkdingAPI } from './linkding-api';
 import { DatabaseService } from './database';
 import { FaviconService } from './favicon-service';
+import { DebugService } from './debug-service';
 import type { LocalBookmark, AppSettings, LocalAsset } from '../types';
 
 export interface SyncEvents {
@@ -69,20 +70,24 @@ export class SyncService extends EventTarget {
     const syncInstance = this.getInstance();
     
     try {
-      console.log('Starting sync...');
-      
       // Get last sync timestamp for incremental sync
       const lastSyncTimestamp = await DatabaseService.getLastSyncTimestamp();
       const syncStartTime = new Date().toISOString();
-      
-      console.log(lastSyncTimestamp ? `Incremental sync since: ${lastSyncTimestamp}` : 'Full sync');
+      DebugService.log('info', 'sync', 'start', lastSyncTimestamp ? 'Starting incremental sync' : 'Starting full sync', {
+        lastSyncTimestamp,
+        syncStartTime
+      });
       
       const remoteBookmarks = await api.getAllBookmarks(lastSyncTimestamp || undefined);
       const localBookmarks = await DatabaseService.getAllBookmarks();
       
       // Debug logging for archived bookmarks
       const archivedCount = remoteBookmarks.filter(b => b.is_archived).length;
-      console.log(`Remote bookmarks: ${remoteBookmarks.length} total, ${archivedCount} archived`);
+      DebugService.log('info', 'sync', 'fetched', 'Retrieved remote bookmarks', {
+        total: remoteBookmarks.length,
+        archived: archivedCount,
+        local: localBookmarks.length
+      });
       
       // Create a map of local bookmarks for efficient lookup
       const localBookmarksMap = new Map(localBookmarks.map(b => [b.id, b]));
@@ -99,6 +104,7 @@ export class SyncService extends EventTarget {
         detail: { total }
       }));
       
+      DebugService.logSyncStart(total);
       onProgress?.(processed, total);
 
       for (const remoteBookmark of remoteBookmarks) {
@@ -169,9 +175,9 @@ export class SyncService extends EventTarget {
         detail: { processed }
       }));
       
-      console.log(`Sync completed: ${processed} bookmarks processed`);
+      DebugService.logSyncComplete(processed);
     } catch (error) {
-      console.error('Sync failed:', error);
+      DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)));
       
       // Emit sync error event
       syncInstance.dispatchEvent(new CustomEvent('sync-error', {
@@ -183,17 +189,22 @@ export class SyncService extends EventTarget {
   }
 
   static async backgroundSync(settings: AppSettings): Promise<void> {
-    if (!settings.auto_sync) return;
+    if (!settings.auto_sync) {
+      DebugService.log('info', 'sync', 'background', 'Background sync skipped - auto sync disabled');
+      return;
+    }
     
     try {
+      DebugService.log('info', 'sync', 'background', 'Starting background sync');
       await this.syncBookmarks(settings);
     } catch (error) {
-      console.error('Background sync failed:', error);
+      DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { context: 'background_sync' });
     }
   }
 
   static async fullSync(settings: AppSettings, onProgress?: (current: number, total: number) => void): Promise<void> {
     // Clear last sync timestamp to force full sync
+    DebugService.log('info', 'sync', 'fullSync', 'Starting full sync - clearing last sync timestamp');
     await DatabaseService.setLastSyncTimestamp('');
     await this.syncBookmarks(settings, onProgress);
   }
@@ -204,21 +215,20 @@ export class SyncService extends EventTarget {
       
       for (const bookmark of bookmarksNeedingSync) {
         try {
-          console.log(`Syncing read status for bookmark ${bookmark.id} to Linkding`);
           await api.markBookmarkAsRead(bookmark.id);
           await DatabaseService.markBookmarkReadSynced(bookmark.id);
-          console.log(`Successfully synced read status for bookmark ${bookmark.id}`);
+          DebugService.logInfo('sync', `Successfully synced read status for bookmark ${bookmark.id}`, { bookmark_id: bookmark.id });
         } catch (error) {
-          console.error(`Failed to sync read status for bookmark ${bookmark.id}:`, error);
+          DebugService.logError(error as Error, 'sync', `Failed to sync read status for bookmark ${bookmark.id}`, { bookmark_id: bookmark.id });
           // Continue with other bookmarks even if one fails
         }
       }
       
       if (bookmarksNeedingSync.length > 0) {
-        console.log(`Synced read status for ${bookmarksNeedingSync.length} bookmarks`);
+        DebugService.logInfo('sync', `Synced read status for ${bookmarksNeedingSync.length} bookmarks`, { count: bookmarksNeedingSync.length });
       }
     } catch (error) {
-      console.error('Failed to sync read status to Linkding:', error);
+      DebugService.logError(error as Error, 'sync', 'Failed to sync read status to Linkding');
       // Don't throw here - we don't want read sync failures to break the main sync
     }
   }
@@ -230,7 +240,7 @@ export class SyncService extends EventTarget {
       
       // Validate that remoteAssets is an array
       if (!Array.isArray(remoteAssets)) {
-        console.warn(`getBookmarkAssets returned non-array for archived bookmark ${bookmarkId}:`, remoteAssets);
+        DebugService.logWarning('sync', `getBookmarkAssets returned non-array for archived bookmark ${bookmarkId}`, { bookmark_id: bookmarkId, response_type: typeof remoteAssets });
         return;
       }
       
@@ -250,13 +260,13 @@ export class SyncService extends EventTarget {
       
       // Clean up any previously cached content if bookmark was just archived
       if (localBookmark && !localBookmark.is_archived) {
-        console.log(`Cleaning up cached assets for newly archived bookmark ${bookmarkId}`);
+        DebugService.logInfo('sync', `Cleaning up cached assets for newly archived bookmark ${bookmarkId}`, { bookmark_id: bookmarkId });
         await DatabaseService.clearAssetContent(bookmarkId);
       }
       
-      console.log(`Synced metadata for ${completedAssets.length} assets for archived bookmark ${bookmarkId}`);
+      DebugService.logInfo('sync', `Synced metadata for ${completedAssets.length} assets for archived bookmark ${bookmarkId}`, { bookmark_id: bookmarkId, asset_count: completedAssets.length });
     } catch (error) {
-      console.error(`Failed to sync assets for archived bookmark ${bookmarkId}:`, error);
+      DebugService.logError(error as Error, 'sync', `Failed to sync assets for archived bookmark ${bookmarkId}`, { bookmark_id: bookmarkId });
       // Don't throw - continue with other bookmarks
     }
   }
@@ -268,7 +278,7 @@ export class SyncService extends EventTarget {
       
       // Validate that remoteAssets is an array
       if (!Array.isArray(remoteAssets)) {
-        console.warn(`getBookmarkAssets returned non-array for bookmark ${bookmarkId}:`, remoteAssets);
+        DebugService.logWarning('sync', `getBookmarkAssets returned non-array for bookmark ${bookmarkId}`, { bookmark_id: bookmarkId, response_type: typeof remoteAssets });
         return;
       }
       
@@ -299,9 +309,9 @@ export class SyncService extends EventTarget {
           };
           
           await DatabaseService.saveAsset(localAsset);
-          console.log(`Downloaded asset ${remoteAsset.id} for bookmark ${bookmarkId}`);
+          DebugService.logInfo('sync', `Downloaded asset ${remoteAsset.id} for bookmark ${bookmarkId}`, { asset_id: remoteAsset.id, bookmark_id: bookmarkId });
         } catch (error) {
-          console.error(`Failed to download asset ${remoteAsset.id} for bookmark ${bookmarkId}:`, error);
+          DebugService.logError(error as Error, 'sync', `Failed to download asset ${remoteAsset.id} for bookmark ${bookmarkId}`, { asset_id: remoteAsset.id, bookmark_id: bookmarkId });
         }
       }
       
@@ -310,13 +320,13 @@ export class SyncService extends EventTarget {
       for (const localAsset of localAssets) {
         if (!remoteAssetIds.has(localAsset.id)) {
           // TODO: Remove this asset from local storage
-          console.log(`Asset ${localAsset.id} no longer exists remotely, should be cleaned up`);
+          DebugService.logWarning('sync', `Asset ${localAsset.id} no longer exists remotely, should be cleaned up`, { asset_id: localAsset.id, bookmark_id: bookmarkId });
         }
       }
     } catch (error) {
-      console.error(`Failed to sync assets for bookmark ${bookmarkId}:`, error);
+      DebugService.logError(error as Error, 'sync', `Failed to sync assets for bookmark ${bookmarkId}`, { bookmark_id: bookmarkId });
       if (error instanceof TypeError && error.message.includes('filter is not a function')) {
-        console.error('This error suggests the API returned a non-array. Check the Linkding server response.');
+        DebugService.logError(new Error('API returned non-array response'), 'sync', 'Invalid API response format - expected array', { bookmark_id: bookmarkId, error_type: 'non_array_response' });
       }
       // Don't throw - continue with other bookmarks
     }

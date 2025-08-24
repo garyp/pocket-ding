@@ -188,6 +188,15 @@ it('should clear highlights after timeout', () => {
 - `vi.runAllTimers()` - Execute all pending timers immediately
 - `vi.useRealTimers()` - Always restore in finally block or afterEach
 
+### Reader View Optimization
+
+**IMPORTANT**: The reader view must take as little space as possible to maximize content area.
+
+- Minimize toolbar height and unnecessary UI elements
+- Remove loading indicators and unnecessary header blocks from Live URL content
+- Keep the user interface minimal to prioritize reading experience
+- Consider hiding progress tracking UI when it's not applicable (e.g., Live URL iframes)
+
 ### Development Best Practices
 
 - Always check that the build works after you've gotten the tests passing
