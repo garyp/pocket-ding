@@ -34,6 +34,7 @@ export class BookmarkReader extends LitElement {
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
   @state() private showInfoModal = false;
+  @state() private iframeLoadError = false;
 
   private progressSaveTimeout: ReturnType<typeof setTimeout> | null = null;
   private readMarkTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -563,6 +564,7 @@ export class BookmarkReader extends LitElement {
       // Reset progress state to prevent carryover from previous bookmarks
       this.readProgress = 0;
       this.scrollPosition = 0;
+      this.iframeLoadError = false;
       this.bookmark = await DatabaseService.getBookmark(this.bookmarkId) || null;
       
       if (this.bookmark) {
@@ -699,11 +701,13 @@ export class BookmarkReader extends LitElement {
 
   private handleIframeLoad = (_event: Event) => {
     console.log('Live URL iframe loaded successfully');
+    this.iframeLoadError = false;
     // Note: We cannot detect HTTP errors within cross-origin iframes due to security restrictions
   }
 
   private handleIframeError = (_event: Event) => {
     console.error('Live URL iframe failed to load');
+    this.iframeLoadError = true;
     // Note: This event is limited and may not capture all loading failures for cross-origin content
   }
 
@@ -1005,6 +1009,19 @@ export class BookmarkReader extends LitElement {
   }
 
   private renderIframeContent(url: string) {
+    if (this.iframeLoadError) {
+      return this.renderErrorContent({
+        type: 'network',
+        message: 'Failed to load live content. This may be due to network issues or the website blocking embedded access.',
+        details: 'Some websites prevent their content from being displayed in iframes for security reasons.',
+        suggestions: [
+          'Check your internet connection',
+          'Try refreshing the page',
+          'Open the original website directly'
+        ]
+      }, this.bookmark!);
+    }
+
     return html`
       <iframe 
         src="${url}" 
