@@ -1026,7 +1026,7 @@ export class BookmarkReader extends LitElement {
       <iframe 
         src="${url}" 
         class="live-iframe"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-navigation"
+        sandbox="allow-scripts allow-same-origin"
         referrerpolicy="no-referrer-when-downgrade"
         @load=${this.handleIframeLoad}
         @error=${this.handleIframeError}
