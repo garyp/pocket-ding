@@ -2,11 +2,27 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AppRoot } from '../../components/app-root';
 import { DatabaseService } from '../../services/database';
 import { ThemeService } from '../../services/theme-service';
+import { DebugService } from '../../services/debug-service';
 import type { AppSettings } from '../../types';
 
-// Mock services
+// Mock services with explicit mock factories
 vi.mock('../../services/database');
-vi.mock('../../services/theme-service');
+vi.mock('../../services/theme-service', () => ({
+  ThemeService: {
+    init: vi.fn(),
+    setThemeFromSettings: vi.fn()
+  }
+}));
+vi.mock('../../services/debug-service');
+
+// Mock utils
+vi.mock('../../utils/fetch-helper', () => ({
+  configureFetchHelper: vi.fn()
+}));
+
+vi.mock('../../utils/base-path', () => ({
+  getBasePath: vi.fn(() => '/')
+}));
 
 // Mock browser APIs
 Object.defineProperty(window, 'location', {
@@ -46,11 +62,13 @@ describe('AppRoot Theme Integration', () => {
 
     // Mock service responses
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
-    vi.mocked(ThemeService.init).mockImplementation(() => {});
-    vi.mocked(ThemeService.setThemeFromSettings).mockImplementation(() => {});
+    // ThemeService mocks are configured via explicit mock factory above
+    vi.mocked(DebugService.initialize).mockResolvedValue();
+    vi.mocked(DebugService.setDebugMode).mockImplementation(() => {});
+    vi.mocked(DebugService.logAppEvent).mockImplementation(() => {});
+    vi.mocked(DebugService.log).mockImplementation(() => {});
 
-    // Create element
-    element = new AppRoot();
+    // Element will be created in individual tests
   });
 
   afterEach(() => {
@@ -59,6 +77,7 @@ describe('AppRoot Theme Integration', () => {
 
   describe('theme initialization on app load', () => {
     it('should initialize ThemeService when app loads', async () => {
+      element = new AppRoot();
       document.body.appendChild(element);
       await element.updateComplete;
 
@@ -66,7 +85,11 @@ describe('AppRoot Theme Integration', () => {
     });
 
     it('should apply theme from settings when app loads', async () => {
+      element = new AppRoot();
       document.body.appendChild(element);
+      
+      // Wait for connectedCallback to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
       expect(ThemeService.setThemeFromSettings).toHaveBeenCalledWith('dark');
@@ -75,7 +98,9 @@ describe('AppRoot Theme Integration', () => {
     it('should not apply theme if no settings exist', async () => {
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(undefined);
 
+      element = new AppRoot();
       document.body.appendChild(element);
+      await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
       expect(ThemeService.init).toHaveBeenCalled();
@@ -85,7 +110,9 @@ describe('AppRoot Theme Integration', () => {
     it('should handle theme initialization errors gracefully', async () => {
       vi.mocked(DatabaseService.getSettings).mockRejectedValue(new Error('Database error'));
 
+      element = new AppRoot();
       document.body.appendChild(element);
+      await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
       // Should not throw error
@@ -95,7 +122,9 @@ describe('AppRoot Theme Integration', () => {
 
   describe('theme updates when settings change', () => {
     beforeEach(async () => {
+      element = new AppRoot();
       document.body.appendChild(element);
+      await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
     });
 
@@ -146,7 +175,9 @@ describe('AppRoot Theme Integration', () => {
 
   describe('theme persistence across navigation', () => {
     beforeEach(async () => {
+      element = new AppRoot();
       document.body.appendChild(element);
+      await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
     });
 
@@ -179,7 +210,9 @@ describe('AppRoot Theme Integration', () => {
 
   describe('theme service integration', () => {
     it('should only initialize theme service once', async () => {
+      element = new AppRoot();
       document.body.appendChild(element);
+      await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
       // Trigger loadSettings again
@@ -190,7 +223,9 @@ describe('AppRoot Theme Integration', () => {
     });
 
     it('should apply theme from most recent settings', async () => {
+      element = new AppRoot();
       document.body.appendChild(element);
+      await new Promise(resolve => setTimeout(resolve, 0));
       await element.updateComplete;
 
       // Change settings
