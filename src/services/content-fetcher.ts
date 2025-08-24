@@ -1,6 +1,7 @@
 import { Readability } from '@mozilla/readability';
 import { DatabaseService } from './database';
 import { createLinkdingAPI } from './linkding-api';
+import { DebugService } from './debug-service';
 import type { LocalBookmark, ContentSource, ContentSourceOption, LocalAsset, ContentResult } from '../types';
 
 export class ContentFetcher {
@@ -88,7 +89,7 @@ export class ContentFetcher {
         }
       };
     } catch (error) {
-      console.error('Failed to get asset content:', error);
+      DebugService.logError(error as Error, 'app', 'Failed to get asset content', { bookmark_id: bookmark.id });
       return null;
     }
   }
@@ -121,10 +122,10 @@ export class ContentFetcher {
 
       // For archived bookmarks or uncached assets, fetch on-demand
       if (!asset.content && asset.status === 'complete') {
-        console.log(`Fetching asset ${assetId} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`);
+        DebugService.logInfo('app', `Fetching asset ${assetId} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`, { asset_id: assetId, bookmark_id: bookmark.id, bookmark_archived: bookmark.is_archived });
         const settings = await DatabaseService.getSettings();
         if (!settings) {
-          console.error('No settings found for on-demand asset fetching');
+          DebugService.logError(new Error('No settings found for on-demand asset fetching'), 'app', 'Missing settings for asset fetching', { asset_id: assetId, bookmark_id: bookmark.id });
           return null;
         }
 
@@ -144,7 +145,7 @@ export class ContentFetcher {
           const tempAsset = { ...asset, content };
           return this.processAssetContent(tempAsset, bookmark);
         } catch (error) {
-          console.error(`Failed to fetch asset ${assetId} on-demand:`, error);
+          DebugService.logError(error as Error, 'app', `Failed to fetch asset ${assetId} on-demand`, { asset_id: assetId, bookmark_id: bookmark.id, bookmark_archived: bookmark.is_archived });
           
           // Return a specific offline/network error message for archived bookmarks
           if (bookmark.is_archived) {
@@ -157,7 +158,7 @@ export class ContentFetcher {
 
       return null;
     } catch (error) {
-      console.error('Failed to get specific asset content:', error);
+      DebugService.logError(error as Error, 'app', 'Failed to get specific asset content', { asset_id: assetId, bookmark_id: bookmark.id });
       return null;
     }
   }
@@ -226,7 +227,7 @@ export class ContentFetcher {
       
       // Only return readability content if parsing was successful
       if (!article?.content) {
-        console.warn('Readability failed to extract content');
+        DebugService.logWarning('app', 'Readability failed to extract content', { bookmark_id: bookmark?.id });
         return '';
       }
       
@@ -238,7 +239,7 @@ export class ContentFetcher {
       
       return content;
     } catch (error) {
-      console.error('Failed to process with Readability:', error);
+      DebugService.logError(error as Error, 'app', 'Failed to process with Readability', { bookmark_id: bookmark?.id });
       return '';
     }
   }

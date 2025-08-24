@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
 import { ThemeService } from '../services/theme-service';
+import { DebugService } from '../services/debug-service';
 import { configureFetchHelper } from '../utils/fetch-helper';
 import { getBasePath } from '../utils/base-path';
 import type { AppSettings } from '../types';
@@ -12,10 +13,11 @@ import '@material/web/progress/circular-progress.js';
 import './bookmark-list-container';
 import './bookmark-reader';
 import './settings-panel';
+import './debug-view';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
-  @state() private currentView: 'bookmarks' | 'reader' | 'settings' | 'not-found' = 'bookmarks';
+  @state() private currentView: 'bookmarks' | 'reader' | 'settings' | 'debug' | 'not-found' = 'bookmarks';
   @state() private selectedBookmarkId: number | null = null;
   @state() private settings: AppSettings | null = null;
   @state() private isLoading = true;
@@ -216,15 +218,23 @@ export class AppRoot extends LitElement {
         configureFetchHelper(this.settings.linkding_url);
       }
       
-      // Initialize theme service
+      // Initialize services
       ThemeService.init();
+      await DebugService.initialize();
       
       // Apply theme from settings if available
       if (this.settings?.theme_mode) {
         ThemeService.setThemeFromSettings(this.settings.theme_mode);
       }
+      
+      // Set debug mode if enabled
+      if (this.settings?.debug_mode) {
+        DebugService.setDebugMode(true);
+        DebugService.logAppEvent('startup', { settings: this.settings });
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
+      DebugService.log('error', 'app', 'loadSettings', 'Failed to load settings', undefined, error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -278,6 +288,8 @@ export class AppRoot extends LitElement {
       this.selectedBookmarkId = null;
     } else if (path === '/settings') {
       this.currentView = 'settings';
+    } else if (path === '/debug') {
+      this.currentView = 'debug';
     } else if (path === '/reader') {
       this.currentView = 'reader';
       const bookmarkId = params.get('id');
@@ -307,6 +319,10 @@ export class AppRoot extends LitElement {
         route = '/settings';
         title = 'Settings - Pocket Ding';
         break;
+      case 'debug':
+        route = '/debug';
+        title = 'Debug - Pocket Ding';
+        break;
       case 'reader':
         route = bookmarkId ? `/reader?id=${bookmarkId}` : '/reader';
         title = 'Reading - Pocket Ding';
@@ -330,7 +346,7 @@ export class AppRoot extends LitElement {
       this.currentView = 'bookmarks';
       this.selectedBookmarkId = null;
       this.updateUrl('bookmarks');
-    } else if (this.currentView === 'settings') {
+    } else if (this.currentView === 'settings' || this.currentView === 'debug') {
       this.currentView = 'bookmarks';
       this.updateUrl('bookmarks');
     }
@@ -339,6 +355,11 @@ export class AppRoot extends LitElement {
   private handleSettingsClick() {
     this.currentView = 'settings';
     this.updateUrl('settings');
+  }
+
+  private handleDebugClick() {
+    this.currentView = 'debug';
+    this.updateUrl('debug');
   }
 
   private handleBookmarkSelect(e: CustomEvent) {
@@ -358,6 +379,12 @@ export class AppRoot extends LitElement {
     // Apply theme from updated settings
     if (this.settings?.theme_mode) {
       ThemeService.setThemeFromSettings(this.settings.theme_mode);
+    }
+    
+    // Update debug mode
+    DebugService.setDebugMode(this.settings?.debug_mode ?? false);
+    if (this.settings?.debug_mode) {
+      DebugService.logAppEvent('settingsUpdated', { debug_mode: true });
     }
     
     this.currentView = 'bookmarks';
@@ -394,7 +421,8 @@ export class AppRoot extends LitElement {
           <h1 class="app-title md-typescale-title-large">
             ${this.currentView === 'bookmarks' ? 'My Bookmarks' : 
               this.currentView === 'reader' ? 'Reading' : 
-              this.currentView === 'settings' ? 'Settings' : 'Page Not Found'}
+              this.currentView === 'settings' ? 'Settings' : 
+              this.currentView === 'debug' ? 'Debug' : 'Page Not Found'}
           </h1>
         </div>
         
@@ -404,6 +432,13 @@ export class AppRoot extends LitElement {
               @click=${this.handleSyncClick}
             >
               <md-icon slot="icon">sync</md-icon>
+            </md-text-button>
+          ` : ''}
+          ${this.currentView === 'bookmarks' && this.settings?.debug_mode ? html`
+            <md-text-button
+              @click=${this.handleDebugClick}
+            >
+              <md-icon slot="icon">bug_report</md-icon>
             </md-text-button>
           ` : ''}
           ${this.currentView === 'bookmarks' ? html`
@@ -462,6 +497,10 @@ export class AppRoot extends LitElement {
             .settings=${this.settings}
             @settings-saved=${this.handleSettingsSave}
           ></settings-panel>
+        `;
+      case 'debug':
+        return html`
+          <debug-view></debug-view>
         `;
       case 'not-found':
       default:
