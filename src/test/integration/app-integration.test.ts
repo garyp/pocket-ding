@@ -554,6 +554,20 @@ describe('App Integration Tests', () => {
   describe('Bookmark Reader', () => {
     it('should display bookmark content', async () => {
       (DatabaseService.getBookmark as any).mockResolvedValue(mockBookmarks[0]);
+      
+      // Mock assets so the reader will use HTML content instead of iframe
+      const mockAsset = {
+        id: 1,
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'Page Snapshot',
+        file_size: 12345,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+        bookmark_id: 1,
+        content: new TextEncoder().encode('<h1>Test Article 1</h1><p>Content</p>')
+      };
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([mockAsset]);
 
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
       (bookmarkReader as any).bookmarkId = 1;
@@ -576,6 +590,20 @@ describe('App Integration Tests', () => {
 
     it('should switch between reading modes', async () => {
       (DatabaseService.getBookmark as any).mockResolvedValue(mockBookmarks[0]);
+      
+      // Mock assets so the reader will use HTML content instead of iframe
+      const mockAsset = {
+        id: 1,
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'Page Snapshot',
+        file_size: 12345,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+        bookmark_id: 1,
+        content: new TextEncoder().encode('<h1>Test Article 1</h1><p>Content</p>')
+      };
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([mockAsset]);
 
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
       (bookmarkReader as any).bookmarkId = 1;
@@ -617,6 +645,20 @@ describe('App Integration Tests', () => {
 
       (DatabaseService.getBookmark as any).mockResolvedValue(mockBookmarks[0]);
       (DatabaseService.getReadProgress as any).mockResolvedValue(mockProgress);
+      
+      // Mock assets so the reader will use HTML content instead of iframe
+      const mockAsset = {
+        id: 1,
+        asset_type: 'snapshot',
+        content_type: 'text/html',
+        display_name: 'Page Snapshot',
+        file_size: 12345,
+        status: 'complete' as const,
+        date_created: '2024-01-01T10:00:00Z',
+        bookmark_id: 1,
+        content: new TextEncoder().encode('<h1>Test Article 1</h1><p>Content</p>')
+      };
+      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([mockAsset]);
 
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
       (bookmarkReader as any).bookmarkId = 1;
