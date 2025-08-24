@@ -35,14 +35,12 @@ vi.mock('../../services/linkding-api', () => ({
   })),
 }));
 
-// Mock DebugService
-vi.mock('../../services/debug-service', () => ({
-  DebugService: {
-    logInfo: vi.fn(),
-    logError: vi.fn(),
-    logWarning: vi.fn(),
-  },
-}));
+// Mock console methods for tests
+const consoleSpy = {
+  log: vi.spyOn(console, 'log').mockImplementation(() => {}),
+  error: vi.spyOn(console, 'error').mockImplementation(() => {}),
+  warn: vi.spyOn(console, 'warn').mockImplementation(() => {}),
+};
 
 describe('ContentFetcher', () => {
   const mockBookmark: LocalBookmark = {
@@ -64,8 +62,6 @@ describe('ContentFetcher', () => {
     date_modified: '2024-01-01T10:00:00Z',
   };
 
-  let consoleErrorSpy: any;
-
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset database service mocks to default values
@@ -80,15 +76,14 @@ describe('ContentFetcher', () => {
       downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
     });
     
-    // Mock console.error to prevent cluttering test output
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Clear console spy mocks
+    consoleSpy.log.mockClear();
+    consoleSpy.error.mockClear();
+    consoleSpy.warn.mockClear();
   });
 
   afterEach(() => {
-    // Restore console.error
-    if (consoleErrorSpy) {
-      consoleErrorSpy.mockRestore();
-    }
+    // Console spies are restored automatically after all tests
   });
 
   it('should return fallback content when no assets available', async () => {
