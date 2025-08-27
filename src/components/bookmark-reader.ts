@@ -300,42 +300,46 @@ export class BookmarkReader extends LitElement {
         padding: 0.25rem 0.5rem;
         flex-wrap: nowrap;
         min-height: 2.75rem; /* 44px - reduced from 3rem */
-        gap: 0.25rem;
+        gap: 0.375rem; /* Increased from 0.25rem for better spacing */
       }
       
       .content-source-selector {
-        min-width: 60px;
-        max-width: 80px;
+        min-width: 70px; /* Slightly increased from 60px */
+        max-width: 90px; /* Increased from 80px to prevent text cutoff */
+        flex-shrink: 0; /* Prevent shrinking that could cause overlap */
       }
       
       .processing-mode-toggle {
-        gap: 0.125rem;
+        gap: 0.25rem; /* Increased from 0.125rem */
+        flex-shrink: 0; /* Prevent shrinking */
       }
       
       .toolbar-section md-icon-button {
         --md-icon-button-icon-size: 18px;
+        flex-shrink: 0; /* Prevent icon buttons from shrinking */
       }
       
       .processing-mode-button {
         --md-icon-button-icon-size: 18px;
+        flex-shrink: 0; /* Prevent shrinking */
       }
       
       .progress-section {
-        /* Remove wrapping - keep inline */
-        /* order: 3; */
-        /* flex-basis: 100%; */
-        /* margin-top: 0.5rem; */
         flex: 1 1 0;
         min-width: 0;
         overflow: hidden;
+        /* Add margin to create separation from adjacent elements */
+        margin-left: 0.25rem;
+        margin-right: 0.25rem;
       }
       
       .toolbar-section {
-        gap: 0.25rem;
+        gap: 0.375rem; /* Increased from 0.25rem */
+        flex-shrink: 0; /* Prevent toolbar sections from shrinking */
       }
       
       .reading-mode-toggle {
-        gap: 0.125rem;
+        gap: 0.25rem; /* Increased from 0.125rem */
       }
     }
 
