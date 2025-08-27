@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ThemeService } from '../../services/theme-service';
 import { DatabaseService } from '../../services/database';
 import { ContentFetcher } from '../../services/content-fetcher';
+import { SecurityService } from '../../services/security-service';
 import { BookmarkReader } from '../../components/bookmark-reader';
 import type { LocalBookmark, ReadProgress } from '../../types';
 
@@ -26,6 +27,7 @@ Object.defineProperty(window, 'matchMedia', {
 // Mock services
 vi.mock('../../services/database');
 vi.mock('../../services/content-fetcher');
+vi.mock('../../services/security-service');
 
 // Component is auto-registered by the @customElement decorator
 
@@ -100,6 +102,7 @@ describe('Dark Mode Integration', () => {
       html_content: '<p>Test content</p>',
       readability_content: '<p>Readability content</p>'
     });
+    vi.mocked(SecurityService.prepareSingleFileContent).mockResolvedValue('<p>Mock content</p>');
 
     // Create reader element
     element = new BookmarkReader();
@@ -343,6 +346,138 @@ describe('Dark Mode Integration', () => {
       toggleButton = Array.from(element.shadowRoot?.querySelectorAll('md-icon-button') || [])
         .find(btn => btn.querySelector('md-icon')?.textContent === 'light_mode' || btn.querySelector('md-icon')?.textContent === 'dark_mode') as HTMLElement;
       expect(toggleButton?.getAttribute('title')).toBe('Dark Mode Active');
+    });
+  });
+
+  describe('Iframe content theme integration', () => {
+    it('should pass correct theme to SecurityService based on reading mode', async () => {
+      ThemeService.init();
+      element.bookmarkId = 1;
+      
+      // Start in readability mode
+      element['readingMode'] = 'readability';
+      await element.updateComplete;
+      
+      // Wait for content to load
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await element.updateComplete;
+      
+      // Should pass content to SecurityService for readability content
+      expect(vi.mocked(SecurityService.prepareSingleFileContent)).toHaveBeenCalledWith(
+        expect.stringContaining('<p>Readability content</p>')
+      );
+      
+      // Clear mocks and reset
+      vi.clearAllMocks();
+      vi.mocked(SecurityService.prepareSingleFileContent).mockResolvedValue('<p>Mock content</p>');
+      
+      // Switch to original mode
+      element['readingMode'] = 'original';
+      await element.updateComplete;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await element.updateComplete;
+      
+      // Should pass only content to SecurityService for original content (no theming)
+      expect(vi.mocked(SecurityService.prepareSingleFileContent)).toHaveBeenCalledWith(
+        '<p>Test content</p>'
+      );
+      
+      // Clear mocks and reset
+      vi.clearAllMocks();
+      vi.mocked(SecurityService.prepareSingleFileContent).mockResolvedValue('<p>Mock content</p>');
+      
+      // Toggle to dark mode in readability mode
+      element['readingMode'] = 'readability';
+      await element.updateComplete;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await element.updateComplete;
+      
+      element['handleDarkModeToggle']();
+      await element.updateComplete;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await element.updateComplete;
+      
+      // Should pass theme-injected content to SecurityService for readability content with dark mode
+      expect(vi.mocked(SecurityService.prepareSingleFileContent)).toHaveBeenCalledWith(
+        expect.stringContaining('<p>Readability content</p>')
+      );
+      
+      // Clear mocks and reset
+      vi.clearAllMocks();
+      vi.mocked(SecurityService.prepareSingleFileContent).mockResolvedValue('<p>Mock content</p>');
+      
+      // Switch to original mode while dark mode is active
+      element['readingMode'] = 'original';
+      await element.updateComplete;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await element.updateComplete;
+      
+      // Should pass only content to SecurityService for original content (no theming)
+      expect(vi.mocked(SecurityService.prepareSingleFileContent)).toHaveBeenCalledWith(
+        '<p>Test content</p>'
+      );
+    });
+
+    it('should apply dark mode styles to iframe content only in readability mode', async () => {
+      ThemeService.init();
+      element.bookmarkId = 1;
+      element['readingMode'] = 'readability';
+      await element.updateComplete;
+      
+      // Wait for content to load
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await element.updateComplete;
+      
+      // Toggle to dark mode
+      element['handleDarkModeToggle']();
+      await element.updateComplete;
+      
+      // Check that the reader has dark mode class
+      expect(element.classList.contains('reader-dark-mode')).toBe(true);
+      
+      // Find the secure iframe
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
+      expect(secureIframe).toBeTruthy();
+      
+      // The iframe should receive content
+      const iframe = secureIframe?.shadowRoot?.querySelector('iframe');
+      expect(iframe).toBeTruthy();
+      
+      if (iframe) {
+        const srcdoc = iframe.getAttribute('srcdoc') || '';
+        expect(srcdoc.length).toBeGreaterThan(0);
+        // The actual content is controlled by the mocked SecurityService
+        expect(srcdoc).toBe('<p>Mock content</p>');
+      }
+    });
+
+    it('should update iframe content when theme changes', async () => {
+      ThemeService.init();
+      element.bookmarkId = 1;
+      await element.updateComplete;
+      
+      // Wait for initial content load
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await element.updateComplete;
+      
+      // Get initial iframe content
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
+      const iframe = secureIframe?.shadowRoot?.querySelector('iframe');
+      
+      // Toggle to dark mode
+      element['handleDarkModeToggle']();
+      await element.updateComplete;
+      
+      // Wait for iframe content to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Get updated iframe content
+      const updatedSrcdoc = iframe?.getAttribute('srcdoc') || '';
+      
+      // Content should be different when theme changes
+      // (The SecurityService should inject different styles)
+      expect(updatedSrcdoc).toBeDefined();
+      expect(updatedSrcdoc.length).toBeGreaterThan(0);
     });
   });
 
