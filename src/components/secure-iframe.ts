@@ -8,6 +8,7 @@ export class SecureIframe extends LitElement {
   @property({ type: Boolean }) isLoading = false;
   @property({ type: Function }) onContentLoad: () => void = () => {};
   @property({ type: Function }) onContentError: (error: string) => void = () => {};
+  @property({ type: Boolean }) isDarkMode = false;
 
   @property({ type: Number }) scrollPosition = 0;
 
@@ -90,7 +91,7 @@ export class SecureIframe extends LitElement {
   }
 
   override updated(changedProperties: Map<string, any>) {
-    if (changedProperties.has('content') && this.content) {
+    if ((changedProperties.has('content') && this.content) || changedProperties.has('isDarkMode')) {
       this.processContent();
     }
   }
@@ -139,7 +140,8 @@ export class SecureIframe extends LitElement {
 
     try {
       this.secureContent = await SecurityService.prepareSingleFileContent(
-        this.content
+        this.content,
+        this.isDarkMode
       );
       await this.updateComplete;
       this.setupIframe();

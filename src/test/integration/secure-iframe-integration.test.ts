@@ -60,7 +60,7 @@ describe('Secure Iframe Integration', () => {
       document.body.appendChild(iframe);
       await iframe.updateComplete;
       
-      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent);
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, false);
     });
 
     it('should create iframe with proper sandbox attributes', async () => {
@@ -271,7 +271,39 @@ describe('Secure Iframe Integration', () => {
       document.body.appendChild(iframe);
       await iframe.updateComplete;
       
-      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(maliciousContent);
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(maliciousContent, false);
+    });
+
+  });
+
+  describe('Dark Mode Integration', () => {
+    it('should pass dark mode state to SecurityService', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      iframe.isDarkMode = true;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, true);
+    });
+
+    it('should reprocess content when dark mode changes', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      iframe.isDarkMode = false;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, false);
+      
+      // Change dark mode and verify content is reprocessed
+      vi.mocked(SecurityService.prepareSingleFileContent).mockClear();
+      iframe.isDarkMode = true;
+      await iframe.updateComplete;
+      
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, true);
     });
 
   });

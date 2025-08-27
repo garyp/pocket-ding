@@ -413,4 +413,57 @@ describe('BookmarkReader Dark Mode', () => {
       expect(ThemeService.removeThemeChangeListener).toHaveBeenCalled();
     });
   });
+
+  describe('iframe dark mode integration', () => {
+    beforeEach(async () => {
+      element.bookmarkId = 1;
+      await element.updateComplete;
+      // Wait for loadBookmark to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await element.updateComplete;
+    });
+
+    it('should pass correct dark mode state to secure iframe when dark override is set', async () => {
+      element['darkModeOverride'] = 'dark';
+      element['systemTheme'] = 'light';
+      await element.updateComplete;
+
+      const iframe = element.shadowRoot?.querySelector('secure-iframe') as any;
+      expect(iframe?.isDarkMode).toBe(true);
+    });
+
+    it('should pass correct dark mode state to secure iframe when light override is set', async () => {
+      element['darkModeOverride'] = 'light';
+      element['systemTheme'] = 'dark';
+      await element.updateComplete;
+
+      const iframe = element.shadowRoot?.querySelector('secure-iframe') as any;
+      expect(iframe?.isDarkMode).toBe(false);
+    });
+
+    it('should pass correct dark mode state to secure iframe when no override (follow system)', async () => {
+      element['darkModeOverride'] = null;
+      element['systemTheme'] = 'dark';
+      await element.updateComplete;
+
+      const iframe = element.shadowRoot?.querySelector('secure-iframe') as any;
+      expect(iframe?.isDarkMode).toBe(true);
+    });
+
+    it('should update iframe dark mode state when override changes', async () => {
+      // Start with no override and light system theme
+      element['darkModeOverride'] = null;
+      element['systemTheme'] = 'light';
+      await element.updateComplete;
+
+      const iframe = element.shadowRoot?.querySelector('secure-iframe') as any;
+      expect(iframe?.isDarkMode).toBe(false);
+
+      // Toggle to dark override
+      element['handleDarkModeToggle']();
+      await element.updateComplete;
+
+      expect(iframe?.isDarkMode).toBe(true);
+    });
+  });
 });

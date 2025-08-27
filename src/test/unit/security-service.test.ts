@@ -212,4 +212,74 @@ describe('SecurityService', () => {
     });
   });
 
+  describe('Dark Mode Support', () => {
+    it('should not inject dark mode CSS when isDarkMode is false', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+          <p>Regular content</p>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml, false);
+      
+      expect(result).not.toContain('background: #121212');
+      expect(result).not.toContain('color: #e0e0e0');
+      expect(result).not.toContain('Dark mode styles for readability content');
+    });
+
+    it('should inject dark mode CSS when isDarkMode is true', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+          <p>Regular content</p>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml, true);
+      
+      expect(result).toContain('background: #121212 !important');
+      expect(result).toContain('color: #e0e0e0 !important');
+      expect(result).toContain('Dark mode styles for readability content');
+      expect(result).toContain('color: #bb86fc !important'); // Links
+      expect(result).toContain('background: #1e1e1e !important'); // Blockquotes/code
+    });
+
+    it('should inject dark mode CSS in correct order (before progress tracking)', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Page</title>
+        </head>
+        <body>
+          <h1>Test Content</h1>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml, true);
+      
+      // Dark mode CSS should come before progress tracking script in the output
+      const darkModeIndex = result.indexOf('Dark mode styles for readability content');
+      const progressTrackerIndex = result.indexOf('progressTracker');
+      
+      expect(darkModeIndex).toBeGreaterThan(0);
+      expect(progressTrackerIndex).toBeGreaterThan(0);
+      expect(darkModeIndex).toBeLessThan(progressTrackerIndex);
+    });
+  });
+
 });

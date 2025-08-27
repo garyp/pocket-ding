@@ -8,7 +8,8 @@ export class SecurityService {
    * Uses DOMParser approach as specified in requirements
    */
   static async prepareSingleFileContent(
-    singleFileHtml: string
+    singleFileHtml: string,
+    isDarkMode: boolean = false
   ): Promise<string> {
     let contentToProcess = singleFileHtml;
     
@@ -39,6 +40,11 @@ export class SecurityService {
     // Add CSP meta tag to head
     this.injectCSP(doc);
     
+    // Add dark mode CSS if enabled
+    if (isDarkMode) {
+      this.injectDarkModeCSS(doc);
+    }
+    
     // Add progress tracking script to body
     this.injectProgressTracking(doc);
     
@@ -68,6 +74,69 @@ export class SecurityService {
       "media-src 'none';"
     );
     doc.head.appendChild(cspMeta);
+  }
+
+  /**
+   * Injects dark mode CSS styles into document head
+   */
+  private static injectDarkModeCSS(doc: Document): void {
+    const darkModeStyle = doc.createElement('style');
+    darkModeStyle.textContent = `
+      /* Dark mode styles for readability content */
+      body {
+        background: #121212 !important;
+        color: #e0e0e0 !important;
+      }
+      
+      h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+      }
+      
+      p, div, span, li {
+        color: #e0e0e0 !important;
+      }
+      
+      a {
+        color: #bb86fc !important;
+      }
+      
+      a:visited {
+        color: #cf6679 !important;
+      }
+      
+      blockquote {
+        background: #1e1e1e !important;
+        border-left-color: #bb86fc !important;
+        color: #e0e0e0 !important;
+      }
+      
+      pre, code {
+        background: #1e1e1e !important;
+        color: #e0e0e0 !important;
+        border: 1px solid #333 !important;
+      }
+      
+      table {
+        background: #121212 !important;
+        color: #e0e0e0 !important;
+        border-color: #333 !important;
+      }
+      
+      th, td {
+        background: #1e1e1e !important;
+        color: #e0e0e0 !important;
+        border-color: #333 !important;
+      }
+      
+      hr {
+        border-color: #333 !important;
+      }
+      
+      img {
+        opacity: 0.8;
+      }
+    `;
+    doc.head.appendChild(darkModeStyle);
   }
 
   /**
