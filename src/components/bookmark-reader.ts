@@ -732,6 +732,148 @@ export class BookmarkReader extends LitElement {
     }
   }
 
+  private getEffectiveTheme(): 'light' | 'dark' {
+    return this.darkModeOverride || this.systemTheme;
+  }
+
+  /**
+   * Injects theme styles into readability content
+   */
+  private injectThemeStyles(content: string, theme: 'light' | 'dark'): string {
+    const themeStyles = this.getThemeStyles(theme);
+    const styleTag = `<style data-theme-injected="${theme}">${themeStyles}</style>`;
+    
+    // Insert the style tag at the beginning of the content
+    return styleTag + content;
+  }
+
+  /**
+   * Gets theme-specific CSS styles
+   */
+  private getThemeStyles(theme: 'light' | 'dark'): string {
+    if (theme === 'dark') {
+      return `
+        /* Dark theme styles for readability content */
+        body {
+          background: #121212 !important;
+          color: #e0e0e0 !important;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+          color: #ffffff !important;
+        }
+        
+        p, div, span {
+          color: #e0e0e0 !important;
+        }
+        
+        a {
+          color: #90caf9 !important;
+        }
+        
+        a:visited {
+          color: #ce93d8 !important;
+        }
+        
+        blockquote {
+          background: #1e1e1e !important;
+          border-left-color: #90caf9 !important;
+          color: #b0b0b0 !important;
+        }
+        
+        pre, code {
+          background: #1e1e1e !important;
+          color: #ffffff !important;
+          border: 1px solid #333333 !important;
+        }
+        
+        table {
+          background: #1e1e1e !important;
+          color: #e0e0e0 !important;
+        }
+        
+        th, td {
+          border-color: #333333 !important;
+          color: #e0e0e0 !important;
+        }
+        
+        th {
+          background: #333333 !important;
+          color: #ffffff !important;
+        }
+        
+        /* Override any inline styles that might interfere */
+        * {
+          background-color: inherit !important;
+        }
+        
+        /* Ensure readability content styling */
+        article, main, .content, .post-content, .entry-content {
+          background: #121212 !important;
+          color: #e0e0e0 !important;
+        }
+      `;
+    } else {
+      // Light theme - minimal overrides to ensure good contrast
+      return `
+        /* Light theme styles for readability content */
+        body {
+          background: #ffffff !important;
+          color: #1d1d1d !important;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+          color: #1d1d1d !important;
+        }
+        
+        p, div, span {
+          color: #1d1d1d !important;
+        }
+        
+        a {
+          color: #1976d2 !important;
+        }
+        
+        a:visited {
+          color: #7b1fa2 !important;
+        }
+        
+        blockquote {
+          background: #f5f5f5 !important;
+          border-left-color: #1976d2 !important;
+          color: #424242 !important;
+        }
+        
+        pre, code {
+          background: #f5f5f5 !important;
+          color: #1d1d1d !important;
+          border: 1px solid #e0e0e0 !important;
+        }
+        
+        table {
+          background: #ffffff !important;
+          color: #1d1d1d !important;
+        }
+        
+        th, td {
+          border-color: #e0e0e0 !important;
+          color: #1d1d1d !important;
+        }
+        
+        th {
+          background: #f5f5f5 !important;
+          color: #1d1d1d !important;
+        }
+        
+        /* Ensure readability content styling */
+        article, main, .content, .post-content, .entry-content {
+          background: #ffffff !important;
+          color: #1d1d1d !important;
+        }
+      `;
+    }
+  }
+
   private handleDarkModeToggle = () => {
     if (this.darkModeOverride === null) {
       // No override set, set to opposite of system
@@ -985,7 +1127,9 @@ export class BookmarkReader extends LitElement {
       return html`
         <secure-iframe
           class="secure-iframe"
-          .content=${content}
+          .content=${this.readingMode === 'readability' ? 
+            this.injectThemeStyles(content, this.getEffectiveTheme()) : 
+            content}
           .scrollPosition=${this.scrollPosition}
           @progress-update=${this.handleIframeProgressUpdate}
           @content-loaded=${this.handleIframeContentLoaded}
