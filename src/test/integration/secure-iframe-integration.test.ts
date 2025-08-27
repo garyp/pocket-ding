@@ -60,7 +60,7 @@ describe('Secure Iframe Integration', () => {
       document.body.appendChild(iframe);
       await iframe.updateComplete;
       
-      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent);
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, false);
     });
 
     it('should create iframe with proper sandbox attributes', async () => {
@@ -271,7 +271,47 @@ describe('Secure Iframe Integration', () => {
       document.body.appendChild(iframe);
       await iframe.updateComplete;
       
-      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(maliciousContent);
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(maliciousContent, false);
+    });
+
+    it('should pass dark mode flag to SecurityService when isDarkMode is true', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      iframe.isDarkMode = true;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, true);
+    });
+
+    it('should pass light mode flag to SecurityService when isDarkMode is false', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      iframe.isDarkMode = false;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, false);
+    });
+
+    it('should reprocess content when isDarkMode changes', async () => {
+      iframe = new SecureIframe();
+      iframe.content = mockSingleFileContent;
+      iframe.isDarkMode = false;
+      
+      document.body.appendChild(iframe);
+      await iframe.updateComplete;
+      
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, false);
+      
+      // Change dark mode setting
+      iframe.isDarkMode = true;
+      await iframe.updateComplete;
+      
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledWith(mockSingleFileContent, true);
+      expect(SecurityService.prepareSingleFileContent).toHaveBeenCalledTimes(2);
     });
 
   });

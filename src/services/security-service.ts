@@ -8,7 +8,8 @@ export class SecurityService {
    * Uses DOMParser approach as specified in requirements
    */
   static async prepareSingleFileContent(
-    singleFileHtml: string
+    singleFileHtml: string,
+    isDarkMode?: boolean
   ): Promise<string> {
     let contentToProcess = singleFileHtml;
     
@@ -41,6 +42,11 @@ export class SecurityService {
     
     // Add progress tracking script to body
     this.injectProgressTracking(doc);
+    
+    // Inject dark mode styles if needed
+    if (isDarkMode) {
+      this.injectDarkModeStyles(doc);
+    }
     
     // Apply content sanitization
     this.sanitizeContent(doc);
@@ -208,6 +214,80 @@ export class SecurityService {
     doc.body.appendChild(progressScript);
   }
 
+  /**
+   * Injects dark mode styles into document head
+   */
+  private static injectDarkModeStyles(doc: Document): void {
+    const darkModeStyle = doc.createElement('style');
+    darkModeStyle.textContent = `
+      /* Dark mode styles for iframe content */
+      body {
+        background-color: #121212 !important;
+        color: #e0e0e0 !important;
+      }
+      
+      h1, h2, h3, h4, h5, h6 {
+        color: #e0e0e0 !important;
+      }
+      
+      p, div, span, li, td, th {
+        color: #b0b0b0 !important;
+      }
+      
+      a {
+        color: #90caf9 !important;
+      }
+      
+      a:visited {
+        color: #ce93d8 !important;
+      }
+      
+      blockquote {
+        background-color: #2c2c2c !important;
+        border-left-color: #90caf9 !important;
+        color: #b0b0b0 !important;
+      }
+      
+      pre {
+        background-color: #2c2c2c !important;
+        color: #e0e0e0 !important;
+      }
+      
+      code {
+        background-color: #2c2c2c !important;
+        color: #e0e0e0 !important;
+      }
+      
+      table {
+        border-color: #555 !important;
+      }
+      
+      th {
+        background-color: #2c2c2c !important;
+        border-color: #555 !important;
+      }
+      
+      td {
+        border-color: #555 !important;
+      }
+      
+      hr {
+        border-color: #555 !important;
+      }
+      
+      /* Override any inline styles that force light colors */
+      * {
+        color: inherit !important;
+      }
+      
+      /* But preserve specific background colors for better contrast */
+      [style*="background-color: #"] {
+        background-color: #2c2c2c !important;
+      }
+    `;
+    
+    doc.head.appendChild(darkModeStyle);
+  }
 
   /**
    * Applies minimal content sanitization on parsed DOM

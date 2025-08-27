@@ -210,6 +210,64 @@ describe('SecurityService', () => {
       expect(result).toContain('font-family: Arial');
       expect(result).toContain('data:image/gif;base64');
     });
+
+    it('should inject dark mode styles when isDarkMode is true', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Article</title>
+        </head>
+        <body>
+          <p>Test content</p>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml, true);
+      
+      expect(result).toContain('background-color: #121212');
+      expect(result).toContain('color: #e0e0e0');
+      expect(result).toContain('/* Dark mode styles for iframe content */');
+    });
+
+    it('should not inject dark mode styles when isDarkMode is false', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Article</title>
+        </head>
+        <body>
+          <p>Test content</p>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml, false);
+      
+      expect(result).not.toContain('background-color: #121212');
+      expect(result).not.toContain('/* Dark mode styles for iframe content */');
+    });
+
+    it('should not inject dark mode styles when isDarkMode is undefined', async () => {
+      const inputHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Test Article</title>
+        </head>
+        <body>
+          <p>Test content</p>
+        </body>
+        </html>
+      `;
+
+      const result = await SecurityService.prepareSingleFileContent(inputHtml);
+      
+      expect(result).not.toContain('background-color: #121212');
+      expect(result).not.toContain('/* Dark mode styles for iframe content */');
+    });
   });
 
 });

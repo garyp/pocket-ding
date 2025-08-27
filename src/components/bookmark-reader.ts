@@ -987,6 +987,7 @@ export class BookmarkReader extends LitElement {
           class="secure-iframe"
           .content=${content}
           .scrollPosition=${this.scrollPosition}
+          .isDarkMode=${(this.darkModeOverride || this.systemTheme) === 'dark'}
           @progress-update=${this.handleIframeProgressUpdate}
           @content-loaded=${this.handleIframeContentLoaded}
           @content-error=${this.handleIframeContentError}

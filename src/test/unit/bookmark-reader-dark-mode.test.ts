@@ -276,6 +276,48 @@ describe('BookmarkReader Dark Mode', () => {
         })
       );
     });
+
+    it('should pass dark mode state to secure-iframe', async () => {
+      element['systemTheme'] = 'light';
+      element['darkModeOverride'] = 'dark';
+      element.bookmarkId = 1;
+      await element.updateComplete;
+      // Wait for loadBookmark to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await element.updateComplete;
+
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe') as any;
+      expect(secureIframe).toBeTruthy();
+      expect(secureIframe?.isDarkMode).toBe(true);
+    });
+
+    it('should pass light mode state to secure-iframe', async () => {
+      element['systemTheme'] = 'dark';
+      element['darkModeOverride'] = 'light';
+      element.bookmarkId = 1;
+      await element.updateComplete;
+      // Wait for loadBookmark to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await element.updateComplete;
+
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe') as any;
+      expect(secureIframe).toBeTruthy();
+      expect(secureIframe?.isDarkMode).toBe(false);
+    });
+
+    it('should follow system theme when no override is set', async () => {
+      element['systemTheme'] = 'dark';
+      element['darkModeOverride'] = null;
+      element.bookmarkId = 1;
+      await element.updateComplete;
+      // Wait for loadBookmark to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await element.updateComplete;
+
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe') as any;
+      expect(secureIframe).toBeTruthy();
+      expect(secureIframe?.isDarkMode).toBe(true);
+    });
   });
 
   describe('theme rendering', () => {
