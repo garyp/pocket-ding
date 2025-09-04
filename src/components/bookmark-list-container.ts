@@ -362,14 +362,10 @@ export class BookmarkListContainer extends LitElement {
       ` : ''}
       
       <bookmark-list
-        .bookmarks=${this.containerState.bookmarks}
-        .isLoading=${this.containerState.isLoading}
-        .bookmarksWithAssets=${this.containerState.bookmarksWithAssets}
         .faviconCache=${faviconState.faviconCache}
-        .syncedBookmarkIds=${syncState.syncedBookmarkIds}
         .paginationState=${this.paginationState}
+        .syncedBookmarkIds=${syncState.syncedBookmarkIds}
         .onBookmarkSelect=${this.handleBookmarkSelect}
-        .onSyncRequested=${this.handleSyncRequested}
         .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
         .onVisibilityChanged=${this.handleVisibilityChanged}
         .onPageChange=${this.handlePageChange}

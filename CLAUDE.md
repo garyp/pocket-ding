@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI agents (including Claude, GPT, etc.) when working with code in this repository.
 
 ## Project Overview
 
@@ -31,25 +31,30 @@ Pocket Ding is a Progressive Web App (PWA) that provides an offline reading expe
 
 **Components** (`src/components/`):
 - `app-root.ts`: Main application shell with routing between views
-- `bookmark-list.ts`: Displays and filters bookmarks with sync functionality
+- `bookmark-list.ts`: Displays and filters bookmarks with reactive database queries
 - `bookmark-reader.ts`: Reading interface with original/readability modes
 - `settings-panel.ts`: Configuration UI for Linkding API connection
 
 **Services** (`src/services/`):
 - `linkding-api.ts`: Handles API communication with Linkding server
-- `database.ts`: Local storage operations using Dexie/IndexedDB
+- `database.ts`: Local storage operations using Dexie/IndexedDB with reactive queries
 - `sync-service.ts`: Synchronizes bookmarks between Linkding and local storage
 - `content-fetcher.ts`: Processes article content with Readability
+
+**Controllers** (`src/controllers/`):
+- `reactive-query-controller.ts`: Manages reactive database queries with automatic UI updates
+- `state-controller.ts`: Handles persistent component state
 
 **Data Flow**:
 1. Settings configured → API connection established
 2. Sync service fetches bookmarks from Linkding
-3. Content fetcher processes articles for offline reading
+3. Reactive queries automatically update UI when data changes
 4. Local database stores bookmarks and reading progress
-5. Components display cached content with real-time sync
+5. Components display cached content with real-time reactivity
 
 ### Key Features
 - Offline reading with content caching
+- Reactive database queries with automatic UI updates
 - Reading progress tracking with scroll position
 - Dual reading modes (original HTML vs. Readability processed)
 - Background sync with configurable intervals
@@ -65,15 +70,45 @@ Tests use Vitest with Happy DOM environment. The setup includes:
 
 All tests should pass before considering features complete. The CI expects zero test failures.
 
-## Development Notes
+## Code Style Guidelines
 
-- Uses Material Web Components for UI with Material Design 3 styling
-- Implements strict TypeScript with unused parameter/variable checking
-- Service worker registration for PWA functionality
-- CSS custom properties for theming consistency
-- Web Components follow Lit's reactive property patterns
+### Private Class Members
+**IMPORTANT**: Use JavaScript `#` syntax for private class variables and methods instead of TypeScript `private` syntax.
 
-### Code Style
+**❌ Bad - TypeScript private syntax:**
+```typescript
+class MyComponent extends LitElement {
+  private myProperty: string = '';
+  private myMethod() { /* ... */ }
+}
+```
+
+**✅ Good - JavaScript # syntax:**
+```typescript
+class MyComponent extends LitElement {
+  #myProperty: string = '';
+  #myMethod() { /* ... */ }
+}
+```
+
+### Reactive Query Controller Naming
+**IMPORTANT**: When creating instances of `ReactiveQueryController`, use the suffix `Query` instead of `Controller` for clarity.
+
+**❌ Bad - Controller suffix:**
+```typescript
+class BookmarkList extends LitElement {
+  private bookmarksController = new ReactiveQueryController(/*...*/);
+}
+```
+
+**✅ Good - Query suffix:**
+```typescript
+class BookmarkList extends LitElement {
+  #bookmarksQuery = new ReactiveQueryController(/*...*/);
+}
+```
+
+### Other Style Rules
 
 - **Interface Naming**: Do NOT use "I" prefix for interfaces. Name interfaces directly (e.g., `LinkdingAPI` not `ILinkdingAPI`)
 - **Event Handlers**: Use arrow functions instead of `bind()` for configuring event handlers. Arrow functions maintain lexical scope and are more readable than `.bind(this)` calls.
@@ -105,6 +140,34 @@ The application includes comprehensive dark mode support:
 - **Per-Bookmark Override**: Users can override dark mode per bookmark in the reader
 - **Theme Service**: Manages global theme state and Material Design theme switching
 - **Persistent Preferences**: Dark mode overrides are saved per bookmark
+
+## Reactive Database Architecture
+
+**IMPORTANT**: The app uses reactive database queries that automatically update the UI when data changes.
+
+### Key Components:
+- **ReactiveQueryController**: Manages Dexie liveQuery subscriptions with proper lifecycle
+- **Database Service**: Provides both traditional and reactive (`*Live()`) query methods
+- **Automatic Updates**: Components re-render when relevant database data changes
+
+### Usage Pattern:
+```typescript
+class MyComponent extends LitElement {
+  #dataQuery = new ReactiveQueryController(
+    this,
+    () => DatabaseService.getDataLive()
+  );
+  
+  get data() { return this.#dataQuery.value ?? []; }
+  get isLoading() { return this.#dataQuery.loading; }
+}
+```
+
+### Benefits:
+- No manual refresh callbacks needed
+- Automatic UI updates on database changes
+- Simplified component logic
+- Better performance through targeted updates
 
 ## Testing Requirements
 
@@ -200,3 +263,6 @@ it('should clear highlights after timeout', () => {
 ### Development Best Practices
 
 - Always check that the build works after you've gotten the tests passing
+- Use reactive database queries instead of manual data management
+- Follow the JavaScript `#` syntax for private members
+- Name reactive query controllers with `Query` suffix for clarity

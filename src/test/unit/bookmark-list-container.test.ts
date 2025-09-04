@@ -3,15 +3,27 @@ import '../setup';
 import { BookmarkListContainer } from '../../components/bookmark-list-container';
 import type { LocalBookmark } from '../../types';
 
-// Mock the services
+// Mock the services - must be static for Vitest hoisting
 vi.mock('../../services/database', () => ({
   DatabaseService: {
+    // Promise-based methods only
     getBookmarksPaginated: vi.fn(),
     getBookmarkCount: vi.fn(),
     getPageFromAnchorBookmark: vi.fn(),
     getBookmarksWithAssetCounts: vi.fn(),
     getCompletedAssetsByBookmarkId: vi.fn(),
     getSettings: vi.fn(),
+    getBookmark: vi.fn(),
+    saveBookmark: vi.fn(),
+    deleteBookmark: vi.fn(),
+    updateBookmarkReadStatus: vi.fn(),
+    saveReadProgress: vi.fn(),
+    getReadProgress: vi.fn(),
+    saveAsset: vi.fn(),
+    getAssetsByBookmarkId: vi.fn(),
+    getLastSyncTimestamp: vi.fn(),
+    setLastSyncTimestamp: vi.fn(),
+    getAllFilterCounts: vi.fn(),
   },
 }));
 
@@ -61,12 +73,14 @@ describe('BookmarkListContainer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    // Setup default mock implementations
+    // Setup database mocks - now using Promise-based API only
     vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue(mockBookmarks);
     vi.mocked(DatabaseService.getBookmarkCount).mockResolvedValue(1);
     vi.mocked(DatabaseService.getPageFromAnchorBookmark).mockResolvedValue(1);
     vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map([[1, false]]));
     vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
+    vi.mocked(DatabaseService.getAllFilterCounts).mockResolvedValue({ all: 1, unread: 1, archived: 0 });
+    
     vi.mocked(SyncService.getInstance).mockReturnValue({
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -126,7 +140,7 @@ describe('BookmarkListContainer', () => {
   });
 
   describe('Data Flow', () => {
-    it('should render presentation component with props', async () => {
+    it('should render presentation component with pagination state', async () => {
       element = new BookmarkListContainer();
       document.body.appendChild(element);
       
@@ -139,9 +153,16 @@ describe('BookmarkListContainer', () => {
       const presentationComponent = element.shadowRoot?.querySelector('bookmark-list');
       expect(presentationComponent).toBeTruthy();
       
-      // Check that bookmarks are passed as props
-      const bookmarksProp = (presentationComponent as any).bookmarks;
-      expect(bookmarksProp).toEqual(mockBookmarks);
+      // Check that pagination state is passed correctly
+      const paginationStateProp = (presentationComponent as any).paginationState;
+      expect(paginationStateProp).toEqual({
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all',
+        filterCounts: { all: 1, unread: 1, archived: 1 }
+      });
     });
   });
 
@@ -171,29 +192,8 @@ describe('BookmarkListContainer', () => {
       expect(eventDetail.bookmarkId).toBe(1);
     });
 
-    it('should handle sync request callback', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue({
-        linkding_url: 'https://linkding.example.com',
-        linkding_token: 'test-token',
-        sync_interval: 300,
-        auto_sync: true,
-        reading_mode: 'original',
-      });
-      
-      element = new BookmarkListContainer();
-      document.body.appendChild(element);
-      
-      await element.updateComplete;
-      
-      const presentationComponent = element.shadowRoot?.querySelector('bookmark-list');
-      expect(presentationComponent).toBeTruthy();
-      
-      // Simulate sync request
-      const onSyncRequested = (presentationComponent as any).onSyncRequested;
-      await onSyncRequested();
-      
-      expect(SyncService.syncBookmarks).toHaveBeenCalled();
-    });
+    // NOTE: onSyncRequested callback test removed because reactive BookmarkList 
+    // no longer requires manual sync callbacks - it automatically updates when database changes
   });
 
   describe('Cleanup', () => {

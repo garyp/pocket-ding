@@ -7,7 +7,7 @@ interface SyncMetadata {
   last_sync_timestamp: string;
 }
 
-export class LinkdingDatabase extends Dexie {
+export class PocketDingDatabase extends Dexie {
   bookmarks!: Table<LocalBookmark>;
   readProgress!: Table<ReadProgress>;
   settings!: Table<AppSettings>;
@@ -15,7 +15,7 @@ export class LinkdingDatabase extends Dexie {
   assets!: Table<LocalAsset>;
 
   constructor() {
-    super('LinkdingReaderDB');
+    super('PocketDingDB');
     this.version(1).stores({
       bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at',
       readProgress: '++id, bookmark_id, last_read_at',
@@ -50,7 +50,7 @@ export class LinkdingDatabase extends Dexie {
   }
 }
 
-export const db = new LinkdingDatabase();
+export const db = new PocketDingDatabase();
 
 export class DatabaseService {
   static async saveBookmark(bookmark: LocalBookmark): Promise<void> {
@@ -82,6 +82,23 @@ export class DatabaseService {
   static async getBookmarkCount(filter: 'all' | 'unread' | 'archived'): Promise<number> {
     const query = this.buildFilteredQuery(filter);
     return await query.count();
+  }
+
+  /**
+   * Get all filter counts
+   */
+  static async getAllFilterCounts(): Promise<{ all: number; unread: number; archived: number }> {
+    const allQuery = this.buildFilteredQuery('all');
+    const unreadQuery = this.buildFilteredQuery('unread');
+    const archivedQuery = this.buildFilteredQuery('archived');
+    
+    const [all, unread, archived] = await Promise.all([
+      allQuery.count(),
+      unreadQuery.count(),
+      archivedQuery.count()
+    ]);
+    
+    return { all, unread, archived };
   }
 
   static async findBookmarkPage(bookmarkId: number, filter: 'all' | 'unread' | 'archived', pageSize: number): Promise<number> {
