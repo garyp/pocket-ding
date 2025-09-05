@@ -1,16 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { liveQuery } from 'dexie';
 import { SettingsPanel } from '../../components/settings-panel';
 import { DatabaseService } from '../../services/database';
 import { ThemeService } from '../../services/theme-service';
 import type { AppSettings } from '../../types';
 
-// Mock services
-vi.mock('../../services/database');
+// Mock services and liveQuery
+vi.mock('dexie', () => ({
+  liveQuery: vi.fn()
+}));
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getSettings: vi.fn(),
+    saveSettings: vi.fn()
+  }
+}));
 vi.mock('../../services/theme-service');
 
 describe('SettingsPanel Theme', () => {
   let element: SettingsPanel;
   let mockSettings: AppSettings;
+  let mockSubscription: { unsubscribe: ReturnType<typeof vi.fn> };
+  let mockObservable: { subscribe: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     // Reset all mocks
@@ -26,13 +37,32 @@ describe('SettingsPanel Theme', () => {
       theme_mode: 'system'
     };
 
+    // Create mock subscription
+    mockSubscription = { unsubscribe: vi.fn() };
+    
+    // Create mock observable
+    mockObservable = {
+      subscribe: vi.fn().mockImplementation((observer) => {
+        // Immediately call the next callback with the mock settings
+        setTimeout(() => observer.next(mockSettings), 0);
+        return mockSubscription;
+      })
+    };
+
+    // Mock liveQuery to return our mock observable
+    vi.mocked(liveQuery).mockReturnValue(mockObservable as any);
+
     // Mock service responses
+    vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
     vi.mocked(DatabaseService.saveSettings).mockResolvedValue();
 
     // Create element
     element = new SettingsPanel();
-    element.settings = mockSettings;
     document.body.appendChild(element);
+    await element.updateComplete;
+    
+    // Wait a bit for the reactive query to initialize
+    await new Promise(resolve => setTimeout(resolve, 10));
     await element.updateComplete;
   });
 
@@ -46,21 +76,61 @@ describe('SettingsPanel Theme', () => {
     });
 
     it('should default to system theme when not set', async () => {
-      element.settings = {
+      // Remove existing element
+      element.remove();
+      
+      const settingsWithoutTheme = {
         ...mockSettings,
         theme_mode: undefined as any
       };
-      element['initializeForm']();
+      
+      // Update the database mock to return settings without theme_mode
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue(settingsWithoutTheme);
+      
+      // Update the observable to return settings without theme_mode
+      mockObservable.subscribe.mockImplementation((observer) => {
+        setTimeout(() => observer.next(settingsWithoutTheme), 0);
+        return mockSubscription;
+      });
+      
+      // Create new element which will use the updated mock
+      element = new SettingsPanel();
+      document.body.appendChild(element);
+      await element.updateComplete;
+      
+      // Wait for reactive query to initialize
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await element.updateComplete;
       
       expect(element['formData'].theme_mode).toBe('system');
     });
 
     it('should preserve theme setting from existing settings', async () => {
-      element.settings = {
+      // Remove existing element
+      element.remove();
+      
+      const darkThemeSettings: AppSettings = {
         ...mockSettings,
-        theme_mode: 'dark'
+        theme_mode: 'dark' as const
       };
-      element['initializeForm']();
+      
+      // Update the database mock to return settings with dark theme
+      vi.mocked(DatabaseService.getSettings).mockResolvedValue(darkThemeSettings);
+      
+      // Update the observable to return settings with dark theme
+      mockObservable.subscribe.mockImplementation((observer) => {
+        setTimeout(() => observer.next(darkThemeSettings as AppSettings), 0);
+        return mockSubscription;
+      });
+      
+      // Create new element which will use the updated mock
+      element = new SettingsPanel();
+      document.body.appendChild(element);
+      await element.updateComplete;
+      
+      // Wait for reactive query to initialize
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await element.updateComplete;
       
       expect(element['formData'].theme_mode).toBe('dark');
     });
@@ -86,7 +156,7 @@ describe('SettingsPanel Theme', () => {
 
     it('should update form data when theme selection changes', async () => {
       // Simulate theme change to dark
-      element['handleInputChange']('theme_mode', 'dark');
+      (element as any)['#handleInputChange']('theme_mode', 'dark');
       await element.updateComplete;
       
       expect(element['formData'].theme_mode).toBe('dark');
@@ -100,7 +170,7 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'dark'
       };
 
-      await element['handleSave']();
+      await (element as any)['#handleSave']();
 
       expect(DatabaseService.saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -115,7 +185,7 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'light'
       };
 
-      await element['handleSave']();
+      await (element as any)['#handleSave']();
 
       expect(ThemeService.setThemeFromSettings).toHaveBeenCalledWith('light');
     });
@@ -129,7 +199,7 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'dark'
       };
 
-      await element['handleSave']();
+      await (element as any)['#handleSave']();
 
       expect(eventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -148,10 +218,10 @@ describe('SettingsPanel Theme', () => {
       const testCases = ['system', 'light', 'dark'] as const;
 
       for (const themeMode of testCases) {
-        element['handleInputChange']('theme_mode', themeMode);
+        (element as any)['#handleInputChange']('theme_mode', themeMode);
         expect(element['formData'].theme_mode).toBe(themeMode);
 
-        await element['handleSave']();
+        await (element as any)['#handleSave']();
         expect(ThemeService.setThemeFromSettings).toHaveBeenCalledWith(themeMode);
       }
     });
@@ -162,7 +232,7 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'dark' as any
       };
 
-      await element['handleSave']();
+      await (element as any)['#handleSave']();
 
       expect(DatabaseService.saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({

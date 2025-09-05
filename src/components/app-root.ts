@@ -494,7 +494,6 @@ export class AppRoot extends LitElement {
       case 'settings':
         return html`
           <settings-panel
-            .settings=${this.settings}
             @settings-saved=${this.handleSettingsSave}
           ></settings-panel>
         `;

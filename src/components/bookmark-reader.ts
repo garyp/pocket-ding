@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DatabaseService } from '../services/database';
 import { ContentFetcher } from '../services/content-fetcher';
 import { ThemeService } from '../services/theme-service';
@@ -21,7 +22,44 @@ import '@material/web/dialog/dialog.js';
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
   @property({ type: Number }) bookmarkId: number | null = null;
-  @state() private bookmark: LocalBookmark | null = null;
+
+  // Reactive query for bookmark data
+  #bookmarkQuery = new ReactiveQueryController(
+    this,
+    () => this.bookmarkId ? DatabaseService.getBookmark(this.bookmarkId) : Promise.resolve(undefined)
+  );
+
+  // Reactive query for read progress
+  #readProgressQuery = new ReactiveQueryController(
+    this,
+    () => this.bookmarkId ? DatabaseService.getReadProgress(this.bookmarkId) : Promise.resolve(undefined)
+  );
+
+  // Reactive query for available content sources (assets)
+  #assetsQuery = new ReactiveQueryController(
+    this,
+    () => this.bookmarkId ? DatabaseService.getCompletedAssetsByBookmarkId(this.bookmarkId) : Promise.resolve([])
+  );
+
+  // Getter methods for reactive data
+  get bookmark(): LocalBookmark | null {
+    return this.#bookmarkQuery.value || null;
+  }
+
+  get readProgressData(): ReadProgress | null {
+    return this.#readProgressQuery.value || null;
+  }
+
+  get assets(): any[] {
+    return this.#assetsQuery.value || [];
+  }
+
+  get isDataLoading(): boolean {
+    return this.#bookmarkQuery.loading || this.#readProgressQuery.loading || this.#assetsQuery.loading;
+  }
+
+  #currentBookmarkId: number | null = null;
+
   @state() private isLoading = true;
   @state() private readingMode: 'original' | 'readability' = 'readability';
   @state() private readProgress = 0;
@@ -522,15 +560,13 @@ export class BookmarkReader extends LitElement {
       this.systemTheme = theme;
       this.updateReaderTheme();
     });
-    
-    if (this.bookmarkId) {
-      await this.loadBookmark();
-    }
   }
 
   override updated(changedProperties: Map<string, any>) {
-    if (changedProperties.has('bookmarkId') && this.bookmarkId) {
-      this.loadBookmark();
+    // Update reactive queries when bookmarkId changes
+    if (changedProperties.has('bookmarkId')) {
+      this.#updateReactiveQueries();
+      this.#handleBookmarkChange();
     }
     
     // Get reference to secure iframe after render
@@ -558,66 +594,7 @@ export class BookmarkReader extends LitElement {
     });
   }
 
-  private async loadBookmark() {
-    if (!this.bookmarkId) return;
-
-    try {
-      this.isLoading = true;
-      this.hasBeenMarkedAsRead = false; // Reset for new bookmark
-      
-      // Reset progress state to prevent carryover from previous bookmarks
-      this.readProgress = 0;
-      this.scrollPosition = 0;
-      this.iframeLoadError = false;
-      this.bookmark = await DatabaseService.getBookmark(this.bookmarkId) || null;
-      
-      if (this.bookmark) {
-        // Load saved reading progress
-        const progress = await DatabaseService.getReadProgress(this.bookmarkId);
-        if (progress) {
-          // Always restore saved position (remove reset logic for now)
-          this.readProgress = progress.progress;
-          this.scrollPosition = progress.scroll_position;
-          this.readingMode = progress.reading_mode;
-          this.darkModeOverride = progress.dark_mode_override || null;
-        } else {
-          // Reset to defaults for new bookmarks with no saved progress
-          this.readProgress = 0;
-          this.scrollPosition = 0;
-          this.readingMode = this.bookmark.reading_mode || 'readability';
-          this.darkModeOverride = null;
-        }
-
-        // Load available content sources
-        this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
-        
-        // Determine content source type (prefer saved artifacts if available)
-        const assetSources = this.availableContentSources.filter(source => source.type === 'asset');
-        this.contentSourceType = assetSources.length > 0 ? 'saved' : 'live';
-        
-        // Set default content source - prefer first asset or URL
-        if (assetSources.length > 0) {
-          this.selectedContentSource = assetSources[0] || null;
-        } else {
-          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
-        }
-        
-        // Load content with preferred source
-        await this.loadContent();
-      }
-    } catch (error) {
-      console.error('Failed to load bookmark:', error);
-    } finally {
-      this.isLoading = false;
-    }
-
-    // Set up read marking and theme after content loads
-    await this.updateComplete;
-    this.setupReadMarking();
-    this.updateReaderTheme();
-    this.updateSelectValue();
-    
-  }
+  // loadBookmark method removed - replaced by reactive queries
 
   private async loadContent() {
     if (!this.bookmark || !this.selectedContentSource) return;
@@ -906,15 +883,15 @@ export class BookmarkReader extends LitElement {
       dark_mode_override: this.darkModeOverride
     };
 
-
     try {
       await DatabaseService.saveReadProgress(progress);
       
-      // Update bookmark with progress info
-      this.bookmark.read_progress = this.readProgress;
-      this.bookmark.reading_mode = this.readingMode;
-      this.bookmark.last_read_at = progress.last_read_at;
-      await DatabaseService.saveBookmark(this.bookmark);
+      // Update bookmark with progress info - reactive queries will update UI automatically
+      const bookmarkUpdate = { ...this.bookmark };
+      bookmarkUpdate.read_progress = this.readProgress;
+      bookmarkUpdate.reading_mode = this.readingMode;
+      bookmarkUpdate.last_read_at = progress.last_read_at;
+      await DatabaseService.saveBookmark(bookmarkUpdate);
     } catch (error) {
       console.error('Failed to save progress:', error);
     }
@@ -934,6 +911,103 @@ export class BookmarkReader extends LitElement {
           }
         }
       }, 3000); // 3 seconds
+    }
+  }
+
+  /**
+   * Update reactive queries when bookmarkId changes
+   */
+  #updateReactiveQueries() {
+    this.#bookmarkQuery.updateQuery(
+      () => this.bookmarkId ? DatabaseService.getBookmark(this.bookmarkId) : Promise.resolve(undefined)
+    );
+    this.#readProgressQuery.updateQuery(
+      () => this.bookmarkId ? DatabaseService.getReadProgress(this.bookmarkId) : Promise.resolve(undefined)
+    );
+    this.#assetsQuery.updateQuery(
+      () => this.bookmarkId ? DatabaseService.getCompletedAssetsByBookmarkId(this.bookmarkId) : Promise.resolve([])
+    );
+  }
+
+  /**
+   * Handle bookmark data changes from reactive queries
+   */
+  #handleBookmarkChange() {
+    if (!this.bookmarkId) return;
+    
+    // Reset for new bookmark
+    this.#currentBookmarkId = null;
+    this.hasBeenMarkedAsRead = false;
+    this.iframeLoadError = false;
+    this.contentResult = null;
+    this.isLoading = true;
+    
+    // The reactive queries will handle loading the data
+    // Once loaded, the render method will trigger #handleReactiveDataUpdate
+  }
+
+  /**
+   * Handle updates from reactive data queries
+   */
+  async #handleReactiveDataUpdate() {
+    if (!this.bookmark || this.isDataLoading) return;
+
+    try {
+      // Update local state from reactive read progress data
+      const progressData = this.readProgressData;
+      if (progressData) {
+        this.readProgress = progressData.progress;
+        this.scrollPosition = progressData.scroll_position;
+        this.readingMode = progressData.reading_mode;
+        this.darkModeOverride = progressData.dark_mode_override || null;
+      } else {
+        // Reset to defaults for new bookmarks with no saved progress
+        this.readProgress = 0;
+        this.scrollPosition = 0;
+        this.readingMode = this.bookmark.reading_mode || 'readability';
+        this.darkModeOverride = null;
+      }
+
+      // Load available content sources from reactive assets query
+      await this.#loadAvailableContentSources();
+      
+      // Load content if not already loaded
+      if (!this.contentResult) {
+        await this.loadContent();
+      }
+
+      // Set up read marking and theme
+      this.setupReadMarking();
+      this.updateReaderTheme();
+      
+      // Defer select value update to next tick to avoid update cycles
+      await this.updateComplete;
+      this.updateSelectValue();
+      
+      this.isLoading = false;
+    } catch (error) {
+      console.error('Failed to handle reactive data update:', error);
+      this.isLoading = false;
+    }
+  }
+
+  /**
+   * Load available content sources from reactive assets data
+   */
+  async #loadAvailableContentSources() {
+    if (!this.bookmark) return;
+    
+    this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
+    
+    // Determine content source type (prefer saved artifacts if available)
+    const assetSources = this.availableContentSources.filter(source => source.type === 'asset');
+    this.contentSourceType = assetSources.length > 0 ? 'saved' : 'live';
+    
+    // Set default content source - prefer first asset or URL
+    if (assetSources.length > 0) {
+      this.selectedContentSource = assetSources[0] || null;
+    } else {
+      this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
     }
   }
 
@@ -1307,7 +1381,7 @@ export class BookmarkReader extends LitElement {
   }
 
   override render() {
-    if (this.isLoading) {
+    if (this.isDataLoading || this.isLoading) {
       return html`
         <div class="loading-container">
           <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
@@ -1325,6 +1399,13 @@ export class BookmarkReader extends LitElement {
         </div>
         ${this.renderInfoModal()}
       `;
+    }
+
+    // Initialize data when bookmark is loaded for the first time
+    if (this.bookmark && this.#currentBookmarkId !== this.bookmark.id) {
+      this.#currentBookmarkId = this.bookmark.id;
+      // Use microtask to avoid update cycle
+      queueMicrotask(() => this.#handleReactiveDataUpdate());
     }
 
     return html`

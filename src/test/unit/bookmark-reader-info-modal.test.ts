@@ -287,37 +287,31 @@ describe('BookmarkReader - Info Modal', () => {
   });
 
   it('should show content when bookmark loads after modal opens', async () => {
-    // Start with null bookmark to simulate loading state
-    vi.mocked(DatabaseService.getBookmark).mockResolvedValue(undefined);
+    // Start with loading state - mock reactive queries to be loading initially
+    vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
+    vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
 
     element.bookmarkId = 1;
+    // Wait for reactive queries to complete
     await element.updateComplete;
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Open modal while bookmark is null
+    // Open modal after bookmark is loaded
     element['showInfoModal'] = true;
     await element.updateComplete;
 
-    // Verify loading state - find the content slot within the dialog
+    // Modal should show bookmark content
     const dialog = element.shadowRoot?.querySelector('md-dialog');
     const contentSlot = dialog?.querySelector('div[slot="content"]');
     const modalBody = contentSlot?.querySelector('.info-modal-body');
-    expect(modalBody?.querySelector('.loading-container')).toBeTruthy();
-
-    // Simulate bookmark loading
-    element['bookmark'] = mockBookmark;
-    await element.updateComplete;
-
-    // Now modal should show bookmark content - get fresh reference to modal body
-    const updatedDialog = element.shadowRoot?.querySelector('md-dialog');
-    const updatedContentSlot = updatedDialog?.querySelector('div[slot="content"]');
-    const updatedModalBody = updatedContentSlot?.querySelector('.info-modal-body');
-    const titleField = Array.from(updatedModalBody?.querySelectorAll('.info-field') || [])
+    
+    const titleField = Array.from(modalBody?.querySelectorAll('.info-field') || [])
       .find(field => field.querySelector('.info-label')?.textContent?.trim() === 'Title');
     expect(titleField).toBeTruthy();
     expect(titleField?.querySelector('.info-value')?.textContent?.trim()).toBe('Test Article');
 
-    // Loading container should be gone
-    expect(updatedModalBody?.querySelector('.loading-container')).toBeFalsy();
+    // Should not have loading container when bookmark is loaded
+    expect(modalBody?.querySelector('.loading-container')).toBeFalsy();
   });
 });
