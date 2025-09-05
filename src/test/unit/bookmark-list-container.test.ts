@@ -106,18 +106,19 @@ describe('BookmarkListContainer', () => {
       expect(element.tagName.toLowerCase()).toBe('bookmark-list-container');
     });
 
-    it('should load bookmarks on connect', async () => {
+    it('should not load bookmarks on connect (data handled by reactive queries)', async () => {
       element = new BookmarkListContainer();
       document.body.appendChild(element);
       
       await element.updateComplete;
       
-      // Wait for async loading to complete
+      // Wait for any potential async operations
       await new Promise(resolve => setTimeout(resolve, 0));
       
-      expect(DatabaseService.getPageFromAnchorBookmark).toHaveBeenCalled();
-      expect(DatabaseService.getBookmarksPaginated).toHaveBeenCalled();
-      expect(DatabaseService.getBookmarkCount).toHaveBeenCalled();
+      // Database methods should NOT be called by container anymore - reactive queries handle this
+      expect(DatabaseService.getPageFromAnchorBookmark).not.toHaveBeenCalled();
+      expect(DatabaseService.getBookmarksPaginated).not.toHaveBeenCalled();
+      expect(DatabaseService.getBookmarkCount).not.toHaveBeenCalled();
     });
 
     it('should setup event listeners on connect', async () => {
@@ -140,28 +141,25 @@ describe('BookmarkListContainer', () => {
   });
 
   describe('Data Flow', () => {
-    it('should render presentation component with pagination state', async () => {
+    it('should render presentation component with simplified pagination state', async () => {
       element = new BookmarkListContainer();
       document.body.appendChild(element);
       
       await element.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await element.updateComplete;
-      
       const presentationComponent = element.shadowRoot?.querySelector('bookmark-list');
       expect(presentationComponent).toBeTruthy();
       
-      // Check that pagination state is passed correctly
+      // Check that simplified pagination state is passed correctly
+      // Data counts (totalCount, totalPages, filterCounts) are now computed by reactive queries
       const paginationStateProp = (presentationComponent as any).paginationState;
       expect(paginationStateProp).toEqual({
         currentPage: 1,
         pageSize: 25,
-        totalCount: 1,
-        totalPages: 1,
-        filter: 'all',
-        filterCounts: { all: 1, unread: 1, archived: 1 }
+        totalCount: 0, // Now handled by reactive queries
+        totalPages: 1, // Now handled by reactive queries
+        filter: 'all'
+        // filterCounts removed - now handled by reactive queries
       });
     });
   });
