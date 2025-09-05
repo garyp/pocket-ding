@@ -164,7 +164,7 @@ describe('Reader View Scrollbar Integration', () => {
 
       // Wait for bookmark content to load
       await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
+        expect((bookmarkReader as any).isDataLoading).toBe(false);
       });
 
       // Even with content loaded, main app should remain constrained
@@ -194,7 +194,7 @@ describe('Reader View Scrollbar Integration', () => {
       
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
+        expect((bookmarkReader as any).isDataLoading).toBe(false);
       });
 
       // Check the component's styles object instead of computed styles
@@ -219,7 +219,7 @@ describe('Reader View Scrollbar Integration', () => {
       
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
+        expect((bookmarkReader as any).isDataLoading).toBe(false);
       });
 
       // Check the component's styles object instead of computed styles
@@ -265,7 +265,7 @@ describe('Reader View Scrollbar Integration', () => {
 
       // Wait for bookmark content to load
       await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
+        expect((bookmarkReader as any).isDataLoading).toBe(false);
       });
 
       // Check scrolling isolation

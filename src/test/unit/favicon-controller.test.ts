@@ -10,8 +10,15 @@ vi.mock('../../services/favicon-service', () => ({
   },
 }));
 
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getBookmark: vi.fn(),
+  },
+}));
+
 // Import after mocking
 import { FaviconService } from '../../services/favicon-service';
+import { DatabaseService } from '../../services/database';
 
 
 describe('FaviconController', () => {
@@ -226,35 +233,28 @@ describe('FaviconController', () => {
     });
 
     it('should handle visibility changes', async () => {
-      // Mock DatabaseService.getBookmark
-      const mockGetBookmark = vi.fn();
-      mockGetBookmark.mockImplementation((id: number) => {
+      // Mock DatabaseService.getBookmark to return bookmark data
+      vi.mocked(DatabaseService.getBookmark).mockImplementation((id: number) => {
         const bookmarkData = {
           1: { id: 1, favicon_url: 'https://example.com/favicon1.ico' },
           2: { id: 2, favicon_url: 'https://example.com/favicon2.ico' },
           3: { id: 3 } // No favicon_url
-        };
+        } as any;
         return Promise.resolve(bookmarkData[id as keyof typeof bookmarkData]);
       });
 
-      // Mock the DatabaseService module 
-      vi.doMock('../services/database', () => ({
-        DatabaseService: {
-          getBookmark: mockGetBookmark
-        }
-      }));
-
-      // Create a fresh controller instance to pick up the mocked module
-      const mockFaviconService = {
-        getAllCachedFaviconUrls: vi.fn().mockReturnValue(new Map()),
-        loadFaviconForBookmark: vi.fn().mockResolvedValue(undefined),
-      };
+      // Set up the favicon service mock
+      mockFaviconService.loadFaviconForBookmark.mockResolvedValue(undefined);
       
-      const freshController = new FaviconController(mockHost);
-      (freshController as any).faviconService = mockFaviconService;
+      // Call the visibility handler
+      await controller.handleVisibilityChanged([1, 2, 3]);
 
-      await freshController.handleVisibilityChanged([1, 2, 3]);
+      // Verify database was called for each bookmark
+      expect(DatabaseService.getBookmark).toHaveBeenCalledWith(1);
+      expect(DatabaseService.getBookmark).toHaveBeenCalledWith(2);
+      expect(DatabaseService.getBookmark).toHaveBeenCalledWith(3);
 
+      // Verify favicons were loaded only for bookmarks with favicon_url
       expect(mockFaviconService.loadFaviconForBookmark).toHaveBeenCalledTimes(2);
       expect(mockFaviconService.loadFaviconForBookmark).toHaveBeenCalledWith(1, 'https://example.com/favicon1.ico');
       expect(mockFaviconService.loadFaviconForBookmark).toHaveBeenCalledWith(2, 'https://example.com/favicon2.ico');

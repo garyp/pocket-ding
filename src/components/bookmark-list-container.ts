@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { DatabaseService } from '../services/database';
+import { SyncService } from '../services/sync-service';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
 import { StateController } from '../controllers/state-controller';
@@ -53,9 +54,11 @@ export class BookmarkListContainer extends LitElement {
   // Removed containerState - data now handled by reactive queries in bookmark-list
   // Removed totalCount, totalPages, filterCounts - computed by reactive queries
 
+  // Services
+  private syncService = SyncService.getInstance();
+
   // Reactive controllers
   private syncController = new SyncController(this, {
-    onBookmarkSynced: (bookmarkId: number, updatedBookmark: LocalBookmark) => this.handleBookmarkSynced(bookmarkId, updatedBookmark),
     onSyncCompleted: () => this.handleSyncCompleted(),
   });
 
@@ -103,12 +106,14 @@ export class BookmarkListContainer extends LitElement {
     // StateController automatically handles persistence via observedProperties
     void this.stateController; // Suppress TS6133: declared but never read warning
     this.addEventListener('sync-requested', this.handleSyncRequested);
+    this.syncService.addEventListener('bookmark-synced', this.handleBookmarkSyncedEvent);
     // No need to loadBookmarks - data now handled by reactive queries in bookmark-list
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('sync-requested', this.handleSyncRequested);
+    this.syncService.removeEventListener('bookmark-synced', this.handleBookmarkSyncedEvent);
   }
 
 
@@ -117,6 +122,13 @@ export class BookmarkListContainer extends LitElement {
     // No need to reload bookmarks - they're updated automatically via reactive queries
     console.log('Sync completed');
   }
+
+  private handleBookmarkSyncedEvent = async (event: Event) => {
+    const customEvent = event as CustomEvent;
+    const updatedBookmark = customEvent.detail.bookmark;
+    const bookmarkId = updatedBookmark?.id;
+    this.handleBookmarkSynced(bookmarkId, updatedBookmark);
+  };
  
   private async handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
     if (!updatedBookmark || !bookmarkId) return;

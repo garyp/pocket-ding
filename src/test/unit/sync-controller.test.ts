@@ -63,7 +63,6 @@ describe('SyncController', () => {
 
     it('should accept options', () => {
       const options = {
-        onBookmarkSynced: vi.fn(),
         onSyncCompleted: vi.fn(),
         onSyncError: vi.fn(),
       };
@@ -135,17 +134,14 @@ describe('SyncController', () => {
   });
 
   describe('event handling', () => {
-    let onBookmarkSynced: any;
     let onSyncCompleted: any;
     let onSyncError: any;
 
     beforeEach(() => {
-      onBookmarkSynced = vi.fn();
       onSyncCompleted = vi.fn();
       onSyncError = vi.fn();
 
       controller = new SyncController(mockHost, {
-        onBookmarkSynced,
         onSyncCompleted,
         onSyncError,
       });
@@ -282,7 +278,6 @@ describe('SyncController', () => {
 
       const syncState = controller.getSyncState();
       expect(syncState.syncedBookmarkIds.has(123)).toBe(true);
-      expect(onBookmarkSynced).toHaveBeenCalledWith(123, bookmark);
     });
   });
 

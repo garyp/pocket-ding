@@ -21,9 +21,9 @@ import '@material/web/dialog/dialog.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
-  @property({ type: Number }) bookmarkId: number | null = null;
+  @property({ type: Number }) bookmarkId: number | undefined = undefined;
 
-  // Reactive query for bookmark data
+  // Reactive query for bookmark data  
   #bookmarkQuery = new ReactiveQueryController(
     this,
     () => this.bookmarkId ? DatabaseService.getBookmark(this.bookmarkId) : Promise.resolve(undefined)
@@ -42,12 +42,12 @@ export class BookmarkReader extends LitElement {
   );
 
   // Getter methods for reactive data
-  get bookmark(): LocalBookmark | null {
-    return this.#bookmarkQuery.value || null;
+  get bookmark(): LocalBookmark | undefined {
+    return this.#bookmarkQuery.value;
   }
 
-  get readProgressData(): ReadProgress | null {
-    return this.#readProgressQuery.value || null;
+  get readProgressData(): ReadProgress | undefined {
+    return this.#readProgressQuery.value;
   }
 
   get assets(): any[] {
@@ -58,9 +58,8 @@ export class BookmarkReader extends LitElement {
     return this.#bookmarkQuery.loading || this.#readProgressQuery.loading || this.#assetsQuery.loading;
   }
 
-  #currentBookmarkId: number | null = null;
+  #currentBookmarkId: number | undefined = undefined;
 
-  @state() private isLoading = true;
   @state() private readingMode: 'original' | 'readability' = 'readability';
   @state() private readProgress = 0;
   @state() private scrollPosition = 0;
@@ -566,7 +565,9 @@ export class BookmarkReader extends LitElement {
     // Update reactive queries when bookmarkId changes
     if (changedProperties.has('bookmarkId')) {
       this.#updateReactiveQueries();
-      this.#handleBookmarkChange();
+      if (this.bookmarkId) {
+        this.#handleBookmarkChange();
+      }
     }
     
     // Get reference to secure iframe after render
@@ -933,14 +934,11 @@ export class BookmarkReader extends LitElement {
    * Handle bookmark data changes from reactive queries
    */
   #handleBookmarkChange() {
-    if (!this.bookmarkId) return;
-    
     // Reset for new bookmark
-    this.#currentBookmarkId = null;
+    this.#currentBookmarkId = undefined;
     this.hasBeenMarkedAsRead = false;
     this.iframeLoadError = false;
     this.contentResult = null;
-    this.isLoading = true;
     
     // The reactive queries will handle loading the data
     // Once loaded, the render method will trigger #handleReactiveDataUpdate
@@ -983,11 +981,8 @@ export class BookmarkReader extends LitElement {
       // Defer select value update to next tick to avoid update cycles
       await this.updateComplete;
       this.updateSelectValue();
-      
-      this.isLoading = false;
     } catch (error) {
       console.error('Failed to handle reactive data update:', error);
-      this.isLoading = false;
     }
   }
 
@@ -1381,7 +1376,8 @@ export class BookmarkReader extends LitElement {
   }
 
   override render() {
-    if (this.isDataLoading || this.isLoading) {
+    // Show loading spinner when data is loading OR when we don't have a bookmarkId yet
+    if (this.isDataLoading || !this.bookmarkId) {
       return html`
         <div class="loading-container">
           <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>

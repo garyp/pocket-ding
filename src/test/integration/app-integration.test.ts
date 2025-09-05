@@ -619,7 +619,7 @@ describe('App Integration Tests', () => {
       
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
+        expect((bookmarkReader as any).isDataLoading).toBe(false);
       });
 
       await waitFor(() => {
@@ -655,7 +655,7 @@ describe('App Integration Tests', () => {
       
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
+        expect((bookmarkReader as any).isDataLoading).toBe(false);
       });
 
       await waitFor(() => {
@@ -717,7 +717,7 @@ describe('App Integration Tests', () => {
       
       // Wait for component to finish loading
       await waitFor(() => {
-        expect((bookmarkReader as any).isLoading).toBe(false);
+        expect((bookmarkReader as any).isDataLoading).toBe(false);
       });
 
       await waitFor(() => {

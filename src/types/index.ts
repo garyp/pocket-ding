@@ -129,7 +129,6 @@ export interface BookmarkListProps {
   
   // Callback props (actions)
   onBookmarkSelect: (bookmarkId: number) => void;
-  onSyncRequested: () => void;
   onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void;
   onVisibilityChanged: (visibleBookmarkIds: number[]) => void;
   onPageChange: (page: number) => void;
@@ -138,7 +137,6 @@ export interface BookmarkListProps {
 
 export interface BookmarkListCallbacks {
   onBookmarkSelect: (bookmarkId: number) => void;
-  onSyncRequested: () => void;
   onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void;
   onVisibilityChanged: (visibleBookmarkIds: number[]) => void;
 }

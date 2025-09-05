@@ -10,7 +10,6 @@ export interface SyncState {
 }
 
 export interface SyncControllerOptions {
-  onBookmarkSynced?: (bookmarkId: number, bookmark: any) => void;
   onSyncCompleted?: () => void;
   onSyncError?: (error: any) => void;
 }
@@ -181,11 +180,6 @@ export class SyncController implements ReactiveController {
       syncedBookmarkIds: new Set([...this._syncState.syncedBookmarkIds, bookmarkId]),
     };
     this.host.requestUpdate();
-
-    // Notify host component
-    if (this.options.onBookmarkSynced) {
-      this.options.onBookmarkSynced(bookmarkId, updatedBookmark);
-    }
   };
 
   // Public API methods
