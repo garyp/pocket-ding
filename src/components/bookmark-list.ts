@@ -625,6 +625,45 @@ export class BookmarkList extends LitElement {
     `;
   }
 
+  private renderRestOfBookmarkContent(bookmark: LocalBookmark, hasProgress: boolean) {
+    return html`
+      ${bookmark.description ? html`
+        <p class="bookmark-description">${bookmark.description}</p>
+      ` : ''}
+      
+      <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
+        <img 
+          class="favicon" 
+          src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
+          alt="Favicon"
+          loading="lazy"
+        />
+        ${bookmark.url}
+      </a>
+      
+      ${bookmark.tag_names.length > 0 ? html`
+        <div class="bookmark-tags">
+          ${bookmark.tag_names.map(tag => html`
+            <span class="tag-badge">${tag}</span>
+          `)}
+        </div>
+      ` : ''}
+      
+      ${hasProgress ? html`
+        <div class="bookmark-progress">
+          <div class="progress-text">
+            ${Math.round(bookmark.read_progress!)}% read
+          </div>
+          <md-linear-progress .value=${bookmark.read_progress! / 100}></md-linear-progress>
+        </div>
+      ` : ''}
+      
+      <div class="bookmark-date">
+        Added ${this.formatDate(bookmark.date_added)}
+      </div>
+    `;
+  }
+
   private renderBookmark(bookmark: LocalBookmark) {
     const hasProgress = Boolean(bookmark.read_progress && bookmark.read_progress > 0);
     const isRecentlySynced = this.syncedBookmarkIds.has(bookmark.id);
@@ -638,15 +677,21 @@ export class BookmarkList extends LitElement {
       >
         <div class="bookmark-content ${hasPreviewImage ? 'bookmark-with-preview' : ''}">
           ${hasPreviewImage ? html`
-            <img 
-              class="bookmark-preview" 
-              src=${bookmark.preview_image_url} 
-              alt="Preview of ${bookmark.title}"
-              loading="lazy"
-              referrerpolicy="no-referrer"
-            />
             <div class="bookmark-text-content">
-              ${this.renderBookmarkContent(bookmark, hasProgress)}
+              <div class="bookmark-header">
+                <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
+                <div class="bookmark-meta">
+                  ${this.renderStatusIcons(bookmark)}
+                </div>
+              </div>
+              <img 
+                class="bookmark-preview" 
+                src=${bookmark.preview_image_url} 
+                alt="Preview of ${bookmark.title}"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              />
+              ${this.renderRestOfBookmarkContent(bookmark, hasProgress)}
             </div>
           ` : html`
             ${this.renderBookmarkContent(bookmark, hasProgress)}
