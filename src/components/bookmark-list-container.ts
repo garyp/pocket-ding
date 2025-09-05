@@ -167,10 +167,8 @@ export class BookmarkListContainer extends LitElement {
   };
 
   private handleVisibilityChanged = (visibleBookmarkIds: number[]) => {
-    // Get bookmark data from the bookmark-list component since container no longer maintains it
-    const bookmarkListElement = this.shadowRoot?.querySelector('bookmark-list') as any;
-    const bookmarks = bookmarkListElement?.bookmarks || [];
-    this.faviconController.handleVisibilityChanged(visibleBookmarkIds, bookmarks);
+    // FaviconController now fetches bookmark data itself to maintain proper encapsulation
+    this.faviconController.handleVisibilityChanged(visibleBookmarkIds);
   };
 
   private handlePageChange = async (page: number) => {
