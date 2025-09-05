@@ -3,6 +3,12 @@ import '../setup';
 import { BookmarkList } from '../../components/bookmark-list';
 import { DatabaseService } from '../../services/database';
 import type { LocalBookmark, AppSettings } from '../../types';
+import { liveQuery } from 'dexie';
+
+// Mock liveQuery from Dexie
+vi.mock('dexie', () => ({
+  liveQuery: vi.fn()
+}));
 
 describe('BookmarkList Controller Integration', () => {
   let element: BookmarkList;
@@ -90,10 +96,55 @@ describe('BookmarkList Controller Integration', () => {
       }
     ];
 
-    // Mock database service
+    // Mock database service - add reactive query methods
     vi.spyOn(DatabaseService, 'getSettings').mockResolvedValue(mockSettings);
     vi.spyOn(DatabaseService, 'getAllBookmarks').mockResolvedValue(mockBookmarks);
     vi.spyOn(DatabaseService, 'getCompletedAssetsByBookmarkId').mockResolvedValue([]);
+    
+    // Mock reactive query methods
+    vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockImplementation(async (filter) => {
+      if (filter === 'unread') {
+        return mockBookmarks.filter(b => b.unread && !b.is_archived);
+      }
+      if (filter === 'archived') {
+        return mockBookmarks.filter(b => b.is_archived);
+      }
+      return mockBookmarks.filter(b => !b.is_archived); // 'all' filter
+    });
+    
+    vi.spyOn(DatabaseService, 'getAllFilterCounts').mockResolvedValue({
+      all: mockBookmarks.filter(b => !b.is_archived).length,
+      unread: mockBookmarks.filter(b => b.unread && !b.is_archived).length,
+      archived: mockBookmarks.filter(b => b.is_archived).length
+    });
+    
+    vi.spyOn(DatabaseService, 'getBookmarksWithAssetCounts').mockResolvedValue(new Map());
+    
+    // Setup liveQuery mock to return mock observables that immediately emit data
+    const mockLiveQuery = vi.mocked(liveQuery);
+    mockLiveQuery.mockImplementation((queryFn: () => any) => {
+      const observable = {
+        subscribe: (observerOrNext?: any, error?: any, complete?: any) => {
+          const observer = typeof observerOrNext === 'function' 
+            ? { next: observerOrNext, error, complete }
+            : observerOrNext || { next: () => {}, error: () => {}, complete: () => {} };
+          
+          // Immediately execute the query function and emit result
+          Promise.resolve(queryFn()).then(
+            (result) => observer.next?.(result),
+            (err) => observer.error?.(err)
+          );
+          return {
+            unsubscribe: vi.fn(),
+            closed: false
+          };
+        },
+        [Symbol.observable]() {
+          return this;
+        }
+      };
+      return observable;
+    });
   });
 
   afterEach(() => {
@@ -106,11 +157,12 @@ describe('BookmarkList Controller Integration', () => {
 
   function createTestElement(filter: 'all' | 'unread' | 'archived' = 'all'): BookmarkList {
     const el = new BookmarkList();
-    el.bookmarks = mockBookmarks;
-    el.isLoading = false;
+    // Remove old property assignments - these are now reactive getters
+    // el.bookmarks = mockBookmarks;         // Now a getter from reactive query
+    // el.isLoading = false;                 // Now a getter from reactive query
+    // el.bookmarksWithAssets = new Set();   // Now a getter from reactive query
     el.syncedBookmarkIds = new Set();
     el.faviconCache = new Map();
-    el.bookmarksWithAssets = new Set();
     el.paginationState = {
       currentPage: 1,
       pageSize: 25,
@@ -127,6 +179,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement('unread');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Verify content is filtered correctly (via props)
       let bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');
@@ -154,6 +209,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement('unread');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Verify content is still filtered correctly (via props)
       bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');
@@ -172,6 +230,9 @@ describe('BookmarkList Controller Integration', () => {
       element.onFilterChange = onFilterChange;
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Test filter sequence: call callbacks for unread -> archived -> all
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
@@ -202,17 +263,20 @@ describe('BookmarkList Controller Integration', () => {
       expect(onFilterChange).toHaveBeenCalledTimes(3);
     });
 
-    it('should update display when bookmark data changes', async () => {
+    it('should update display when bookmark data changes via reactive queries', async () => {
       element = createTestElement('unread');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Initially should show 1 unread bookmark
       let bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');
       expect(bookmarkCards?.length).toBe(1);
       expect(bookmarkCards?.[0]?.querySelector('.bookmark-title')?.textContent).toBe('Unread Bookmark');
 
-      // Update bookmarks data (simulate sync with new bookmark)
+      // Update the mock data to simulate database changes (new bookmark synced)
       const updatedBookmarks = [...mockBookmarks, {
         id: 4,
         url: 'https://example.com/4',
@@ -232,8 +296,26 @@ describe('BookmarkList Controller Integration', () => {
         date_modified: '2024-01-04T00:00:00Z'
       }];
 
-      element.bookmarks = updatedBookmarks;
+      // Update the mock to return new data and trigger re-query
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockImplementation(async (filter) => {
+        if (filter === 'unread') {
+          return updatedBookmarks.filter(b => b.unread && !b.is_archived);
+        }
+        if (filter === 'archived') {
+          return updatedBookmarks.filter(b => b.is_archived);
+        }
+        return updatedBookmarks.filter(b => !b.is_archived); // 'all' filter
+      });
+      
+      // Trigger pagination state update to refresh reactive queries
+      element.paginationState = { 
+        ...element.paginationState, 
+        totalCount: 2 
+      };
       await element.updateComplete;
+      
+      // Wait for reactive queries to update
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Filter should show both unread bookmarks now
       bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');
@@ -264,6 +346,9 @@ describe('BookmarkList Controller Integration', () => {
       element.onFilterChange = onFilterChange;
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Component should still function despite storage errors
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);
@@ -303,6 +388,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement('all');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Should still show filter state correctly (via props, not localStorage)
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button, md-icon-button') || []);

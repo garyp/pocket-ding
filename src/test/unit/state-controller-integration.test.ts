@@ -3,6 +3,26 @@ import '../setup';
 import { BookmarkList } from '../../components/bookmark-list';
 import type { LocalBookmark } from '../../types';
 
+// Mock liveQuery from Dexie
+vi.mock('dexie', () => ({
+  liveQuery: vi.fn()
+}));
+
+// Mock DatabaseService - must be before imports for Vitest hoisting
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getBookmarksPaginated: vi.fn(),
+    getAllFilterCounts: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
+    getSettings: vi.fn(),
+    getAllBookmarks: vi.fn(),
+    getCompletedAssetsByBookmarkId: vi.fn(),
+  },
+}));
+
+import { DatabaseService } from '../../services/database';
+import { liveQuery } from 'dexie';
+
 describe('BookmarkList Controller Integration', () => {
   let element: BookmarkList;
   let mockBookmarks: LocalBookmark[];
@@ -55,6 +75,51 @@ describe('BookmarkList Controller Integration', () => {
         date_modified: '2024-01-02T00:00:00Z'
       }
     ];
+    
+    // Mock DatabaseService methods for reactive queries
+    vi.mocked(DatabaseService.getBookmarksPaginated).mockImplementation(async (filter) => {
+      if (filter === 'unread') {
+        return mockBookmarks.filter(b => b.unread && !b.is_archived);
+      }
+      if (filter === 'archived') {
+        return mockBookmarks.filter(b => b.is_archived);
+      }
+      return mockBookmarks.filter(b => !b.is_archived); // 'all' filter
+    });
+    
+    vi.mocked(DatabaseService.getAllFilterCounts).mockResolvedValue({
+      all: mockBookmarks.filter(b => !b.is_archived).length,
+      unread: mockBookmarks.filter(b => b.unread && !b.is_archived).length,
+      archived: mockBookmarks.filter(b => b.is_archived).length
+    });
+    
+    vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+    
+    // Setup liveQuery mock to return mock observables that immediately emit data
+    const mockLiveQuery = vi.mocked(liveQuery);
+    mockLiveQuery.mockImplementation((queryFn: () => any) => {
+      const observable = {
+        subscribe: (observerOrNext?: any, error?: any, complete?: any) => {
+          const observer = typeof observerOrNext === 'function' 
+            ? { next: observerOrNext, error, complete }
+            : observerOrNext || { next: () => {}, error: () => {}, complete: () => {} };
+          
+          // Immediately execute the query function and emit result
+          Promise.resolve(queryFn()).then(
+            (result) => observer.next?.(result),
+            (err) => observer.error?.(err)
+          );
+          return {
+            unsubscribe: vi.fn(),
+            closed: false
+          };
+        },
+        [Symbol.observable]() {
+          return this;
+        }
+      };
+      return observable;
+    });
   });
 
   afterEach(() => {
@@ -62,15 +127,17 @@ describe('BookmarkList Controller Integration', () => {
     if (element && element.parentNode) {
       element.remove();
     }
+    vi.restoreAllMocks();
   });
 
   function createTestElement(filter: 'all' | 'unread' | 'archived' = 'all'): BookmarkList {
     const el = new BookmarkList();
-    el.bookmarks = mockBookmarks;
-    el.isLoading = false;
+    // Remove old property assignments - these are now reactive getters
+    // el.bookmarks = mockBookmarks;  // Now a getter from reactive query
+    // el.isLoading = false;          // Now a getter from reactive query
+    // el.bookmarksWithAssets = new Set(); // Now a getter from reactive query
     el.syncedBookmarkIds = new Set();
     el.faviconCache = new Map();
-    el.bookmarksWithAssets = new Set();
     el.paginationState = {
       currentPage: 1,
       pageSize: 25,
@@ -86,6 +153,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Should show the filter passed via props
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
@@ -103,6 +173,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement('unread');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Should show the unread filter (passed via props)
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
@@ -122,6 +195,9 @@ describe('BookmarkList Controller Integration', () => {
       element.onFilterChange = onFilterChange;
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Click unread filter
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
@@ -144,6 +220,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Should fall back to default scroll position of 0
       expect((element as any).scrollPosition).toBe(0);
@@ -165,6 +244,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Mock scroll container and trigger scroll position save
       const mockScrollContainer = { 
@@ -174,8 +256,8 @@ describe('BookmarkList Controller Integration', () => {
       };
       (element as any).scrollContainer = mockScrollContainer;
       
-      // Try to save scroll position (this should trigger storage error)
-      (element as any).saveCurrentScrollPosition();
+      // Try to set scroll position which should trigger storage error
+      element.scrollPosition = 100;
       await element.updateComplete;
 
       // Should have logged warning but not crashed
@@ -195,6 +277,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Mock scroll container with event methods
       const mockScrollContainer = { 
@@ -204,8 +289,8 @@ describe('BookmarkList Controller Integration', () => {
       };
       (element as any).scrollContainer = mockScrollContainer;
 
-      // Trigger scroll position save
-      (element as any).saveCurrentScrollPosition();
+      // Save scroll position - set the property directly
+      element.scrollPosition = 250;
 
       // Check localStorage
       const savedData = localStorage.getItem('bookmark-list-state');
@@ -223,41 +308,29 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Mock scroll container with event methods
-      const mockScrollContainer = { 
-        scrollTop: 0,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn()
-      };
-      (element as any).scrollContainer = mockScrollContainer;
-
-      // Trigger scroll position restore
-      (element as any).restoreScrollPosition();
-
-      expect(mockScrollContainer.scrollTop).toBe(300);
+      // The scroll position is restored automatically when the component connects
+      // Check that the internal scrollPosition property was set correctly
+      expect(element.scrollPosition).toBe(300);
     });
 
     it('should enforce minimum scroll position of 0', async () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Mock scroll container with negative position and event methods
-      const mockScrollContainer = { 
-        scrollTop: -50,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn()
-      };
-      (element as any).scrollContainer = mockScrollContainer;
-
-      // Trigger scroll position save
-      (element as any).saveCurrentScrollPosition();
-
-      // Check that negative position was clamped to 0
-      const savedData = localStorage.getItem('bookmark-list-state');
-      const savedState = JSON.parse(savedData!);
-      expect(savedState.scrollPosition).toBe(0);
+      // Set negative scroll position and let component handle it
+      element.scrollPosition = -50;
+      await element.updateComplete;
+      
+      // The component should clamp to minimum of 0
+      expect(element.scrollPosition).toBe(0);
     });
   });
 
@@ -267,19 +340,18 @@ describe('BookmarkList Controller Integration', () => {
       let element1 = createTestElement('archived');
       document.body.appendChild(element1);
       await element1.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Verify it shows archived filter (from props)
       const buttons1 = Array.from(element1.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const archivedBtn1 = buttons1.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
       expect(archivedBtn1?.tagName.toLowerCase()).toBe('md-filled-button');
 
-      // Set scroll position
-      (element1 as any).scrollContainer = { 
-        scrollTop: 400,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn()
-      };
-      (element1 as any).saveCurrentScrollPosition();
+      // Set scroll position through the property
+      element1.scrollPosition = 400;
+      await element1.updateComplete;
 
       // Remove first instance
       element1.remove();
@@ -288,6 +360,9 @@ describe('BookmarkList Controller Integration', () => {
       let element2 = createTestElement('archived');
       document.body.appendChild(element2);
       await element2.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Verify filter state is maintained (via props, not localStorage)
       const buttons2 = Array.from(element2.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
@@ -307,14 +382,13 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement();
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Mock scroll container with event methods
-      const mockScrollContainer = { 
-        scrollTop: 150,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn()
-      };
-      (element as any).scrollContainer = mockScrollContainer;
+      // Set scroll position before disconnect
+      element.scrollPosition = 150;
+      await element.updateComplete;
 
       // Disconnect component (should trigger save)
       element.remove();
@@ -331,6 +405,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement('unread');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Should only show unread, non-archived bookmarks (bookmark 1)
       const bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');
@@ -344,6 +421,9 @@ describe('BookmarkList Controller Integration', () => {
       element = createTestElement('archived');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Should only show archived bookmarks (bookmark 2)
       const bookmarkCards = element.shadowRoot?.querySelectorAll('.bookmark-card');
@@ -353,20 +433,24 @@ describe('BookmarkList Controller Integration', () => {
       expect(displayedTitle).toBe('Test Bookmark 2');
     });
 
-    it('should update filter counts based on paginationState prop', async () => {
+    it('should update filter counts based on reactive queries', async () => {
       element = createTestElement('all');
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Check filter button counts - only the active filter shows the count
+      // Check filter button counts - reactive queries now provide all counts
       const buttons = Array.from(element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button') || []);
       const allBtn = buttons.find(btn => btn.textContent?.includes('All')) as HTMLElement;
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       const archivedBtn = buttons.find(btn => btn.textContent?.includes('Archived')) as HTMLElement;
 
-      expect(allBtn?.textContent).toContain('All (1)'); // Active filter shows count
-      expect(unreadBtn?.textContent).toContain('Unread (0)'); // Inactive filters show 0
-      expect(archivedBtn?.textContent).toContain('Archived (0)'); // Inactive filters show 0
+      // All filters now show correct counts from reactive queries
+      expect(allBtn?.textContent).toContain('All (1)'); // All non-archived bookmarks
+      expect(unreadBtn?.textContent).toContain('Unread (1)'); // Unread non-archived bookmarks
+      expect(archivedBtn?.textContent).toContain('Archived (1)'); // Archived bookmarks
     });
   });
 });

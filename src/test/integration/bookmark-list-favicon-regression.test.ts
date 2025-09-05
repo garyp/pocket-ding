@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '../setup';
 import { BookmarkList } from '../../components/bookmark-list';
+import { DatabaseService } from '../../services/database';
 import type { LocalBookmark } from '../../types';
+import { liveQuery } from 'dexie';
+
+// Mock liveQuery from Dexie
+vi.mock('dexie', () => ({
+  liveQuery: vi.fn()
+}));
 
 describe('BookmarkList Favicon Loading Regression Test', () => {
   let element: BookmarkList;
@@ -85,6 +92,37 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
       unobserve: unobserveSpy,
       disconnect: disconnectSpy,
     };
+    
+    // Mock DatabaseService methods for reactive queries
+    vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue(mockBookmarks);
+    vi.spyOn(DatabaseService, 'getAllFilterCounts').mockResolvedValue({ all: 2, unread: 1, archived: 0 });
+    vi.spyOn(DatabaseService, 'getBookmarksWithAssetCounts').mockResolvedValue(new Map());
+    
+    // Setup liveQuery mock to return mock observables that immediately emit data
+    const mockLiveQuery = vi.mocked(liveQuery);
+    mockLiveQuery.mockImplementation((queryFn: () => any) => {
+      const observable = {
+        subscribe: (observerOrNext?: any, error?: any, complete?: any) => {
+          const observer = typeof observerOrNext === 'function' 
+            ? { next: observerOrNext, error, complete }
+            : observerOrNext || { next: () => {}, error: () => {}, complete: () => {} };
+          
+          // Immediately execute the query function and emit result
+          Promise.resolve(queryFn()).then(
+            (result) => observer.next?.(result),
+            (err) => observer.error?.(err)
+          );
+          return {
+            unsubscribe: vi.fn(),
+            closed: false
+          };
+        },
+        [Symbol.observable]() {
+          return this;
+        }
+      };
+      return observable;
+    });
   });
 
   afterEach(() => {
@@ -93,6 +131,7 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
     }
     // Note: NOT calling vi.restoreAllMocks() to avoid clearing IntersectionObserver implementations
     // that might still be used by async requestAnimationFrame callbacks
+    vi.restoreAllMocks();
   });
 
   describe('REGRESSION: Favicon loading intersection observer timing', () => {
@@ -102,11 +141,19 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
 
       // Create component with callbacks
       element = new BookmarkList();
-      element.bookmarks = mockBookmarks;
-      element.isLoading = false;
+      // Remove old property assignments - these are now reactive getters
+      // element.bookmarks = mockBookmarks;     // Now a getter from reactive query
+      // element.isLoading = false;             // Now a getter from reactive query  
+      // element.bookmarksWithAssets = new Set(); // Now a getter from reactive query
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
-      element.bookmarksWithAssets = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 2,
+        totalPages: 1,
+        filter: 'all'
+      };
       element.onFaviconLoadRequested = onFaviconLoadRequested;
       element.onVisibilityChanged = onVisibilityChanged;
 
@@ -114,7 +161,8 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
       document.body.appendChild(element);
       await element.updateComplete;
 
-      // Wait for requestAnimationFrame to complete (this is where the bug was)
+      // Wait for reactive queries to load and requestAnimationFrame to complete
+      await new Promise(resolve => setTimeout(resolve, 50));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Verify intersection observer was created
@@ -166,16 +214,30 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
         favicon_url: '',
       }];
 
+      // Mock DatabaseService to return bookmarks without favicon
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue(bookmarksWithoutFavicon);
+      
       element = new BookmarkList();
-      element.bookmarks = bookmarksWithoutFavicon;
-      element.isLoading = false;
+      // Remove old property assignments - these are now reactive getters
+      // element.bookmarks = bookmarksWithoutFavicon; // Now a getter from reactive query
+      // element.isLoading = false;                   // Now a getter from reactive query
+      // element.bookmarksWithAssets = new Set();     // Now a getter from reactive query
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
-      element.bookmarksWithAssets = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       element.onFaviconLoadRequested = onFaviconLoadRequested;
 
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Verify elements are in DOM
@@ -195,16 +257,27 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
       const onFaviconLoadRequested = vi.fn();
 
       element = new BookmarkList();
-      element.bookmarks = mockBookmarks;
-      element.isLoading = false;
+      // Remove old property assignments - these are now reactive getters
+      // element.bookmarks = mockBookmarks;         // Now a getter from reactive query
+      // element.isLoading = false;                 // Now a getter from reactive query
+      // element.bookmarksWithAssets = new Set();   // Now a getter from reactive query
       // Pre-populate cache
       element.faviconCache = new Map([[1, 'data:image/png;base64,cached-favicon']]);
       element.syncedBookmarkIds = new Set();
-      element.bookmarksWithAssets = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 2,
+        totalPages: 1,
+        filter: 'all'
+      };
       element.onFaviconLoadRequested = onFaviconLoadRequested;
 
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Verify elements are in DOM
@@ -239,22 +312,42 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
         }
       }
 
+      // Mock DatabaseService to start with empty bookmarks
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue([]);
+      
       const brokenElement = new BrokenBookmarkList();
-      brokenElement.bookmarks = [];  // Start with empty bookmarks
-      brokenElement.isLoading = false;
+      // Remove old property assignments - these are now reactive getters  
+      // brokenElement.bookmarks = [];            // Now a getter from reactive query
+      // brokenElement.isLoading = false;         // Now a getter from reactive query
+      // brokenElement.bookmarksWithAssets = new Set(); // Now a getter from reactive query
       brokenElement.faviconCache = new Map();
       brokenElement.syncedBookmarkIds = new Set();
-      brokenElement.bookmarksWithAssets = new Set();
+      brokenElement.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 0,
+        totalPages: 1,
+        filter: 'all'
+      };
       brokenElement.onFaviconLoadRequested = onFaviconLoadRequested;
 
       document.body.appendChild(brokenElement);
       await brokenElement.updateComplete;
+      
+      // Wait for reactive queries to load (initially empty)
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Now set bookmarks directly (not through property change detection)
-      // This simulates scenarios where DOM is updated but intersection observer isn't
-      brokenElement.bookmarks = mockBookmarks;
+      // Now update the mock to return bookmarks and trigger re-query
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue(mockBookmarks);
+      brokenElement.paginationState = { 
+        ...brokenElement.paginationState, 
+        totalCount: 2 
+      };
       brokenElement.requestUpdate(); // Force re-render
       await brokenElement.updateComplete;
+      
+      // Wait for reactive queries to update
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Elements exist in DOM
       const bookmarkElements = brokenElement.shadowRoot?.querySelectorAll('[data-bookmark-id]');
@@ -287,26 +380,44 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
     });
 
     it('FIXED: demonstrates that the fix ensures favicon loading works consistently', async () => {
+      // Mock DatabaseService to start with empty bookmarks
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue([]);
+      
       element = new BookmarkList();
-      // Start with empty bookmarks to test the critical edge case
-      element.bookmarks = [];
-      element.isLoading = false;
+      // Remove old property assignments - these are now reactive getters
+      // element.bookmarks = [];                    // Now a getter from reactive query
+      // element.isLoading = false;                 // Now a getter from reactive query
+      // element.bookmarksWithAssets = new Set();   // Now a getter from reactive query
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
-      element.bookmarksWithAssets = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 0,
+        totalPages: 1,
+        filter: 'all'
+      };
 
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load (initially empty)
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Verify no bookmarks initially
       let bookmarkElements = element.shadowRoot?.querySelectorAll('[data-bookmark-id]');
       expect(bookmarkElements!.length).toBe(0);
 
-      // Now update bookmarks (common scenario - bookmarks loaded after component mounted)
-      element.bookmarks = mockBookmarks;
+      // Now update the mock to return bookmarks (common scenario - bookmarks loaded after component mounted)
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue(mockBookmarks);
+      element.paginationState = { 
+        ...element.paginationState, 
+        totalCount: 2 
+      };
       await element.updateComplete;
 
-      // With our fix, updateObservedElements is always called after DOM updates
+      // Wait for reactive queries to update and DOM updates
+      await new Promise(resolve => setTimeout(resolve, 50));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Verify elements are now in DOM - this is the core fix
@@ -323,25 +434,46 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
     it('should properly re-observe elements when bookmarks change', async () => {
       const onFaviconLoadRequested = vi.fn();
 
+      // Mock DatabaseService to start with one bookmark
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue([mockBookmarks[0]!]);
+      
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarks[0]!]; // Start with one bookmark
-      element.isLoading = false;
+      // Remove old property assignments - these are now reactive getters
+      // element.bookmarks = [mockBookmarks[0]!];   // Now a getter from reactive query
+      // element.isLoading = false;                 // Now a getter from reactive query
+      // element.bookmarksWithAssets = new Set();   // Now a getter from reactive query
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
-      element.bookmarksWithAssets = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       element.onFaviconLoadRequested = onFaviconLoadRequested;
 
       document.body.appendChild(element);
       await element.updateComplete;
+      
+      // Wait for reactive queries to load
+      await new Promise(resolve => setTimeout(resolve, 50));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Initially should have observed some elements
       expect(mockIntersectionObserver.observe).toHaveBeenCalled();
       const initialObserveCallCount = mockIntersectionObserver.observe.mock.calls.length;
 
-      // Add more bookmarks
-      element.bookmarks = mockBookmarks; // Now has 2 bookmarks
+      // Update mock to return more bookmarks
+      vi.spyOn(DatabaseService, 'getBookmarksPaginated').mockResolvedValue(mockBookmarks);
+      element.paginationState = { 
+        ...element.paginationState, 
+        totalCount: 2 
+      };
       await element.updateComplete;
+      
+      // Wait for reactive queries to update
+      await new Promise(resolve => setTimeout(resolve, 50));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Should have made more observe calls (disconnect + re-observe)
