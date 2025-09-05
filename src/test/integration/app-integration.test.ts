@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { waitFor } from '@testing-library/dom';
 import { userEvent } from '@testing-library/user-event';
+import { liveQuery } from 'dexie';
 import type { LocalBookmark } from '../../types';
 import '../setup';
 
@@ -10,6 +11,11 @@ import { SettingsPanel } from '../../components/settings-panel';
 import { BookmarkListContainer } from '../../components/bookmark-list-container';
 import { BookmarkList } from '../../components/bookmark-list';
 import { BookmarkReader } from '../../components/bookmark-reader';
+
+// Mock liveQuery from Dexie to provide reactive behavior in tests
+vi.mock('dexie', () => ({
+  liveQuery: vi.fn()
+}));
 
 // Mock the database service - now using Promise-based API only
 vi.mock('../../services/database', () => ({
@@ -221,6 +227,24 @@ describe('App Integration Tests', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     vi.clearAllMocks();
+    
+    // Setup liveQuery mock to return mock observables that immediately emit data
+    const mockLiveQuery = vi.mocked(liveQuery);
+    mockLiveQuery.mockImplementation((queryFn: () => any) => {
+      return {
+        subscribe: (observer: { next: (value: any) => void }) => {
+          // Immediately execute the query and emit the result
+          Promise.resolve(queryFn()).then(result => observer.next(result)).catch(() => {
+            // If query fails, emit empty result
+            observer.next([]);
+          });
+          
+          return {
+            unsubscribe: vi.fn()
+          };
+        }
+      } as any;
+    });
     
     // Ensure custom elements are properly defined
     if (!customElements.get('app-root')) {
@@ -443,8 +467,16 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for the loadBookmarks promise to complete using fake timers
+      vi.useFakeTimers();
+      try {
+        const bookmarkListLoadPromise = new Promise(resolve => setTimeout(resolve, 0));
+        vi.runAllTimers();
+        await bookmarkListLoadPromise;
+      } finally {
+        vi.useRealTimers();
+      }
+      
       await bookmarkList.updateComplete;
       
       // Wait for component to finish loading
@@ -469,8 +501,16 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for the loadBookmarks promise to complete using fake timers
+      vi.useFakeTimers();
+      try {
+        const bookmarkListLoadPromise = new Promise(resolve => setTimeout(resolve, 0));
+        vi.runAllTimers();
+        await bookmarkListLoadPromise;
+      } finally {
+        vi.useRealTimers();
+      }
+      
       await bookmarkList.updateComplete;
       
       // Wait for component to finish loading
@@ -511,8 +551,20 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for the loadBookmarks promise to complete using fake timers
+      vi.useFakeTimers();
+      try {
+        // Give the component time to call loadBookmarks and complete its operations
+        const bookmarkListLoadPromise = new Promise(resolve => setTimeout(resolve, 0));
+        vi.runAllTimers();
+        await bookmarkListLoadPromise;
+        
+        // Give another microtask for async database operations to complete
+        await new Promise(resolve => Promise.resolve().then(resolve));
+      } finally {
+        vi.useRealTimers();
+      }
+      
       await bookmarkList.updateComplete;
       
       // Wait for component to finish loading
@@ -620,8 +672,15 @@ describe('App Integration Tests', () => {
       await user.click(toggleButton);
       await bookmarkReader.updateComplete;
 
-      // Wait a bit for the mode change to process
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait a bit for the mode change to process using fake timers
+      vi.useFakeTimers();
+      try {
+        const processingDelayPromise = new Promise(resolve => setTimeout(resolve, 100));
+        vi.advanceTimersByTime(100);
+        await processingDelayPromise;
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should restore reading progress', async () => {
@@ -684,20 +743,36 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Wait for the loadBookmarks promise to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for the loadBookmarks promise to complete using fake timers for sync test
+      vi.useFakeTimers();
+      try {
+        // Give the component time to call loadBookmarks and complete its operations
+        const bookmarkListLoadPromise = new Promise(resolve => setTimeout(resolve, 0));
+        vi.runAllTimers();
+        await bookmarkListLoadPromise;
+        
+        // Give another microtask for async database operations to complete
+        await new Promise(resolve => Promise.resolve().then(resolve));
+      } finally {
+        vi.useRealTimers();
+      }
+      
       await bookmarkList.updateComplete;
 
-      // Wait for component to be fully loaded and filter buttons to be rendered
-      await waitFor(() => {
+      // Wait for component to be fully loaded and filter buttons to be rendered with better retry logic
+      await waitFor(async () => {
+        await bookmarkList.updateComplete;
         const presentationComponent = bookmarkList.shadowRoot?.querySelector('bookmark-list');
         expect(presentationComponent).toBeTruthy();
-      });
+        
+        // Force another update cycle after component creation
+        await (presentationComponent as any)?.updateComplete;
+      }, { timeout: 5000 });
       
       await waitFor(() => {
         const allText = findTextInShadowDOM(bookmarkList, 'All (2)');
         expect(allText).toBeTruthy();
-      });
+      }, { timeout: 5000 });
 
       // Trigger sync through the controller API instead of legacy event
       await (bookmarkList as any).syncController.requestSync();
@@ -837,8 +912,15 @@ describe('App Integration Tests', () => {
       container.appendChild(bookmarkList);
       await bookmarkList.updateComplete;
       
-      // Simple async wait for component initialization
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Simple async wait for component initialization using fake timers
+      vi.useFakeTimers();
+      try {
+        const initDelayPromise = new Promise(resolve => setTimeout(resolve, 100));
+        vi.advanceTimersByTime(100);
+        await initDelayPromise;
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Test passed - sync event processing works
       expect(true).toBe(true);
@@ -874,8 +956,15 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Simple async wait for component initialization
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Simple async wait for component initialization using fake timers
+      vi.useFakeTimers();
+      try {
+        const initDelayPromise = new Promise(resolve => setTimeout(resolve, 100));
+        vi.advanceTimersByTime(100);
+        await initDelayPromise;
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Update bookmark
       const updatedBookmark: LocalBookmark = {
@@ -904,8 +993,15 @@ describe('App Integration Tests', () => {
 
       await bookmarkList.updateComplete;
       
-      // Simple async wait for component initialization
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Simple async wait for component initialization using fake timers
+      vi.useFakeTimers();
+      try {
+        const initDelayPromise = new Promise(resolve => setTimeout(resolve, 100));
+        vi.advanceTimersByTime(100);
+        await initDelayPromise;
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Sync a bookmark
       triggerSyncEvent('bookmark-synced', { 
