@@ -43,6 +43,7 @@ export class BookmarkList extends LitElement {
   
   // UI state (internal only)
   @state() private scrollPosition: number = 0;
+  @state() private isOnline: boolean = navigator.onLine;
   
   private scrollContainer: Element | null = null;
   private intersectionObserver: IntersectionObserver | null = null;
@@ -118,6 +119,24 @@ export class BookmarkList extends LitElement {
 
     .bookmark-content {
       padding: 1rem;
+    }
+
+    .bookmark-with-preview {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .bookmark-preview {
+      width: 120px;
+      height: 80px;
+      border-radius: 0.5rem;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .bookmark-text-content {
+      flex: 1;
+      min-width: 0;
     }
 
     .bookmark-header {
@@ -293,6 +312,21 @@ export class BookmarkList extends LitElement {
         padding: 0.75rem;
       }
       
+      .bookmark-with-preview {
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .bookmark-preview {
+        width: 100%;
+        height: 120px;
+        order: -1;
+      }
+
+      .bookmark-text-content {
+        order: 1;
+      }
+      
       .bookmark-header {
         margin-bottom: 0.5rem;
       }
@@ -331,6 +365,7 @@ export class BookmarkList extends LitElement {
     this.initializeState();
     this.setupScrollTracking();
     this.setupIntersectionObserver();
+    this.setupOnlineDetection();
   }
 
   override disconnectedCallback() {
@@ -344,6 +379,9 @@ export class BookmarkList extends LitElement {
     
     // Clean up intersection observer
     this.cleanupIntersectionObserver();
+    
+    // Clean up online detection
+    this.cleanupOnlineDetection();
   }
 
   private initializeState() {
@@ -420,6 +458,32 @@ export class BookmarkList extends LitElement {
     if (this.intersectionObserver) {
       this.intersectionObserver.disconnect();
       this.intersectionObserver = null;
+    }
+  }
+
+  private setupOnlineDetection() {
+    const handleOnline = () => {
+      this.isOnline = true;
+    };
+
+    const handleOffline = () => {
+      this.isOnline = false;
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Store the handlers so we can remove them later
+    (this as any)._onlineHandler = handleOnline;
+    (this as any)._offlineHandler = handleOffline;
+  }
+
+  private cleanupOnlineDetection() {
+    if ((this as any)._onlineHandler) {
+      window.removeEventListener('online', (this as any)._onlineHandler);
+    }
+    if ((this as any)._offlineHandler) {
+      window.removeEventListener('offline', (this as any)._offlineHandler);
     }
   }
 
@@ -508,6 +572,7 @@ export class BookmarkList extends LitElement {
   private renderBookmark(bookmark: LocalBookmark) {
     const hasProgress = bookmark.read_progress && bookmark.read_progress > 0;
     const isRecentlySynced = this.syncedBookmarkIds.has(bookmark.id);
+    const hasPreviewImage = this.isOnline && bookmark.preview_image_url && bookmark.preview_image_url.trim() !== '';
     
     return html`
       <md-outlined-card 
@@ -515,60 +580,128 @@ export class BookmarkList extends LitElement {
         data-bookmark-id="${bookmark.id}"
         @click=${() => this.handleBookmarkClick(bookmark)}
       >
-        <div class="bookmark-content">
-          <div class="bookmark-header">
-            <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
-            <div class="bookmark-meta">
-              <div class="status-icons">
-                ${bookmark.unread ? html`
-                  <md-icon class="unread-icon" title="Unread">email</md-icon>
-                ` : html`
-                  <md-icon class="read-icon" title="Read">drafts</md-icon>
-                `}
-                ${bookmark.is_archived ? html`
-                  <md-icon class="status-icon archived" title="Archived">archive</md-icon>
-                ` : ''}
-                ${this.bookmarksWithAssets.has(bookmark.id) ? html`
-                  <md-icon class="status-icon cached" title="Cached">download_done</md-icon>
-                ` : ''}
-              </div>
-            </div>
-          </div>
-          
-          ${bookmark.description ? html`
-            <p class="bookmark-description">${bookmark.description}</p>
-          ` : ''}
-          
-          <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="bookmark-content ${hasPreviewImage ? 'bookmark-with-preview' : ''}">
+          ${hasPreviewImage ? html`
             <img 
-              class="favicon" 
-              src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
-              alt="Favicon"
+              class="bookmark-preview" 
+              src=${bookmark.preview_image_url} 
+              alt="Preview of ${bookmark.title}"
               loading="lazy"
+              referrerpolicy="no-referrer"
             />
-            ${bookmark.url}
-          </a>
-          
-          ${bookmark.tag_names.length > 0 ? html`
-            <div class="bookmark-tags">
-              ${bookmark.tag_names.map(tag => html`
-                <span class="tag-badge">${tag}</span>
-              `)}
-            </div>
           ` : ''}
           
-          ${hasProgress ? html`
-            <div class="bookmark-progress">
-              <div class="progress-text">
-                ${Math.round(bookmark.read_progress!)}% read
+          ${hasPreviewImage ? html`
+            <div class="bookmark-text-content">
+              <div class="bookmark-header">
+                <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
+                <div class="bookmark-meta">
+                  <div class="status-icons">
+                    ${bookmark.unread ? html`
+                      <md-icon class="unread-icon" title="Unread">email</md-icon>
+                    ` : html`
+                      <md-icon class="read-icon" title="Read">drafts</md-icon>
+                    `}
+                    ${bookmark.is_archived ? html`
+                      <md-icon class="status-icon archived" title="Archived">archive</md-icon>
+                    ` : ''}
+                    ${this.bookmarksWithAssets.has(bookmark.id) ? html`
+                      <md-icon class="status-icon cached" title="Cached">download_done</md-icon>
+                    ` : ''}
+                  </div>
+                </div>
               </div>
-              <md-linear-progress .value=${bookmark.read_progress! / 100}></md-linear-progress>
+              
+              ${bookmark.description ? html`
+                <p class="bookmark-description">${bookmark.description}</p>
+              ` : ''}
+              
+              <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
+                <img 
+                  class="favicon" 
+                  src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
+                  alt="Favicon"
+                  loading="lazy"
+                />
+                ${bookmark.url}
+              </a>
+              
+              ${bookmark.tag_names.length > 0 ? html`
+                <div class="bookmark-tags">
+                  ${bookmark.tag_names.map(tag => html`
+                    <span class="tag-badge">${tag}</span>
+                  `)}
+                </div>
+              ` : ''}
+              
+              ${hasProgress ? html`
+                <div class="bookmark-progress">
+                  <div class="progress-text">
+                    ${Math.round(bookmark.read_progress!)}% read
+                  </div>
+                  <md-linear-progress .value=${bookmark.read_progress! / 100}></md-linear-progress>
+                </div>
+              ` : ''}
+              
+              <div class="bookmark-date">
+                Added ${this.formatDate(bookmark.date_added)}
+              </div>
             </div>
-          ` : ''}
-          
-          <div class="bookmark-date">
-            Added ${this.formatDate(bookmark.date_added)}
-          </div>
+          ` : html`
+            <div class="bookmark-header">
+              <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
+              <div class="bookmark-meta">
+                <div class="status-icons">
+                  ${bookmark.unread ? html`
+                    <md-icon class="unread-icon" title="Unread">email</md-icon>
+                  ` : html`
+                    <md-icon class="read-icon" title="Read">drafts</md-icon>
+                  `}
+                  ${bookmark.is_archived ? html`
+                    <md-icon class="status-icon archived" title="Archived">archive</md-icon>
+                  ` : ''}
+                  ${this.bookmarksWithAssets.has(bookmark.id) ? html`
+                    <md-icon class="status-icon cached" title="Cached">download_done</md-icon>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+            
+            ${bookmark.description ? html`
+              <p class="bookmark-description">${bookmark.description}</p>
+            ` : ''}
+            
+            <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
+              <img 
+                class="favicon" 
+                src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
+                alt="Favicon"
+                loading="lazy"
+              />
+              ${bookmark.url}
+            </a>
+            
+            ${bookmark.tag_names.length > 0 ? html`
+              <div class="bookmark-tags">
+                ${bookmark.tag_names.map(tag => html`
+                  <span class="tag-badge">${tag}</span>
+                `)}
+              </div>
+            ` : ''}
+            
+            ${hasProgress ? html`
+              <div class="bookmark-progress">
+                <div class="progress-text">
+                  ${Math.round(bookmark.read_progress!)}% read
+                </div>
+                <md-linear-progress .value=${bookmark.read_progress! / 100}></md-linear-progress>
+              </div>
+            ` : ''}
+            
+            <div class="bookmark-date">
+              Added ${this.formatDate(bookmark.date_added)}
+            </div>
+          `}
         </div>
       </md-outlined-card>
     `;
