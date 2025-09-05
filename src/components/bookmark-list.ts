@@ -122,21 +122,22 @@ export class BookmarkList extends LitElement {
     }
 
     .bookmark-with-preview {
-      display: flex;
-      gap: 1rem;
+      position: relative;
     }
 
     .bookmark-preview {
+      float: right;
       width: 120px;
       height: 80px;
       border-radius: 0.5rem;
       object-fit: cover;
-      flex-shrink: 0;
+      margin-left: 1rem;
+      margin-bottom: 0.5rem;
+      clear: right;
     }
 
     .bookmark-text-content {
-      flex: 1;
-      min-width: 0;
+      overflow: hidden; /* This ensures proper text wrapping around floated image */
     }
 
     .bookmark-header {
@@ -311,14 +312,11 @@ export class BookmarkList extends LitElement {
       .bookmark-content {
         padding: 0.75rem;
       }
-      
-      .bookmark-with-preview {
-        gap: 0.75rem;
-      }
 
       .bookmark-preview {
         width: 80px;
         height: 60px;
+        margin-left: 0.75rem;
       }
       
       .bookmark-header {
