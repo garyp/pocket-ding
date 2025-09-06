@@ -106,6 +106,7 @@ describe('Dark Mode Integration', () => {
 
     // Create reader element
     element = new BookmarkReader();
+    element.bookmarkId = 1;
     document.body.appendChild(element);
   });
 
@@ -122,7 +123,6 @@ describe('Dark Mode Integration', () => {
       ThemeService.init();
       
       // Load reader with bookmark
-      element.bookmarkId = 1;
       await element.updateComplete;
       
       // Both global and reader should be dark
@@ -138,7 +138,6 @@ describe('Dark Mode Integration', () => {
     it('should sync reader theme when global theme changes', async () => {
       // Start with light theme
       ThemeService.init();
-      element.bookmarkId = 1;
       await element.updateComplete;
       
       expect(document.documentElement.className).toBe('light');
@@ -154,7 +153,6 @@ describe('Dark Mode Integration', () => {
 
     it('should handle system preference changes', async () => {
       ThemeService.init();
-      element.bookmarkId = 1;
       await element.updateComplete;
       
       // Initially light
@@ -175,7 +173,6 @@ describe('Dark Mode Integration', () => {
       ThemeService.init();
       
       // Load first bookmark
-      element.bookmarkId = 1;
       await element.updateComplete;
       
       // Set dark override
@@ -200,11 +197,13 @@ describe('Dark Mode Integration', () => {
         dark_mode_override: null,
       };
       
+      // Update mock before changing bookmark ID
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(mockProgress2);
+      
+      // Change bookmark ID and wait for initialization to complete
       element.bookmarkId = 2;
       await element.updateComplete;
-      // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for initializeComponent
       await element.updateComplete;
       
       expect(element['darkModeOverride']).toBeNull();
@@ -220,11 +219,13 @@ describe('Dark Mode Integration', () => {
         dark_mode_override: 'dark',
       };
       
+      // Update mock before changing bookmark ID back
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(mockProgress1);
+      
+      // Change back to first bookmark and wait for initialization
       element.bookmarkId = 1;
       await element.updateComplete;
-      // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for initializeComponent
       await element.updateComplete;
       
       expect(element['darkModeOverride']).toBe('dark');
@@ -234,7 +235,19 @@ describe('Dark Mode Integration', () => {
     it('should handle multiple bookmarks with different overrides', async () => {
       ThemeService.init();
       
-      // Bookmark 1 - dark override
+      // Start with a different bookmark first, then switch to test bookmark 1
+      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue({
+        bookmark_id: 999,
+        progress: 0,
+        last_read_at: '2024-01-01T00:00:00Z',
+        reading_mode: 'readability',
+        scroll_position: 0,
+        dark_mode_override: null,
+      });
+      element.bookmarkId = 999;
+      await element.updateComplete;
+      
+      // Now test bookmark 1 - dark override
       const progress1: ReadProgress = {
         bookmark_id: 1,
         progress: 0,
@@ -244,12 +257,13 @@ describe('Dark Mode Integration', () => {
         dark_mode_override: 'dark',
       };
       
+      // Update mock and switch to bookmark 1
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(progress1);
       element.bookmarkId = 1;
       await element.updateComplete;
-      // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for initializeComponent
       await element.updateComplete;
+      await element.updateComplete; // Additional cycle for requestUpdate()
       
       expect(element.classList.contains('reader-dark-mode')).toBe(true);
       
@@ -263,11 +277,11 @@ describe('Dark Mode Integration', () => {
         dark_mode_override: 'light',
       };
       
+      // Update mock before changing bookmark ID
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(progress2);
       element.bookmarkId = 2;
       await element.updateComplete;
-      // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for initializeComponent
       await element.updateComplete;
       
       expect(element.classList.contains('reader-dark-mode')).toBe(false);
@@ -282,11 +296,11 @@ describe('Dark Mode Integration', () => {
         dark_mode_override: null,
       };
       
+      // Update mock before changing bookmark ID
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(progress3);
       element.bookmarkId = 3;
       await element.updateComplete;
-      // Wait for loadBookmark to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for initializeComponent
       await element.updateComplete;
       
       // Should follow system (light in this case)
@@ -297,7 +311,6 @@ describe('Dark Mode Integration', () => {
   describe('Theme preference UI workflow', () => {
     beforeEach(async () => {
       ThemeService.init();
-      element.bookmarkId = 1;
       await element.updateComplete;
     });
 
@@ -352,7 +365,6 @@ describe('Dark Mode Integration', () => {
   describe('Iframe content theme integration', () => {
     it('should pass correct theme to SecurityService based on reading mode', async () => {
       ThemeService.init();
-      element.bookmarkId = 1;
       
       // Start in readability mode
       element['readingMode'] = 'readability';
@@ -420,7 +432,6 @@ describe('Dark Mode Integration', () => {
 
     it('should apply dark mode styles to iframe content only in readability mode', async () => {
       ThemeService.init();
-      element.bookmarkId = 1;
       element['readingMode'] = 'readability';
       await element.updateComplete;
       
@@ -453,7 +464,6 @@ describe('Dark Mode Integration', () => {
 
     it('should update iframe content when theme changes', async () => {
       ThemeService.init();
-      element.bookmarkId = 1;
       await element.updateComplete;
       
       // Wait for initial content load
@@ -486,7 +496,6 @@ describe('Dark Mode Integration', () => {
       ThemeService.init();
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
       
-      element.bookmarkId = 1;
       await element.updateComplete;
       
       expect(element['darkModeOverride']).toBeNull();
@@ -495,7 +504,6 @@ describe('Dark Mode Integration', () => {
 
     it('should handle database save errors gracefully', async () => {
       ThemeService.init();
-      element.bookmarkId = 1;
       await element.updateComplete;
       
       // Mock save error

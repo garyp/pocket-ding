@@ -71,7 +71,9 @@ describe('BookmarkListContainer', () => {
   let element: BookmarkListContainer;
 
   beforeEach(() => {
+    // Clear mock call history but keep module mocks
     vi.clearAllMocks();
+    localStorage.clear();
     
     // Setup database mocks - now using Promise-based API only
     vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue(mockBookmarks);
@@ -93,10 +95,12 @@ describe('BookmarkListContainer', () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
     if (element) {
       element.remove();
     }
+    // Only clear mocks set in specific tests
+    vi.clearAllMocks();
+    localStorage.clear();
   });
 
   describe('Initialization', () => {
@@ -106,18 +110,21 @@ describe('BookmarkListContainer', () => {
       expect(element.tagName.toLowerCase()).toBe('bookmark-list-container');
     });
 
-    it('should not load bookmarks on connect (data handled by reactive queries)', async () => {
+    it('should trigger data loading through reactive queries when connected', async () => {
       element = new BookmarkListContainer();
       document.body.appendChild(element);
       
       await element.updateComplete;
       
-      // Wait for any potential async operations
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for reactive queries to initialize
+      await new Promise(resolve => setTimeout(resolve, 50));
       
-      // Database methods should NOT be called by container anymore - reactive queries handle this
+      // Database methods SHOULD be called by reactive queries in the BookmarkList component
+      // The container itself doesn't call database methods, but its child BookmarkList does
+      expect(DatabaseService.getBookmarksPaginated).toHaveBeenCalledWith('all', 1, 25);
+      
+      // Container-specific methods should not be called
       expect(DatabaseService.getPageFromAnchorBookmark).not.toHaveBeenCalled();
-      expect(DatabaseService.getBookmarksPaginated).not.toHaveBeenCalled();
       expect(DatabaseService.getBookmarkCount).not.toHaveBeenCalled();
     });
 

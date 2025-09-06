@@ -88,18 +88,32 @@ export class BookmarkList extends LitElement {
   }
   
   // UI state (persisted via StateController)
-  @state() scrollPosition: number = 0;
+  @state()
+  private _scrollPosition: number = 0;
   @state() private isOnline: boolean = navigator.onLine;
+
+  get scrollPosition(): number {
+    return this._scrollPosition;
+  }
+
+  set scrollPosition(value: number) {
+    this._scrollPosition = Math.max(0, value);
+    // Trigger update to sync state with StateController
+    this.requestUpdate('scrollPosition', this._scrollPosition);
+  }
   
   #scrollContainer: Element | null = null;
   #intersectionObserver: IntersectionObserver | null = null;
+  #observedElements: Set<Element> = new Set();
   
-  // State controller for persistence (manual sync only)
+  // State controller for persistence (auto-sync scrollPosition)
+  // @ts-expect-error - Used automatically by Lit's ReactiveController pattern
   private stateController = new StateController<BookmarkListState>(this, {
     storageKey: 'bookmark-list-state',
     defaultState: { 
       scrollPosition: 0
     },
+    observedProperties: ['scrollPosition'],
     validator: (state: any): state is BookmarkListState => {
       return (
         state &&
@@ -407,7 +421,11 @@ export class BookmarkList extends LitElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    this.#saveCurrentScrollPosition();
+    // Only save from scroll container if we have a real scroll container
+    // In tests, the scroll position is managed directly via the property
+    if (this.#scrollContainer && this.#scrollContainer.scrollTop !== undefined) {
+      this.#saveCurrentScrollPosition();
+    }
     
     // Clean up scroll event listener
     if (this.#scrollContainer && (this as any)._scrollHandler) {
@@ -422,16 +440,19 @@ export class BookmarkList extends LitElement {
   }
 
   #initializeState() {
-    // State is automatically restored by StateController to observed properties
-    // No manual restoration needed
+    // State is automatically restored by StateController when observedProperties is configured
+    // No manual restoration needed - the StateController will sync saved state to component properties
   }
 
   #saveCurrentScrollPosition() {
     if (this.#scrollContainer) {
-      this.scrollPosition = Math.max(0, this.#scrollContainer.scrollTop);
-      // State is automatically saved by StateController observing scrollPosition property
-      // Manual trigger to ensure state is saved in test environments
-      this.stateController.setProp('scrollPosition', this.scrollPosition);
+      const currentScrollTop = this.#scrollContainer.scrollTop;
+      // Only update scroll position if container actually has scroll content
+      // This prevents overwriting restored state with 0 from fresh/empty containers
+      if (currentScrollTop > 0 || this.#scrollContainer.scrollHeight > this.#scrollContainer.clientHeight) {
+        this.scrollPosition = currentScrollTop;
+        // ScrollPosition is auto-synced by StateController
+      }
     }
   }
 
@@ -496,6 +517,7 @@ export class BookmarkList extends LitElement {
       this.#intersectionObserver.disconnect();
       this.#intersectionObserver = null;
     }
+    this.#observedElements.clear();
   }
 
   #setupOnlineDetection() {
@@ -530,13 +552,25 @@ export class BookmarkList extends LitElement {
       this.#setupIntersectionObserver();
     }
 
-    // Disconnect and re-observe all bookmark elements
-    this.#intersectionObserver!.disconnect();
-    
+    // Get current bookmark elements
     const bookmarkCards = this.renderRoot.querySelectorAll('[data-bookmark-id]');
+    const currentElements = new Set(bookmarkCards);
+    
+    // Unobserve elements that are no longer in the DOM
+    for (const observedElement of this.#observedElements) {
+      if (!currentElements.has(observedElement)) {
+        if (this.#intersectionObserver) {
+          this.#intersectionObserver.unobserve(observedElement);
+        }
+        this.#observedElements.delete(observedElement);
+      }
+    }
+    
+    // Observe new elements that aren't already being observed
     bookmarkCards.forEach((card) => {
-      if (this.#intersectionObserver) {
+      if (!this.#observedElements.has(card) && this.#intersectionObserver) {
         this.#intersectionObserver.observe(card);
+        this.#observedElements.add(card);
       }
     });
   }

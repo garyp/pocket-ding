@@ -7,7 +7,19 @@ import { liveQuery } from 'dexie';
 
 // Mock liveQuery from Dexie
 vi.mock('dexie', () => ({
-  liveQuery: vi.fn()
+  liveQuery: vi.fn(),
+  default: vi.fn(), // Mock default Dexie export
+  Table: vi.fn() // Mock Table export
+}));
+
+// Mock database service to prevent database initialization
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getBookmarksPaginated: vi.fn(),
+    getAllFilterCounts: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
+    getCompletedAssetsByBookmarkId: vi.fn(),
+  },
 }));
 
 describe('BookmarkList Favicon Loading Regression Test', () => {
@@ -57,6 +69,10 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
   ];
 
   beforeEach(() => {
+    // Clear mock call history but keep module mocks
+    vi.clearAllMocks();
+    localStorage.clear();
+    
     observedElements = [];
     allIntersectionObservers = [];
 
@@ -129,9 +145,9 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
     if (element && element.parentNode) {
       element.remove();
     }
-    // Note: NOT calling vi.restoreAllMocks() to avoid clearing IntersectionObserver implementations
-    // that might still be used by async requestAnimationFrame callbacks
-    vi.restoreAllMocks();
+    // Only clear mocks set in specific tests
+    vi.clearAllMocks();
+    localStorage.clear();
   });
 
   describe('REGRESSION: Favicon loading intersection observer timing', () => {
@@ -476,8 +492,9 @@ describe('BookmarkList Favicon Loading Regression Test', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
-      // Should have made more observe calls (disconnect + re-observe)
-      expect(mockIntersectionObserver.disconnect).toHaveBeenCalled();
+      // Should have made more observe calls for the new element
+      // Note: With the optimized implementation, we don't disconnect everything anymore
+      // We only observe new elements that aren't already being observed
       expect(mockIntersectionObserver.observe.mock.calls.length).toBeGreaterThan(initialObserveCallCount);
       
       // Verify we have elements to observe

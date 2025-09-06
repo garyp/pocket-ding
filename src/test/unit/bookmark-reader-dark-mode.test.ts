@@ -3,7 +3,17 @@ import { BookmarkReader } from '../../components/bookmark-reader';
 import { DatabaseService } from '../../services/database';
 import { ContentFetcher } from '../../services/content-fetcher';
 import { ThemeService } from '../../services/theme-service';
+import { liveQuery } from 'dexie';
 import type { LocalBookmark, ReadProgress } from '../../types';
+
+// Mock Dexie liveQuery
+vi.mock('dexie', async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  return {
+    ...actual,
+    liveQuery: vi.fn()
+  };
+});
 
 // Mock services
 vi.mock('../../services/database');
@@ -18,7 +28,7 @@ describe('BookmarkReader Dark Mode', () => {
   let mockProgress: ReadProgress;
 
   beforeEach(async () => {
-    // Reset all mocks
+    // Clean setup
     vi.clearAllMocks();
 
     // Mock bookmark data
@@ -54,6 +64,7 @@ describe('BookmarkReader Dark Mode', () => {
     // Mock service responses
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(mockProgress);
+    vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
     vi.mocked(ContentFetcher.getAvailableContentSources).mockResolvedValue([
@@ -66,6 +77,25 @@ describe('BookmarkReader Dark Mode', () => {
       readability_content: '<p>Readability content</p>'
     });
 
+    // Mock liveQuery to work with ReactiveQueryController
+    const mockSubscription = { unsubscribe: vi.fn() };
+    const mockObservable = {
+      subscribe: vi.fn((observer) => {
+        // Immediately call the query function and resolve with its result
+        const queryFn = vi.mocked(liveQuery).mock.calls[vi.mocked(liveQuery).mock.calls.length - 1]?.[0];
+        if (queryFn) {
+          const result = queryFn();
+          if (result && typeof (result as any).then === 'function') {
+            (result as Promise<any>).then((value: any) => observer.next(value));
+          } else {
+            observer.next(result);
+          }
+        }
+        return mockSubscription;
+      })
+    };
+    vi.mocked(liveQuery).mockReturnValue(mockObservable as any);
+
     // Mock ThemeService
     vi.mocked(ThemeService.addThemeChangeListener).mockImplementation((listener) => {
       listener('light'); // Default to light theme
@@ -74,17 +104,22 @@ describe('BookmarkReader Dark Mode', () => {
 
     // Create element
     element = new BookmarkReader();
+    element.bookmarkId = 1;
     document.body.appendChild(element);
     await element.updateComplete;
   });
 
   afterEach(() => {
-    element.remove();
+    // Safe cleanup
+    if (element && element.parentNode) {
+      element.parentNode.removeChild(element);
+    }
+    element = null as any;
+    vi.restoreAllMocks();
   });
 
   describe('dark mode override initialization', () => {
     it('should initialize with null dark mode override by default', async () => {
-      element.bookmarkId = 1;
       await element.updateComplete;
 
       expect(element['darkModeOverride']).toBeNull();
@@ -92,10 +127,17 @@ describe('BookmarkReader Dark Mode', () => {
     });
 
     it('should load saved dark mode override from progress', async () => {
-      mockProgress.dark_mode_override = 'dark';
-      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(mockProgress);
+      // Create a new progress object with dark override
+      const progressWithDark = { ...mockProgress, dark_mode_override: 'dark' as const };
+      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(progressWithDark);
 
+      // Create new element to pick up the mock change
+      if (element && element.parentNode) {
+        element.parentNode.removeChild(element);
+      }
+      element = new BookmarkReader();
       element.bookmarkId = 1;
+      document.body.appendChild(element);
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -106,10 +148,17 @@ describe('BookmarkReader Dark Mode', () => {
     });
 
     it('should apply light override correctly', async () => {
-      mockProgress.dark_mode_override = 'light';
-      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(mockProgress);
+      // Create a new progress object with light override
+      const progressWithLight = { ...mockProgress, dark_mode_override: 'light' as const };
+      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(progressWithLight);
 
+      // Create new element to pick up the mock change
+      if (element && element.parentNode) {
+        element.parentNode.removeChild(element);
+      }
+      element = new BookmarkReader();
       element.bookmarkId = 1;
+      document.body.appendChild(element);
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -122,7 +171,6 @@ describe('BookmarkReader Dark Mode', () => {
 
   describe('theme change listener', () => {
     it('should add theme change listener on connect', async () => {
-      element.bookmarkId = 1;
       await element.updateComplete;
 
       expect(ThemeService.addThemeChangeListener).toHaveBeenCalledWith(expect.any(Function));
@@ -135,7 +183,6 @@ describe('BookmarkReader Dark Mode', () => {
         listener('light');
       });
 
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -156,7 +203,6 @@ describe('BookmarkReader Dark Mode', () => {
         listener('light');
       });
 
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -173,8 +219,9 @@ describe('BookmarkReader Dark Mode', () => {
     });
 
     it('should not change when override is set and system changes', async () => {
-      mockProgress.dark_mode_override = 'light';
-      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(mockProgress);
+      // Create a new progress object with light override
+      const progressWithLight = { ...mockProgress, dark_mode_override: 'light' as const };
+      vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(progressWithLight);
 
       let themeListener: any;
       vi.mocked(ThemeService.addThemeChangeListener).mockImplementation((listener) => {
@@ -182,7 +229,13 @@ describe('BookmarkReader Dark Mode', () => {
         listener('light');
       });
 
+      // Create new element to pick up the mock change
+      if (element && element.parentNode) {
+        element.parentNode.removeChild(element);
+      }
+      element = new BookmarkReader();
       element.bookmarkId = 1;
+      document.body.appendChild(element);
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -201,7 +254,6 @@ describe('BookmarkReader Dark Mode', () => {
 
   describe('dark mode toggle functionality', () => {
     beforeEach(async () => {
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -282,7 +334,6 @@ describe('BookmarkReader Dark Mode', () => {
     it('should render correct icon for light mode', async () => {
       element['systemTheme'] = 'light';
       element['darkModeOverride'] = null;
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -295,7 +346,6 @@ describe('BookmarkReader Dark Mode', () => {
     it('should render correct icon for dark mode', async () => {
       element['systemTheme'] = 'dark';
       element['darkModeOverride'] = null;
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -307,7 +357,6 @@ describe('BookmarkReader Dark Mode', () => {
 
     it('should render correct icon for dark override', async () => {
       element['systemTheme'] = 'light';
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -325,7 +374,6 @@ describe('BookmarkReader Dark Mode', () => {
     it('should render correct button title for no override', async () => {
       element['systemTheme'] = 'light';
       element['darkModeOverride'] = null;
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -337,7 +385,6 @@ describe('BookmarkReader Dark Mode', () => {
 
     it('should render correct button title for dark override', async () => {
       element['systemTheme'] = 'light';
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -353,7 +400,6 @@ describe('BookmarkReader Dark Mode', () => {
 
     it('should render correct button title for light override', async () => {
       element['systemTheme'] = 'dark';
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -370,7 +416,6 @@ describe('BookmarkReader Dark Mode', () => {
 
   describe('progress saving with dark mode', () => {
     beforeEach(async () => {
-      element.bookmarkId = 1;
       await element.updateComplete;
       // Wait for loadBookmark to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -407,7 +452,6 @@ describe('BookmarkReader Dark Mode', () => {
 
   describe('cleanup', () => {
     it('should remove theme change listener on disconnect', () => {
-      element.bookmarkId = 1;
       element.remove();
 
       expect(ThemeService.removeThemeChangeListener).toHaveBeenCalled();

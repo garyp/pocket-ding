@@ -200,4 +200,216 @@ describe('ReactiveQueryController', () => {
     // Should have created multiple subscriptions and unsubscribed from previous ones
     expect(mockSubscription.unsubscribe).toHaveBeenCalledTimes(5);
   });
+
+  describe('Dependency tracking', () => {
+    let dependencyComponent: TestComponentWithDependencies;
+
+    // Test component with dependencies
+    @customElement('test-component-deps')
+    class TestComponentWithDependencies extends LitElement {
+      bookmarkId = 1;
+
+      #queryController = new ReactiveQueryController(
+        this,
+        (id: number) => Promise.resolve(`data-${id}`),
+        (): [number] => [this.bookmarkId]
+      );
+
+      get data() {
+        return this.#queryController.value;
+      }
+
+      get loading() {
+        return this.#queryController.loading;
+      }
+
+      setBookmarkId(id: number) {
+        this.bookmarkId = id;
+        this.requestUpdate();
+      }
+
+      // Public method to trigger hostUpdate for testing
+      triggerHostUpdate() {
+        this.#queryController.hostUpdate();
+      }
+
+      override render() {
+        return html`<div>Test Component: ${this.bookmarkId}</div>`;
+      }
+    }
+
+    beforeEach(() => {
+      // Reset mocks
+      vi.clearAllMocks();
+      
+      // Create mock subscription
+      mockSubscription = { unsubscribe: vi.fn() };
+      
+      // Create mock observable
+      mockObservable = {
+        subscribe: vi.fn().mockReturnValue(mockSubscription)
+      };
+
+      // Mock liveQuery to return our mock observable
+      vi.mocked(liveQuery).mockReturnValue(mockObservable as any);
+
+      // Create test component
+      dependencyComponent = new TestComponentWithDependencies();
+      document.body.appendChild(dependencyComponent);
+    });
+
+    afterEach(() => {
+      if (dependencyComponent.parentNode) {
+        dependencyComponent.parentNode.removeChild(dependencyComponent);
+      }
+    });
+
+    it('should pass dependencies to query function on initial subscription', async () => {
+      dependencyComponent.connectedCallback();
+      
+      expect(liveQuery).toHaveBeenCalled();
+      
+      // The liveQuery should have been called with a function that uses the dependencies
+      const liveQueryCall = vi.mocked(liveQuery).mock.calls[0];
+      expect(liveQueryCall).toBeDefined();
+      const queryFunction = liveQueryCall![0];
+      
+      // Execute the query function to verify it uses the correct dependency
+      const result = queryFunction();
+      await expect(result).resolves.toBe('data-1');
+    });
+
+    it('should detect dependency changes and resubscribe', () => {
+      dependencyComponent.connectedCallback();
+      
+      // Clear initial subscription calls
+      vi.clearAllMocks();
+      mockObservable.subscribe.mockReturnValue(mockSubscription);
+      vi.mocked(liveQuery).mockReturnValue(mockObservable as any);
+      
+      // Change dependency
+      dependencyComponent.setBookmarkId(2);
+      
+      // Trigger hostUpdate manually (normally called by Lit during render cycle)
+      dependencyComponent.triggerHostUpdate();
+      
+      // Should have unsubscribed from old subscription
+      expect(mockSubscription.unsubscribe).toHaveBeenCalled();
+      
+      // Should have created new subscription with new dependency
+      expect(liveQuery).toHaveBeenCalled();
+      expect(mockObservable.subscribe).toHaveBeenCalled();
+    });
+
+    it('should not resubscribe when dependencies are the same', () => {
+      dependencyComponent.connectedCallback();
+      
+      // Clear initial subscription calls
+      vi.clearAllMocks();
+      
+      // Set the same bookmark ID
+      dependencyComponent.setBookmarkId(1);
+      
+      // Trigger hostUpdate
+      dependencyComponent.triggerHostUpdate();
+      
+      // Should not have unsubscribed or resubscribed
+      expect(mockSubscription.unsubscribe).not.toHaveBeenCalled();
+      expect(liveQuery).not.toHaveBeenCalled();
+      expect(mockObservable.subscribe).not.toHaveBeenCalled();
+    });
+
+    it('should handle undefined dependency values', async () => {
+      // Component with potentially undefined dependencies  
+      @customElement('test-component-undefined-deps-unique')
+      class TestComponentUndefinedDeps extends LitElement {
+        bookmarkId: number | undefined = undefined;
+
+        #queryController = new ReactiveQueryController(
+          this,
+          (id: number | undefined) => Promise.resolve(id ? `data-${id}` : 'no-data'),
+          (): [number | undefined] => [this.bookmarkId]
+        );
+
+        get data() {
+          return this.#queryController.value;
+        }
+
+        get loading() {
+          return this.#queryController.loading;
+        }
+        
+        override render() {
+          return html`<div>Test Component</div>`;
+        }
+      }
+
+      const undefinedDepsComponent = new TestComponentUndefinedDeps();
+      document.body.appendChild(undefinedDepsComponent);
+      
+      try {
+        // Clear mocks before this component to ensure isolated test
+        vi.clearAllMocks();
+        mockObservable.subscribe.mockReturnValue(mockSubscription);
+        vi.mocked(liveQuery).mockReturnValue(mockObservable as any);
+        
+        undefinedDepsComponent.connectedCallback();
+        
+        // Should NOT call liveQuery when dependencies are undefined
+        expect(liveQuery).not.toHaveBeenCalled();
+        
+        // Should have loading=false and value=undefined
+        expect(undefinedDepsComponent.loading).toBe(false);
+        expect(undefinedDepsComponent.data).toBeUndefined();
+      } finally {
+        undefinedDepsComponent.remove();
+      }
+    });
+
+    it('should handle multiple dependencies', async () => {
+      // Component with multiple dependencies
+      @customElement('test-component-multi-deps-unique')
+      class TestComponentMultiDeps extends LitElement {
+        bookmarkId = 1;
+        userId = 42;
+
+        #queryController = new ReactiveQueryController(
+          this,
+          (bookmarkId: number, userId: number) => Promise.resolve(`data-${bookmarkId}-${userId}`),
+          (): [number, number] => [this.bookmarkId, this.userId]
+        );
+
+        get data() {
+          return this.#queryController.value;
+        }
+        
+        override render() {
+          return html`<div>Test Component</div>`;
+        }
+      }
+
+      const multiDepsComponent = new TestComponentMultiDeps();
+      document.body.appendChild(multiDepsComponent);
+      
+      try {
+        // Clear mocks before this component to ensure isolated test
+        vi.clearAllMocks();
+        mockObservable.subscribe.mockReturnValue(mockSubscription);
+        vi.mocked(liveQuery).mockReturnValue(mockObservable as any);
+        
+        multiDepsComponent.connectedCallback();
+        
+        expect(liveQuery).toHaveBeenCalled();
+        
+        // The query should use both dependencies
+        const liveQueryCall = vi.mocked(liveQuery).mock.calls[0];
+        expect(liveQueryCall).toBeDefined();
+        const queryFunction = liveQueryCall![0];
+        const result = queryFunction();
+        await expect(result).resolves.toBe('data-1-42');
+      } finally {
+        multiDepsComponent.remove();
+      }
+    });
+  });
 });

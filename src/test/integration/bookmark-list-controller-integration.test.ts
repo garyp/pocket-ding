@@ -7,7 +7,21 @@ import { liveQuery } from 'dexie';
 
 // Mock liveQuery from Dexie
 vi.mock('dexie', () => ({
-  liveQuery: vi.fn()
+  liveQuery: vi.fn(),
+  default: vi.fn(), // Mock default Dexie export
+  Table: vi.fn() // Mock Table export
+}));
+
+// Mock database service to prevent database initialization
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getBookmarksPaginated: vi.fn(),
+    getAllFilterCounts: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
+    getSettings: vi.fn(),
+    getAllBookmarks: vi.fn(),
+    getCompletedAssetsByBookmarkId: vi.fn(),
+  },
 }));
 
 describe('BookmarkList Controller Integration', () => {
@@ -16,6 +30,8 @@ describe('BookmarkList Controller Integration', () => {
   let mockSettings: AppSettings;
 
   beforeEach(async () => {
+    // Clear mock call history but keep module mocks
+    vi.clearAllMocks();
     localStorage.clear();
     
     // Use persistent implementations that won't be cleared by vi.restoreAllMocks()
@@ -148,11 +164,12 @@ describe('BookmarkList Controller Integration', () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
     if (element && element.parentNode) {
       element.remove();
     }
-    vi.restoreAllMocks();
+    // Only clear mocks set in specific tests
+    vi.clearAllMocks();
+    localStorage.clear();
   });
 
   function createTestElement(filter: 'all' | 'unread' | 'archived' = 'all'): BookmarkList {
@@ -193,14 +210,13 @@ describe('BookmarkList Controller Integration', () => {
       const unreadBtn = buttons.find(btn => btn.textContent?.includes('Unread')) as HTMLElement;
       expect(unreadBtn?.tagName.toLowerCase()).toBe('md-filled-button');
 
-      // User scrolls down
-      const mockScrollContainer = { 
-        scrollTop: 250,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn()
-      };
-      (element as any).scrollContainer = mockScrollContainer;
-      (element as any).saveCurrentScrollPosition();
+      // User scrolls down - simulate by setting scroll position directly
+      // With auto-sync enabled, this will automatically save to localStorage
+      element.scrollPosition = 250;
+      await element.updateComplete;
+      
+      // Give StateController time to sync the state
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Simulate navigation away (component destruction)
       element.remove();
@@ -331,14 +347,21 @@ describe('BookmarkList Controller Integration', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const onFilterChange = vi.fn();
 
-      // Store original setItem function
-      const originalSetItem = localStorage.setItem;
+      // Store original localStorage for this test only
+      const originalLocalStorage = localStorage;
       
-      // Mock localStorage to fail BEFORE creating component
-      Object.defineProperty(global.localStorage, 'setItem', {
-        value: vi.fn(() => {
-          throw new Error('Storage quota exceeded');
-        }),
+      // Mock localStorage.setItem to fail
+      const setItemMock = vi.fn(() => {
+        throw new Error('Storage quota exceeded');
+      });
+      
+      // Replace the entire localStorage object to ensure StateController gets the mock
+      Object.defineProperty(globalThis, 'localStorage', {
+        value: {
+          ...localStorage,
+          setItem: setItemMock,
+          clear: vi.fn() // Ensure clear method exists for test cleanup
+        },
         writable: true
       });
 
@@ -361,23 +384,21 @@ describe('BookmarkList Controller Integration', () => {
       expect(onFilterChange).toHaveBeenCalledWith('unread');
 
       // Trigger scroll position save which should fail and log error
-      const mockScrollContainer = { 
-        scrollTop: 100,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn()
-      };
-      (element as any).scrollContainer = mockScrollContainer;
-      (element as any).saveCurrentScrollPosition();
+      // With auto-sync enabled, setting scrollPosition will trigger save
+      element.scrollPosition = 100;
+      await element.updateComplete;
+      
+      // Give StateController time to sync the state and trigger the error
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Should have logged the error (scroll position save attempts will fail)
       expect(consoleWarnSpy).toHaveBeenCalled();
 
-      // Restore original localStorage functionality
-      Object.defineProperty(global.localStorage, 'setItem', {
-        value: originalSetItem,
+      // Restore original localStorage functionality for this test only
+      Object.defineProperty(globalThis, 'localStorage', {
+        value: originalLocalStorage,
         writable: true
       });
-      
       consoleWarnSpy.mockRestore();
     });
 

@@ -46,6 +46,7 @@ describe('Settings Panel - Sync Integration', () => {
   };
 
   beforeEach(async () => {
+    // Clean setup
     vi.clearAllMocks();
     
     // Setup default mock behaviors
@@ -53,18 +54,19 @@ describe('Settings Panel - Sync Integration', () => {
     (DatabaseService.saveSettings as any).mockResolvedValue(undefined);
     (DatabaseService.getSettings as any).mockResolvedValue(mockSettings);
 
-    // Create settings panel element
+    // Create and append element properly
     settingsPanel = document.createElement('settings-panel');
-    settingsPanel.settings = mockSettings;
     document.body.appendChild(settingsPanel);
-    
-    // Wait for component to initialize
-    await new Promise(resolve => setTimeout(resolve, 0));
     await settingsPanel.updateComplete;
   });
 
   afterEach(() => {
-    document.body.removeChild(settingsPanel);
+    // Safe cleanup
+    if (settingsPanel && settingsPanel.parentNode) {
+      settingsPanel.parentNode.removeChild(settingsPanel);
+    }
+    settingsPanel = null;
+    vi.restoreAllMocks();
   });
 
   describe('Full Sync Button', () => {
@@ -79,7 +81,7 @@ describe('Settings Panel - Sync Integration', () => {
     });
 
     it('should be enabled when settings are configured', async () => {
-      settingsPanel.settings = mockSettings;
+      // Settings are already mocked in beforeEach
       await settingsPanel.updateComplete;
       
       const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
@@ -91,7 +93,14 @@ describe('Settings Panel - Sync Integration', () => {
     });
 
     it('should be disabled when settings are not configured', async () => {
-      settingsPanel.settings = null;
+      // Mock empty settings for this test
+      (DatabaseService.getSettings as any).mockResolvedValue(null);
+      // Force reactive query to re-run by creating new element
+      if (settingsPanel && settingsPanel.parentNode) {
+        settingsPanel.parentNode.removeChild(settingsPanel);
+      }
+      settingsPanel = document.createElement('settings-panel');
+      document.body.appendChild(settingsPanel);
       await settingsPanel.updateComplete;
       
       const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
@@ -108,11 +117,17 @@ describe('Settings Panel - Sync Integration', () => {
       window.confirm = vi.fn().mockReturnValue(false);
       
       try {
-        settingsPanel.settings = mockSettings;
+        // Settings are already mocked in beforeEach
         await settingsPanel.updateComplete;
         
-        // Trigger full sync
-        await settingsPanel.handleFullSync();
+        // Trigger full sync by clicking the button
+        const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+        const fullSyncButton = Array.from(buttons).find((btn: any) => 
+          btn.textContent?.includes('Force Full Sync')
+        ) as HTMLElement;
+        expect(fullSyncButton).toBeTruthy();
+        fullSyncButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
         
         expect(window.confirm).toHaveBeenCalledWith(
           'This will perform a complete resync of all bookmarks. Continue?'
@@ -131,7 +146,7 @@ describe('Settings Panel - Sync Integration', () => {
       window.confirm = vi.fn().mockReturnValue(true);
       
       try {
-        settingsPanel.settings = mockSettings;
+        // Settings are already mocked in beforeEach
         await settingsPanel.updateComplete;
         
         // Setup progress callback mock
@@ -139,8 +154,14 @@ describe('Settings Panel - Sync Integration', () => {
           return Promise.resolve();
         });
         
-        // Trigger full sync
-        await settingsPanel.handleFullSync();
+        // Trigger full sync by clicking the button
+        const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+        const fullSyncButton = Array.from(buttons).find((btn: any) => 
+          btn.textContent?.includes('Force Full Sync')
+        ) as HTMLElement;
+        expect(fullSyncButton).toBeTruthy();
+        fullSyncButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
         
         expect(SyncService.fullSync).toHaveBeenCalledWith(
           mockSettings,
@@ -156,7 +177,7 @@ describe('Settings Panel - Sync Integration', () => {
       window.confirm = vi.fn().mockReturnValue(true);
       
       try {
-        settingsPanel.settings = mockSettings;
+        // Settings are already mocked in beforeEach
         await settingsPanel.updateComplete;
         
         (SyncService.fullSync as any).mockImplementation((_settings: any, callback: any) => {
@@ -169,7 +190,19 @@ describe('Settings Panel - Sync Integration', () => {
           return new Promise(resolve => setTimeout(resolve, 50));
         });
         
-        const syncPromise = settingsPanel.handleFullSync();
+        // Trigger full sync by clicking the button
+        const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+        const fullSyncButton = Array.from(buttons).find((btn: any) => 
+          btn.textContent?.includes('Force Full Sync')
+        ) as HTMLElement;
+        expect(fullSyncButton).toBeTruthy();
+        
+        const syncPromise = new Promise(resolve => {
+          // Mock the sync to resolve after a delay
+          setTimeout(resolve, 60);
+        });
+        
+        fullSyncButton.click();
         
         // Wait a bit for progress updates
         await new Promise(resolve => setTimeout(resolve, 30));
@@ -191,12 +224,19 @@ describe('Settings Panel - Sync Integration', () => {
       window.confirm = vi.fn().mockReturnValue(true);
       
       try {
-        settingsPanel.settings = mockSettings;
+        // Settings are already mocked in beforeEach
         await settingsPanel.updateComplete;
         
         (SyncService.fullSync as any).mockRejectedValue(new Error('Sync failed'));
         
-        await settingsPanel.handleFullSync();
+        // Trigger full sync by clicking the button
+        const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+        const fullSyncButton = Array.from(buttons).find((btn: any) => 
+          btn.textContent?.includes('Force Full Sync')
+        ) as HTMLElement;
+        expect(fullSyncButton).toBeTruthy();
+        fullSyncButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
         
         expect(settingsPanel.testStatus).toBe('error');
         expect(settingsPanel.testMessage).toContain('Full sync failed');
@@ -211,7 +251,7 @@ describe('Settings Panel - Sync Integration', () => {
       window.confirm = vi.fn().mockReturnValue(true);
       
       try {
-        settingsPanel.settings = mockSettings;
+        // Settings are already mocked in beforeEach
         await settingsPanel.updateComplete;
         
         let eventEmitted = false;
@@ -219,7 +259,14 @@ describe('Settings Panel - Sync Integration', () => {
           eventEmitted = true;
         });
         
-        await settingsPanel.handleFullSync();
+        // Trigger full sync by clicking the button
+        const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+        const fullSyncButton = Array.from(buttons).find((btn: any) => 
+          btn.textContent?.includes('Force Full Sync')
+        ) as HTMLElement;
+        expect(fullSyncButton).toBeTruthy();
+        fullSyncButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
         
         expect(eventEmitted).toBe(true);
         expect(settingsPanel.testStatus).toBe('success');
@@ -230,10 +277,24 @@ describe('Settings Panel - Sync Integration', () => {
     });
 
     it('should show error when settings are not saved', async () => {
-      settingsPanel.settings = null;
+      // Mock empty settings for this test
+      (DatabaseService.getSettings as any).mockResolvedValue(null);
+      // Force reactive query to re-run by creating new element
+      if (settingsPanel && settingsPanel.parentNode) {
+        settingsPanel.parentNode.removeChild(settingsPanel);
+      }
+      settingsPanel = document.createElement('settings-panel');
+      document.body.appendChild(settingsPanel);
       await settingsPanel.updateComplete;
       
-      await settingsPanel.handleFullSync();
+      // Trigger full sync by clicking the button
+      const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+      const fullSyncButton = Array.from(buttons).find((btn: any) => 
+        btn.textContent?.includes('Force Full Sync')
+      ) as HTMLElement;
+      expect(fullSyncButton).toBeTruthy();
+      fullSyncButton.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
       
       expect(settingsPanel.testStatus).toBe('error');
       expect(settingsPanel.testMessage).toBe('Please save your Linkding settings first.');
@@ -247,14 +308,26 @@ describe('Settings Panel - Sync Integration', () => {
       window.confirm = vi.fn().mockReturnValue(true);
       
       try {
-        settingsPanel.settings = mockSettings;
+        // Settings are already mocked in beforeEach
         
         (SyncService.fullSync as any).mockImplementation((_settings: any, callback: any) => {
           callback(5, 10); // Set progress
           return new Promise(resolve => setTimeout(resolve, 100));
         });
         
-        const syncPromise = settingsPanel.handleFullSync();
+        // Trigger full sync by clicking the button
+        const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+        const fullSyncButton = Array.from(buttons).find((btn: any) => 
+          btn.textContent?.includes('Force Full Sync')
+        ) as HTMLElement;
+        expect(fullSyncButton).toBeTruthy();
+        
+        const syncPromise = new Promise(resolve => {
+          // Mock the sync to resolve after showing progress
+          setTimeout(resolve, 60);
+        });
+        
+        fullSyncButton.click();
         
         // Wait for progress to be set
         await new Promise(resolve => setTimeout(resolve, 10));
@@ -277,9 +350,16 @@ describe('Settings Panel - Sync Integration', () => {
       window.confirm = vi.fn().mockReturnValue(true);
       
       try {
-        settingsPanel.settings = mockSettings;
+        // Settings are already mocked in beforeEach
         
-        await settingsPanel.handleFullSync();
+        // Trigger full sync by clicking the button
+        const buttons = settingsPanel.shadowRoot.querySelectorAll('md-outlined-button, md-filled-button, md-text-button');
+        const fullSyncButton = Array.from(buttons).find((btn: any) => 
+          btn.textContent?.includes('Force Full Sync')
+        ) as HTMLElement;
+        expect(fullSyncButton).toBeTruthy();
+        fullSyncButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
         await settingsPanel.updateComplete;
         
         const progressBar = settingsPanel.shadowRoot.querySelector('md-linear-progress');

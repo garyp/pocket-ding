@@ -21,24 +21,27 @@ import '@material/web/dialog/dialog.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
-  @property({ type: Number }) bookmarkId: number | undefined = undefined;
+  @property({ type: Number }) bookmarkId!: number;
 
   // Reactive query for bookmark data  
   #bookmarkQuery = new ReactiveQueryController(
     this,
-    () => this.bookmarkId ? DatabaseService.getBookmark(this.bookmarkId) : Promise.resolve(undefined)
+    (bookmarkId: number) => DatabaseService.getBookmark(bookmarkId),
+    (): [number] => [this.bookmarkId]
   );
 
   // Reactive query for read progress
   #readProgressQuery = new ReactiveQueryController(
     this,
-    () => this.bookmarkId ? DatabaseService.getReadProgress(this.bookmarkId) : Promise.resolve(undefined)
+    (bookmarkId: number) => DatabaseService.getReadProgress(bookmarkId),
+    (): [number] => [this.bookmarkId]
   );
 
   // Reactive query for available content sources (assets)
   #assetsQuery = new ReactiveQueryController(
     this,
-    () => this.bookmarkId ? DatabaseService.getCompletedAssetsByBookmarkId(this.bookmarkId) : Promise.resolve([])
+    (bookmarkId: number) => DatabaseService.getCompletedAssetsByBookmarkId(bookmarkId),
+    (): [number] => [this.bookmarkId]
   );
 
   // Getter methods for reactive data
@@ -58,7 +61,8 @@ export class BookmarkReader extends LitElement {
     return this.#bookmarkQuery.loading || this.#readProgressQuery.loading || this.#assetsQuery.loading;
   }
 
-  #currentBookmarkId: number | undefined = undefined;
+  #initialized = false;
+
 
   @state() private readingMode: 'original' | 'readability' = 'readability';
   @state() private readProgress = 0;
@@ -561,15 +565,14 @@ export class BookmarkReader extends LitElement {
     });
   }
 
-  override updated(changedProperties: Map<string, any>) {
-    // Update reactive queries when bookmarkId changes
-    if (changedProperties.has('bookmarkId')) {
-      this.#updateReactiveQueries();
-      if (this.bookmarkId) {
-        this.#handleBookmarkChange();
-      }
+  override willUpdate(changedProperties: Map<string, any>) {
+    // Reset initialization when bookmark ID changes
+    if (changedProperties.has('bookmarkId') && this.#initialized) {
+      this.#initialized = false;
     }
-    
+  }
+
+  override updated(changedProperties: Map<string, any>) {
     // Get reference to secure iframe after render
     if (!this.secureIframe) {
       this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
@@ -915,41 +918,13 @@ export class BookmarkReader extends LitElement {
     }
   }
 
-  /**
-   * Update reactive queries when bookmarkId changes
-   */
-  #updateReactiveQueries() {
-    this.#bookmarkQuery.updateQuery(
-      () => this.bookmarkId ? DatabaseService.getBookmark(this.bookmarkId) : Promise.resolve(undefined)
-    );
-    this.#readProgressQuery.updateQuery(
-      () => this.bookmarkId ? DatabaseService.getReadProgress(this.bookmarkId) : Promise.resolve(undefined)
-    );
-    this.#assetsQuery.updateQuery(
-      () => this.bookmarkId ? DatabaseService.getCompletedAssetsByBookmarkId(this.bookmarkId) : Promise.resolve([])
-    );
-  }
+
 
   /**
-   * Handle bookmark data changes from reactive queries
+   * Initialize component data when all reactive queries are loaded
    */
-  #handleBookmarkChange() {
-    // Reset for new bookmark
-    this.#currentBookmarkId = undefined;
-    this.hasBeenMarkedAsRead = false;
-    this.iframeLoadError = false;
-    this.contentResult = null;
-    
-    // The reactive queries will handle loading the data
-    // Once loaded, the render method will trigger #handleReactiveDataUpdate
-  }
-
-  /**
-   * Handle updates from reactive data queries
-   */
-  async #handleReactiveDataUpdate() {
-    if (!this.bookmark || this.isDataLoading) return;
-
+  async #initializeComponent() {
+    if (!this.bookmark) return;
     try {
       // Update local state from reactive read progress data
       const progressData = this.readProgressData;
@@ -969,20 +944,17 @@ export class BookmarkReader extends LitElement {
       // Load available content sources from reactive assets query
       await this.#loadAvailableContentSources();
       
-      // Load content if not already loaded
-      if (!this.contentResult) {
-        await this.loadContent();
-      }
+      // Load content
+      await this.loadContent();
 
       // Set up read marking and theme
       this.setupReadMarking();
       this.updateReaderTheme();
       
-      // Defer select value update to next tick to avoid update cycles
-      await this.updateComplete;
-      this.updateSelectValue();
+      // Ensure theme is applied after component update
+      this.requestUpdate();
     } catch (error) {
-      console.error('Failed to handle reactive data update:', error);
+      console.error('Failed to initialize component:', error);
     }
   }
 
@@ -1004,6 +976,11 @@ export class BookmarkReader extends LitElement {
     } else {
       this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
     }
+    
+    // Trigger re-render and then update select value
+    this.requestUpdate();
+    await this.updateComplete;
+    this.updateSelectValue();
   }
 
   private cleanupTimeouts() {
@@ -1334,7 +1311,7 @@ export class BookmarkReader extends LitElement {
 
   private getContentSourceLabel(type: 'saved' | 'live'): string {
     if (type === 'saved') {
-      const assetCount = this.availableContentSources.filter(s => s.type === 'asset').length;
+      const assetCount = (this.availableContentSources || []).filter(s => s.type === 'asset').length;
       return assetCount > 1 ? `Saved (${assetCount})` : 'Saved';
     }
     return 'Live URL';
@@ -1371,13 +1348,13 @@ export class BookmarkReader extends LitElement {
   }
   
   private shouldShowIndividualAssets(): boolean {
-    const assetSources = this.availableContentSources.filter(s => s.type === 'asset');
+    const assetSources = (this.availableContentSources || []).filter(s => s.type === 'asset');
     return assetSources.length > 1;
   }
 
   override render() {
-    // Show loading spinner when data is loading OR when we don't have a bookmarkId yet
-    if (this.isDataLoading || !this.bookmarkId) {
+    // Show loading spinner when data is loading
+    if (this.isDataLoading) {
       return html`
         <div class="loading-container">
           <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
@@ -1397,11 +1374,10 @@ export class BookmarkReader extends LitElement {
       `;
     }
 
-    // Initialize data when bookmark is loaded for the first time
-    if (this.bookmark && this.#currentBookmarkId !== this.bookmark.id) {
-      this.#currentBookmarkId = this.bookmark.id;
-      // Use microtask to avoid update cycle
-      queueMicrotask(() => this.#handleReactiveDataUpdate());
+    // Initialize component data once all reactive queries are loaded
+    if (this.bookmark && !this.isDataLoading && !this.#initialized) {
+      this.#initialized = true;
+      queueMicrotask(() => this.#initializeComponent());
     }
 
     return html`
@@ -1416,13 +1392,13 @@ export class BookmarkReader extends LitElement {
             >
               ${this.shouldShowIndividualAssets() ? 
                 // Show individual assets when multiple exist
-                this.availableContentSources.filter(s => s.type === 'asset').map(source => html`
+                (this.availableContentSources || []).filter(s => s.type === 'asset').map(source => html`
                   <md-select-option value="asset-${source.assetId}">
                     ${source.label}
                   </md-select-option>
                 `) :
                 // Show simple "Saved" option when only one asset
-                this.availableContentSources.some(s => s.type === 'asset') ? html`
+                (this.availableContentSources || []).some(s => s.type === 'asset') ? html`
                   <md-select-option value="saved">
                     ${this.getContentSourceLabel('saved')}
                   </md-select-option>

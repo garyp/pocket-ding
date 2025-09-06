@@ -3,6 +3,16 @@ import { BookmarkReader } from '../../components/bookmark-reader';
 import type { LocalBookmark, ContentSourceOption } from '../../types';
 import { DatabaseService } from '../../services/database';
 import { ContentFetcher } from '../../services/content-fetcher';
+import { liveQuery } from 'dexie';
+
+// Mock Dexie liveQuery
+vi.mock('dexie', async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  return {
+    ...actual,
+    liveQuery: vi.fn()
+  };
+});
 
 // Mock services
 vi.mock('../../services/database');
@@ -58,6 +68,7 @@ describe('BookmarkReader - Info Modal', () => {
     // Mock service responses
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue();
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue();
     vi.mocked(ContentFetcher.getAvailableContentSources).mockResolvedValue(contentSources);
@@ -68,8 +79,28 @@ describe('BookmarkReader - Info Modal', () => {
       readability_content: '<div>Readable content</div>'
     });
 
+    // Mock liveQuery to work with ReactiveQueryController
+    const mockSubscription = { unsubscribe: vi.fn() };
+    const mockObservable = {
+      subscribe: vi.fn((observer) => {
+        // Immediately call the query function and resolve with its result
+        const queryFn = vi.mocked(liveQuery).mock.calls[vi.mocked(liveQuery).mock.calls.length - 1]?.[0];
+        if (queryFn) {
+          const result = queryFn();
+          if (result && typeof (result as any).then === 'function') {
+            (result as Promise<any>).then((value: any) => observer.next(value));
+          } else {
+            observer.next(result);
+          }
+        }
+        return mockSubscription;
+      })
+    };
+    vi.mocked(liveQuery).mockReturnValue(mockObservable as any);
+
     // Create element
     element = new BookmarkReader();
+    element.bookmarkId = 1;
     document.body.appendChild(element);
     await element.updateComplete;
   });
@@ -79,7 +110,6 @@ describe('BookmarkReader - Info Modal', () => {
   });
 
   it('should show info button only in original (non-readability) mode', async () => {
-    element.bookmarkId = 1;
     await element.updateComplete;
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -111,7 +141,6 @@ describe('BookmarkReader - Info Modal', () => {
   });
 
   it('should open info modal when info button is clicked', async () => {
-    element.bookmarkId = 1;
     await element.updateComplete;
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -143,7 +172,6 @@ describe('BookmarkReader - Info Modal', () => {
   });
 
   it('should display bookmark information in the modal', async () => {
-    element.bookmarkId = 1;
     await element.updateComplete;
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -200,7 +228,12 @@ describe('BookmarkReader - Info Modal', () => {
     };
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmarkMinimal);
 
+    // Create a new element with the updated mock
+    element.remove();
+    element = new BookmarkReader();
     element.bookmarkId = 1;
+    document.body.appendChild(element);
+    
     await element.updateComplete;
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -227,7 +260,6 @@ describe('BookmarkReader - Info Modal', () => {
   });
 
   it('should close modal when close button is clicked', async () => {
-    element.bookmarkId = 1;
     await element.updateComplete;
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -257,7 +289,12 @@ describe('BookmarkReader - Info Modal', () => {
     // Mock getBookmark to return null
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(undefined);
 
+    // Create a new element with the updated mock
+    element.remove();
+    element = new BookmarkReader();
     element.bookmarkId = 1;
+    document.body.appendChild(element);
+    
     await element.updateComplete;
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -292,7 +329,6 @@ describe('BookmarkReader - Info Modal', () => {
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
 
-    element.bookmarkId = 1;
     // Wait for reactive queries to complete
     await element.updateComplete;
     await new Promise(resolve => setTimeout(resolve, 100));

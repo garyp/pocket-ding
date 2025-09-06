@@ -99,11 +99,8 @@ describe('Reading Progress Integration Tests', () => {
     });
 
     element = new BookmarkReader();
-    container.appendChild(element);
-    await element.updateComplete;
-
-    // Set bookmark ID to trigger loading
     element.bookmarkId = 1;
+    container.appendChild(element);
     await element.updateComplete;
 
     // Wait for loadBookmark async operation to complete
@@ -175,6 +172,12 @@ describe('Reading Progress Integration Tests', () => {
       bubbles: true
     });
     
+    // Wait for secure-iframe element to be rendered
+    await waitFor(() => {
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
+      return !!secureIframe;
+    }, { timeout: 1000 });
+    
     // Dispatch the event on the secure-iframe element to simulate iframe → BookmarkReader communication
     const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
     if (secureIframe) {
@@ -218,6 +221,12 @@ describe('Reading Progress Integration Tests', () => {
       detail: { progress, scrollPosition: scrollTop },
       bubbles: true
     });
+    
+    // Wait for secure-iframe element to be rendered
+    await waitFor(() => {
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
+      return !!secureIframe;
+    }, { timeout: 1000 });
     
     // Dispatch the event on the secure-iframe element to simulate iframe → BookmarkReader communication
     const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
@@ -618,9 +627,8 @@ describe('Reading Progress Integration Tests', () => {
       });
 
       element = new BookmarkReader();
-      container.appendChild(element);
-      await element.updateComplete;
       element.bookmarkId = 1;
+      container.appendChild(element);
       await element.updateComplete;
       
       // Wait for content to load

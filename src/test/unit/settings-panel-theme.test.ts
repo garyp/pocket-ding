@@ -155,8 +155,21 @@ describe('SettingsPanel Theme', () => {
     });
 
     it('should update form data when theme selection changes', async () => {
-      // Simulate theme change to dark
-      (element as any)['#handleInputChange']('theme_mode', 'dark');
+      // Simulate theme change to dark by dispatching change event
+      const themeSelect = element.shadowRoot?.querySelector('#theme-mode') as any;
+      expect(themeSelect).toBeTruthy();
+      
+      // Create a custom event that mimics Material Design select behavior
+      const changeEvent = new CustomEvent('change', { 
+        detail: { value: 'dark' },
+        bubbles: true 
+      });
+      Object.defineProperty(changeEvent, 'target', {
+        writable: false,
+        value: { value: 'dark' }
+      });
+      
+      themeSelect.dispatchEvent(changeEvent);
       await element.updateComplete;
       
       expect(element['formData'].theme_mode).toBe('dark');
@@ -170,7 +183,15 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'dark'
       };
 
-      await (element as any)['#handleSave']();
+      // Trigger save by clicking the "Save Settings" button
+      const saveButton = element.shadowRoot?.querySelector('md-filled-button') as any;
+      expect(saveButton).toBeTruthy();
+      
+      saveButton.click();
+      await element.updateComplete;
+      
+      // Wait for async save operation to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(DatabaseService.saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -185,7 +206,15 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'light'
       };
 
-      await (element as any)['#handleSave']();
+      // Trigger save by clicking the "Save Settings" button
+      const saveButton = element.shadowRoot?.querySelector('md-filled-button') as any;
+      expect(saveButton).toBeTruthy();
+      
+      saveButton.click();
+      await element.updateComplete;
+      
+      // Wait for async save operation to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(ThemeService.setThemeFromSettings).toHaveBeenCalledWith('light');
     });
@@ -199,7 +228,15 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'dark'
       };
 
-      await (element as any)['#handleSave']();
+      // Trigger save by clicking the "Save Settings" button
+      const saveButton = element.shadowRoot?.querySelector('md-filled-button') as any;
+      expect(saveButton).toBeTruthy();
+      
+      saveButton.click();
+      await element.updateComplete;
+      
+      // Wait for async save operation to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(eventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -218,10 +255,34 @@ describe('SettingsPanel Theme', () => {
       const testCases = ['system', 'light', 'dark'] as const;
 
       for (const themeMode of testCases) {
-        (element as any)['#handleInputChange']('theme_mode', themeMode);
+        // Simulate theme change by dispatching change event
+        const themeSelect = element.shadowRoot?.querySelector('#theme-mode') as any;
+        expect(themeSelect).toBeTruthy();
+        
+        const changeEvent = new CustomEvent('change', { 
+          detail: { value: themeMode },
+          bubbles: true 
+        });
+        Object.defineProperty(changeEvent, 'target', {
+          writable: false,
+          value: { value: themeMode }
+        });
+        
+        themeSelect.dispatchEvent(changeEvent);
+        await element.updateComplete;
+        
         expect(element['formData'].theme_mode).toBe(themeMode);
 
-        await (element as any)['#handleSave']();
+        // Trigger save by clicking the "Save Settings" button
+        const saveButton = element.shadowRoot?.querySelector('md-filled-button') as any;
+        expect(saveButton).toBeTruthy();
+        
+        saveButton.click();
+        await element.updateComplete;
+        
+        // Wait for async save operation to complete
+        await new Promise(resolve => setTimeout(resolve, 0));
+        
         expect(ThemeService.setThemeFromSettings).toHaveBeenCalledWith(themeMode);
       }
     });
@@ -232,7 +293,15 @@ describe('SettingsPanel Theme', () => {
         theme_mode: 'dark' as any
       };
 
-      await (element as any)['#handleSave']();
+      // Trigger save by clicking the "Save Settings" button
+      const saveButton = element.shadowRoot?.querySelector('md-filled-button') as any;
+      expect(saveButton).toBeTruthy();
+      
+      saveButton.click();
+      await element.updateComplete;
+      
+      // Wait for async save operation to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(DatabaseService.saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({

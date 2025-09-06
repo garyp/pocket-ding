@@ -5,7 +5,9 @@ import type { LocalBookmark } from '../../types';
 
 // Mock liveQuery from Dexie
 vi.mock('dexie', () => ({
-  liveQuery: vi.fn()
+  liveQuery: vi.fn(),
+  default: vi.fn(), // Mock default Dexie export
+  Table: vi.fn() // Mock Table export
 }));
 
 // Mock DatabaseService - must be before imports for Vitest hoisting
@@ -28,6 +30,8 @@ describe('BookmarkList Controller Integration', () => {
   let mockBookmarks: LocalBookmark[];
 
   beforeEach(async () => {
+    // Clear mock call history but keep module mocks
+    vi.clearAllMocks();
     localStorage.clear();
     
     // Ensure IntersectionObserver is properly mocked
@@ -123,11 +127,12 @@ describe('BookmarkList Controller Integration', () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
     if (element && element.parentNode) {
       element.remove();
     }
-    vi.restoreAllMocks();
+    // Only clear mocks set in specific tests
+    vi.clearAllMocks();
+    localStorage.clear();
   });
 
   function createTestElement(filter: 'all' | 'unread' | 'archived' = 'all'): BookmarkList {
@@ -231,13 +236,22 @@ describe('BookmarkList Controller Integration', () => {
     it('should handle storage errors gracefully', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
-      // Mock setItem to throw error
+      // Create a local mock that only affects this test
+      // Store original localStorage for this test only
+      const originalLocalStorage = localStorage;
+      
+      // Mock localStorage.setItem to fail
       const setItemMock = vi.fn(() => {
         throw new Error('Storage quota exceeded');
       });
       
-      Object.defineProperty(global.localStorage, 'setItem', {
-        value: setItemMock,
+      // Replace the entire localStorage object to ensure StateController gets the mock
+      Object.defineProperty(globalThis, 'localStorage', {
+        value: {
+          ...localStorage,
+          setItem: setItemMock,
+          clear: vi.fn() // Ensure clear method exists for test cleanup
+        },
         writable: true
       });
 
@@ -256,16 +270,22 @@ describe('BookmarkList Controller Integration', () => {
       };
       (element as any).scrollContainer = mockScrollContainer;
       
+      // Verify initial state
+      expect(element.scrollPosition).toBe(0);
+      
       // Try to set scroll position which should trigger storage error
       element.scrollPosition = 100;
       await element.updateComplete;
+      
+      // Verify the property was set
+      expect(element.scrollPosition).toBe(100);
 
       // Should have logged warning but not crashed
       expect(consoleWarnSpy).toHaveBeenCalled();
 
-      // Restore localStorage
-      Object.defineProperty(global.localStorage, 'setItem', {
-        value: Storage.prototype.setItem,
+      // Restore localStorage for this test only
+      Object.defineProperty(globalThis, 'localStorage', {
+        value: originalLocalStorage,
         writable: true
       });
       consoleWarnSpy.mockRestore();
@@ -291,6 +311,7 @@ describe('BookmarkList Controller Integration', () => {
 
       // Save scroll position - set the property directly
       element.scrollPosition = 250;
+      await element.updateComplete; // Wait for StateController auto-sync
 
       // Check localStorage
       const savedData = localStorage.getItem('bookmark-list-state');

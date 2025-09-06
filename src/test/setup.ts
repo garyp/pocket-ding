@@ -3,6 +3,44 @@ import { beforeEach, vi } from 'vitest';
 // Setup DOM environment
 import '@testing-library/jest-dom/vitest';
 
+// Mock Dexie liveQuery globally
+vi.mock('dexie', async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  
+  // Create a proper liveQuery mock that returns an observable
+  const mockLiveQuery = vi.fn().mockImplementation((queryFn: () => any) => {
+    const mockSubscription = { unsubscribe: vi.fn() };
+    
+    const mockObservable = {
+      subscribe: vi.fn((observer: any) => {
+        try {
+          const result = queryFn();
+          // Handle both sync and async query results
+          if (result && typeof (result as any).then === 'function') {
+            (result as Promise<any>).then((value: any) => {
+              observer.next(value);
+            }).catch((error: any) => {
+              observer.error?.(error);
+            });
+          } else {
+            observer.next(result);
+          }
+        } catch (error) {
+          observer.error?.(error);
+        }
+        return mockSubscription;
+      })
+    };
+    
+    return mockObservable;
+  });
+  
+  return {
+    ...actual,
+    liveQuery: mockLiveQuery
+  };
+});
+
 // Mock console.error globally to prevent stderr output in tests
 const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -176,12 +214,45 @@ if (!Element.prototype.animate) {
   };
 }
 
-beforeEach(() => {
+
+beforeEach(async () => {
   // Clear specific mocks but don't touch IntersectionObserver since it uses persistent implementations
   if (global.fetch && vi.isMockFunction(global.fetch)) {
     (global.fetch as any).mockClear();
   }
   consoleErrorSpy.mockClear();
+  
+  // Always re-establish liveQuery mock to handle clearAllMocks calls in individual tests
+  const { liveQuery } = await import('dexie');
+  
+  // Create the liveQuery mock implementation
+  const liveQueryMock = vi.mocked(liveQuery);
+  liveQueryMock.mockImplementation((queryFn: () => any) => {
+    const mockSubscription = { unsubscribe: vi.fn() };
+    
+    const mockObservable = {
+      subscribe: vi.fn((observer: any) => {
+        try {
+          const result = queryFn();
+          // Handle both sync and async query results
+          if (result && typeof (result as any).then === 'function') {
+            (result as Promise<any>).then((value: any) => {
+              observer.next(value);
+            }).catch((error: any) => {
+              observer.error?.(error);
+            });
+          } else {
+            observer.next(result);
+          }
+        } catch (error) {
+          observer.error?.(error);
+        }
+        return mockSubscription;
+      })
+    };
+    
+    return mockObservable as any;
+  });
   
   // Note: IntersectionObserver uses persistent implementations that are immune to vi.clearAllMocks()
   // Individual test files can call vi.clearAllMocks() without breaking existing IntersectionObserver instances
