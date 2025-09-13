@@ -60,7 +60,22 @@ vi.mock('../../services/content-fetcher', () => ({
   },
 }));
 
+vi.mock('../../services/settings-service', () => ({
+  SettingsService: {
+    getSettings: vi.fn(),
+    getSettingsLive: vi.fn(),
+    saveSettings: vi.fn(),
+    getCurrentSettings: vi.fn(),
+    hasValidSettings: vi.fn(),
+    getLinkdingUrl: vi.fn(),
+    getLinkdingToken: vi.fn(),
+    initialize: vi.fn(),
+    cleanup: vi.fn(),
+  },
+}));
+
 import { DatabaseService } from '../../services/database';
+import { SettingsService } from '../../services/settings-service';
 import { SyncService } from '../../services/sync-service';
 import { createLinkdingAPI } from '../../services/linkding-api';
 import { ContentFetcher } from '../../services/content-fetcher';
@@ -72,6 +87,16 @@ describe('Error Scenarios - Failure Handling', () => {
     sync_interval: 60,
     auto_sync: true,
     reading_mode: 'readability',
+  };
+
+  // Helper function to mock SettingsService.getSettingsLive for reactive components
+  const mockSettingsLive = (settings: AppSettings | undefined) => {
+    vi.mocked(SettingsService.getSettingsLive).mockReturnValue({
+      subscribe: vi.fn().mockImplementation(({ next }) => {
+        if (next) next(settings);
+        return { unsubscribe: vi.fn() };
+      })
+    } as any);
   };
 
   const mockBookmark: LocalBookmark = {
@@ -95,7 +120,19 @@ describe('Error Scenarios - Failure Handling', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    
+
+    // Setup default SettingsService mocks
+    vi.mocked(SettingsService.getSettingsLive).mockReturnValue({
+      subscribe: vi.fn().mockImplementation(({ next }) => {
+        // By default, return undefined for no settings
+        if (next) next(undefined);
+        return { unsubscribe: vi.fn() };
+      })
+    } as any);
+    vi.mocked(SettingsService.getSettings).mockResolvedValue(undefined);
+    vi.mocked(SettingsService.initialize).mockResolvedValue(undefined);
+    vi.mocked(SettingsService.cleanup).mockReturnValue(undefined);
+
     // Register components if not already registered
     if (!customElements.get('app-root')) {
       customElements.define('app-root', AppRoot);
@@ -124,7 +161,8 @@ describe('Error Scenarios - Failure Handling', () => {
   describe('Network Failure Scenarios', () => {
     it('should handle network failures during sync gracefully', async () => {
       // Mock existing settings but network failure
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
+      mockSettingsLive(validSettings);
       vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue([mockBookmark]);
       vi.mocked(DatabaseService.getAllFilterCounts).mockResolvedValue({
         all: 1,
@@ -149,13 +187,14 @@ describe('Error Scenarios - Failure Handling', () => {
       });
 
       // Verify that the app loads cached data when sync fails
-      expect(DatabaseService.getSettings).toHaveBeenCalled();
+      expect(SettingsService.getSettings).toHaveBeenCalled();
       expect(DatabaseService.getAllBookmarks).toHaveBeenCalled();
     });
 
     it('should handle API request timeouts during bookmark fetching', async () => {
       // Mock timeout scenario
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
+      mockSettingsLive(validSettings);
       const mockAPI = vi.mocked(createLinkdingAPI('', ''));
       vi.mocked(mockAPI.getAllBookmarks).mockRejectedValue(new Error('Request timeout'));
       vi.mocked(SyncService.syncBookmarks).mockRejectedValue(new Error('Request timeout'));
@@ -167,12 +206,12 @@ describe('Error Scenarios - Failure Handling', () => {
       await appRoot.updateComplete;
 
       // Should handle timeout gracefully without crashing
-      expect(DatabaseService.getSettings).toHaveBeenCalled();
+      expect(SettingsService.getSettings).toHaveBeenCalled();
     });
 
     it('should degrade gracefully when network becomes unavailable', async () => {
       // Mock offline scenario
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue([mockBookmark]);
       
       // Mock fetch failures
@@ -192,7 +231,7 @@ describe('Error Scenarios - Failure Handling', () => {
 
     it('should handle intermittent network failures during large sync operations', async () => {
       // Mock partial sync failure
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(SyncService.syncBookmarks)
         .mockRejectedValueOnce(new Error('Network timeout'))
         .mockRejectedValueOnce(new Error('Connection reset'))
@@ -205,7 +244,7 @@ describe('Error Scenarios - Failure Handling', () => {
       await appRoot.updateComplete;
 
       // Should handle retry scenarios gracefully
-      expect(DatabaseService.getSettings).toHaveBeenCalled();
+      expect(SettingsService.getSettings).toHaveBeenCalled();
     });
   });
 
@@ -216,7 +255,7 @@ describe('Error Scenarios - Failure Handling', () => {
         linkding_token: 'invalid-token',
       };
 
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(invalidSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(invalidSettings);
       
       // Mock 401 Unauthorized response
       const authError = new Error('API request failed: 401 Unauthorized');
@@ -234,7 +273,7 @@ describe('Error Scenarios - Failure Handling', () => {
     });
 
     it('should handle expired authentication tokens during sync', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       
       // Mock 403 Forbidden response
       const expiredTokenError = new Error('API request failed: 403 Forbidden');
@@ -247,7 +286,7 @@ describe('Error Scenarios - Failure Handling', () => {
       await appRoot.updateComplete;
 
       // Should handle expired token gracefully
-      expect(DatabaseService.getSettings).toHaveBeenCalled();
+      expect(SettingsService.getSettings).toHaveBeenCalled();
     });
 
     it('should handle API server returning unauthorized errors', async () => {
@@ -256,7 +295,7 @@ describe('Error Scenarios - Failure Handling', () => {
         linkding_url: 'https://unauthorized.example.com',
       };
 
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(unauthorizedSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(unauthorizedSettings);
       
       // Mock multiple 401 responses
       const mockAPI = vi.mocked(createLinkdingAPI('', ''));
@@ -279,7 +318,7 @@ describe('Error Scenarios - Failure Handling', () => {
         linkding_token: '',  // Empty token
       };
 
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(corruptSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(corruptSettings);
 
       const settingsPanel = document.createElement('settings-panel') as SettingsPanel;
       document.body.appendChild(settingsPanel);
@@ -294,7 +333,7 @@ describe('Error Scenarios - Failure Handling', () => {
 
   describe('Database Storage Errors', () => {
     it('should handle database quota exceeded scenarios', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       
       // Mock QuotaExceededError
       const quotaError = new Error('QuotaExceededError: The quota has been exceeded');
@@ -308,14 +347,21 @@ describe('Error Scenarios - Failure Handling', () => {
       await appRoot.updateComplete;
 
       // Should handle storage quota gracefully
-      expect(DatabaseService.getSettings).toHaveBeenCalled();
+      expect(SettingsService.getSettings).toHaveBeenCalled();
     });
 
     it('should handle database corruption and unavailability', async () => {
       // Mock database corruption
       const corruptionError = new Error('Database corruption detected');
       corruptionError.name = 'DatabaseError';
-      vi.mocked(DatabaseService.getSettings).mockRejectedValue(corruptionError);
+      vi.mocked(SettingsService.getSettings).mockRejectedValue(corruptionError);
+      vi.mocked(SettingsService.getSettingsLive).mockReturnValue({
+        subscribe: vi.fn().mockImplementation(({ error }) => {
+          // Immediately call the error callback to simulate the subscription error
+          if (error) error(corruptionError);
+          return { unsubscribe: vi.fn() };
+        })
+      } as any);
       vi.mocked(DatabaseService.getAllBookmarks).mockRejectedValue(corruptionError);
 
       const appRoot = document.createElement('app-root') as AppRoot;
@@ -325,11 +371,11 @@ describe('Error Scenarios - Failure Handling', () => {
       await appRoot.updateComplete;
 
       // Should handle database errors gracefully
-      expect(DatabaseService.getSettings).toHaveBeenCalled();
+      expect(SettingsService.getSettings).toHaveBeenCalled();
     });
 
     it('should handle failed bookmark save operations', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
       
       // Mock save failure
@@ -348,7 +394,7 @@ describe('Error Scenarios - Failure Handling', () => {
     });
 
     it('should handle failed read progress persistence', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
       
@@ -370,7 +416,7 @@ describe('Error Scenarios - Failure Handling', () => {
 
   describe('Malformed Bookmark Content', () => {
     it('should handle invalid HTML content processing', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
       
       // Mock invalid HTML content
@@ -399,7 +445,7 @@ describe('Error Scenarios - Failure Handling', () => {
     });
 
     it('should handle missing required bookmark fields', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       
       // Mock bookmark with missing required fields
       const incompleteBookmark = {
@@ -435,7 +481,7 @@ describe('Error Scenarios - Failure Handling', () => {
     });
 
     it('should handle corrupt content fetching results', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
       
       // Mock network error during content fetch
@@ -464,7 +510,7 @@ describe('Error Scenarios - Failure Handling', () => {
     });
 
     it('should handle security-related content filtering', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue({
         ...mockBookmark,
         url: 'javascript:alert("xss")', // Potentially malicious URL
@@ -496,7 +542,7 @@ describe('Error Scenarios - Failure Handling', () => {
     });
 
     it('should handle CORS errors during content fetching', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
       
       // Mock CORS error
@@ -525,7 +571,7 @@ describe('Error Scenarios - Failure Handling', () => {
     });
 
     it('should handle server errors during content retrieval', async () => {
-      vi.mocked(DatabaseService.getSettings).mockResolvedValue(validSettings);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
       
       // Mock server error

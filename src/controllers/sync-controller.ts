@@ -1,6 +1,8 @@
 import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { SyncService } from '../services/sync-service';
-import { DatabaseService } from '../services/database';
+import { SettingsService } from '../services/settings-service';
+import { ReactiveQueryController } from './reactive-query-controller';
+import type { AppSettings } from '../types';
 
 export interface SyncState {
   isSyncing: boolean;
@@ -21,9 +23,10 @@ export interface SyncControllerOptions {
  * methods for triggering sync operations.
  */
 export class SyncController implements ReactiveController {
-  private host: ReactiveControllerHost;
-  private syncService: SyncService | null = null;
-  private options: SyncControllerOptions;
+  #host: ReactiveControllerHost;
+  #syncService: SyncService | null = null;
+  #options: SyncControllerOptions;
+  #settingsQuery: ReactiveQueryController<AppSettings | undefined>;
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -34,8 +37,15 @@ export class SyncController implements ReactiveController {
   };
 
   constructor(host: ReactiveControllerHost, options: SyncControllerOptions = {}) {
-    this.host = host;
-    this.options = options;
+    this.#host = host;
+    this.#options = options;
+
+    // Initialize reactive query for settings data
+    this.#settingsQuery = new ReactiveQueryController(
+      host,
+      () => SettingsService.getSettings()
+    );
+
     host.addController(this);
   }
 
@@ -49,36 +59,36 @@ export class SyncController implements ReactiveController {
 
   private initializeSync() {
     // Initialize sync service
-    this.syncService = SyncService.getInstance();
-    
+    this.#syncService = SyncService.getInstance();
+
     // Setup event listeners
     this.setupSyncEventListeners();
-    
+
     // Check for ongoing sync
     this.checkOngoingSync();
   }
 
   private cleanupSync() {
     // Clean up event listeners
-    if (this.syncService) {
-      this.syncService.removeEventListener('sync-initiated', this.handleSyncInitiated);
-      this.syncService.removeEventListener('sync-started', this.handleSyncStarted);
-      this.syncService.removeEventListener('sync-progress', this.handleSyncProgress);
-      this.syncService.removeEventListener('sync-completed', this.handleSyncCompleted);
-      this.syncService.removeEventListener('sync-error', this.handleSyncError);
-      this.syncService.removeEventListener('bookmark-synced', this.handleBookmarkSynced);
+    if (this.#syncService) {
+      this.#syncService.removeEventListener('sync-initiated', this.handleSyncInitiated);
+      this.#syncService.removeEventListener('sync-started', this.handleSyncStarted);
+      this.#syncService.removeEventListener('sync-progress', this.handleSyncProgress);
+      this.#syncService.removeEventListener('sync-completed', this.handleSyncCompleted);
+      this.#syncService.removeEventListener('sync-error', this.handleSyncError);
+      this.#syncService.removeEventListener('bookmark-synced', this.handleBookmarkSynced);
     }
   }
 
   private setupSyncEventListeners() {
-    if (!this.syncService) return;
+    if (!this.#syncService) return;
 
-    this.syncService.addEventListener('sync-initiated', this.handleSyncInitiated);
-    this.syncService.addEventListener('sync-started', this.handleSyncStarted);
-    this.syncService.addEventListener('sync-progress', this.handleSyncProgress);
-    this.syncService.addEventListener('sync-completed', this.handleSyncCompleted);
-    this.syncService.addEventListener('sync-error', this.handleSyncError);
-    this.syncService.addEventListener('bookmark-synced', this.handleBookmarkSynced);
+    this.#syncService.addEventListener('sync-initiated', this.handleSyncInitiated);
+    this.#syncService.addEventListener('sync-started', this.handleSyncStarted);
+    this.#syncService.addEventListener('sync-progress', this.handleSyncProgress);
+    this.#syncService.addEventListener('sync-completed', this.handleSyncCompleted);
+    this.#syncService.addEventListener('sync-error', this.handleSyncError);
+    this.#syncService.addEventListener('bookmark-synced', this.handleBookmarkSynced);
   }
 
   private checkOngoingSync() {
@@ -91,7 +101,7 @@ export class SyncController implements ReactiveController {
         syncTotal: progress.total,
         syncedBookmarkIds: new Set<number>(),
       };
-      this.host.requestUpdate();
+      this.#host.requestUpdate();
     }
   }
 
@@ -105,7 +115,7 @@ export class SyncController implements ReactiveController {
       syncTotal: 0,
       syncedBookmarkIds: new Set<number>(),
     };
-    this.host.requestUpdate();
+    this.#host.requestUpdate();
   };
 
   private handleSyncStarted = (event: Event) => {
@@ -117,7 +127,7 @@ export class SyncController implements ReactiveController {
       syncTotal: customEvent.detail.total || 0,
       syncedBookmarkIds: new Set<number>(),
     };
-    this.host.requestUpdate();
+    this.#host.requestUpdate();
   };
 
   private handleSyncProgress = (event: Event) => {
@@ -127,7 +137,7 @@ export class SyncController implements ReactiveController {
       syncProgress: customEvent.detail.current || customEvent.detail.progress || 0,
       syncTotal: customEvent.detail.total || 0,
     };
-    this.host.requestUpdate();
+    this.#host.requestUpdate();
   };
 
   private handleSyncCompleted = async () => {
@@ -137,11 +147,11 @@ export class SyncController implements ReactiveController {
       syncProgress: 0,
       syncTotal: 0,
     };
-    this.host.requestUpdate();
+    this.#host.requestUpdate();
 
     // Notify host component
-    if (this.options.onSyncCompleted) {
-      this.options.onSyncCompleted();
+    if (this.#options.onSyncCompleted) {
+      this.#options.onSyncCompleted();
     }
     
     // Clear synced highlights after delay (3 seconds)
@@ -160,11 +170,11 @@ export class SyncController implements ReactiveController {
       syncProgress: 0,
       syncTotal: 0,
     };
-    this.host.requestUpdate();
+    this.#host.requestUpdate();
 
     // Notify host component
-    if (this.options.onSyncError) {
-      this.options.onSyncError(customEvent.detail);
+    if (this.#options.onSyncError) {
+      this.#options.onSyncError(customEvent.detail);
     }
   };
 
@@ -180,16 +190,30 @@ export class SyncController implements ReactiveController {
       ...this._syncState,
       syncedBookmarkIds: new Set([...this._syncState.syncedBookmarkIds, bookmarkId]),
     };
-    this.host.requestUpdate();
+    this.#host.requestUpdate();
     
     // Call callback if provided (for navigation logic, etc.)
-    if (this.options.onBookmarkSynced) {
-      this.options.onBookmarkSynced(bookmarkId, updatedBookmark);
+    if (this.#options.onBookmarkSynced) {
+      this.#options.onBookmarkSynced(bookmarkId, updatedBookmark);
     }
   };
 
   // Public API methods
-  
+
+  /**
+   * Get current settings from the reactive query
+   */
+  get settings() {
+    return this.#settingsQuery.value ?? null;
+  }
+
+  /**
+   * Check if settings are currently loading
+   */
+  get isSettingsLoading() {
+    return this.#settingsQuery.loading;
+  }
+
   /**
    * Get the current sync state
    */
@@ -204,7 +228,14 @@ export class SyncController implements ReactiveController {
     if (this._syncState.isSyncing) return;
 
     try {
-      const settings = await DatabaseService.getSettings();
+      // Check if settings are still loading
+      if (this.isSettingsLoading) {
+        console.warn('Cannot sync while settings are loading');
+        return;
+      }
+
+      // Use reactive settings instead of direct DatabaseService call
+      const settings = this.settings;
       if (settings) {
         // Update sync state to indicate we're starting sync
         this._syncState = {
@@ -214,11 +245,13 @@ export class SyncController implements ReactiveController {
           syncTotal: 0,
           syncedBookmarkIds: new Set<number>(),
         };
-        this.host.requestUpdate();
-        
+        this.#host.requestUpdate();
+
         await SyncService.syncBookmarks(settings);
         // Don't dispatch sync-requested event to avoid infinite loop
         // The sync service itself will dispatch the necessary events
+      } else {
+        console.warn('Cannot sync without valid settings');
       }
     } catch (error) {
       console.error('Failed to sync bookmarks:', error);
@@ -229,7 +262,7 @@ export class SyncController implements ReactiveController {
         syncProgress: 0,
         syncTotal: 0,
       };
-      this.host.requestUpdate();
+      this.#host.requestUpdate();
     }
   }
 
@@ -265,6 +298,6 @@ export class SyncController implements ReactiveController {
       ...this._syncState,
       syncedBookmarkIds: new Set<number>(),
     };
-    this.host.requestUpdate();
+    this.#host.requestUpdate();
   }
 }

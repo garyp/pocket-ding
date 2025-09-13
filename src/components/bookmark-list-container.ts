@@ -1,9 +1,10 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { DatabaseService } from '../services/database';
+import { db } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
 import { StateController } from '../controllers/state-controller';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import type { LocalBookmark, PaginationState, BookmarkListContainerState } from '../types';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/icon/icon.js';
@@ -62,6 +63,13 @@ export class BookmarkListContainer extends LitElement {
 
   private faviconController = new FaviconController(this);
 
+  // Reactive query to track bookmark positions for pagination calculations
+  #bookmarkPositionsQuery = new ReactiveQueryController(
+    this,
+    (filter: 'all' | 'unread' | 'archived') => this.#getBookmarkPositions(filter),
+    (): ['all' | 'unread' | 'archived'] => [this.filter]
+  );
+
   // State controller for pagination persistence with automatic observation
   // The controller automatically observes and persists state changes via observedProperties
   private stateController = new StateController<BookmarkListContainerState>(this, {
@@ -87,13 +95,59 @@ export class BookmarkListContainer extends LitElement {
     }
   });
 
+  // Helper method to get bookmark positions for reactive query
+  async #getBookmarkPositions(filter: 'all' | 'unread' | 'archived'): Promise<number[]> {
+    // Use the same filtering logic as DatabaseService but only get IDs
+    const query = this.#buildFilteredQuery(filter);
+    const bookmarks = await query.toArray();
+    return bookmarks.map(bookmark => bookmark.id);
+  }
+
+  // Helper method to build filtered query (mirrors DatabaseService logic)
+  #buildFilteredQuery(filter: 'all' | 'unread' | 'archived') {
+    if (filter === 'unread') {
+      return db.bookmarks
+        .orderBy('date_added')
+        .reverse()
+        .filter((bookmark: any) => bookmark.unread && !bookmark.is_archived);
+    } else if (filter === 'archived') {
+      return db.bookmarks
+        .orderBy('date_added')
+        .reverse()
+        .filter((bookmark: any) => bookmark.is_archived);
+    } else {
+      return db.bookmarks
+        .orderBy('date_added')
+        .reverse();
+    }
+  }
+
+  // Helper method to calculate page number from bookmark positions
+  #getPageFromAnchorBookmark(anchorBookmarkId: number | undefined, fallbackPage: number = 1): number {
+    if (!anchorBookmarkId) {
+      return fallbackPage;
+    }
+
+    const positions = this.#bookmarkPositionsQuery.value;
+    if (!positions) {
+      return fallbackPage;
+    }
+
+    const index = positions.indexOf(anchorBookmarkId);
+    if (index === -1) {
+      return fallbackPage;
+    }
+
+    return Math.floor(index / this.pageSize) + 1;
+  }
+
   // Simplified pagination state - data counts now handled by reactive queries in bookmark-list
   private get paginationState(): PaginationState {
     return {
       currentPage: this.currentPage,
       pageSize: this.pageSize,
       totalCount: 0, // Will be computed by reactive queries
-      totalPages: 1, // Will be computed by reactive queries  
+      totalPages: 1, // Will be computed by reactive queries
       filter: this.filter,
       ...(this.anchorBookmarkId ? { anchorBookmarkId: this.anchorBookmarkId } : {})
     };
@@ -120,18 +174,13 @@ export class BookmarkListContainer extends LitElement {
   }
 
  
-  private async handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
+  private handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
     if (!updatedBookmark || !bookmarkId) return;
-    
+
     // If this is the anchor bookmark, ensure we're on the correct page to show it
     if (bookmarkId === this.anchorBookmarkId) {
-      const targetPage = await DatabaseService.getPageFromAnchorBookmark(
-        bookmarkId,
-        this.filter,
-        this.pageSize,
-        this.currentPage
-      );
-      
+      const targetPage = this.#getPageFromAnchorBookmark(bookmarkId, this.currentPage);
+
       // If the anchor bookmark is now on a different page, navigate to that page
       if (targetPage !== this.currentPage) {
         // Update currentPage property (StateController will automatically persist)
@@ -168,9 +217,9 @@ export class BookmarkListContainer extends LitElement {
     }
   };
 
-  private handleVisibilityChanged = (visibleBookmarkIds: number[]) => {
-    // FaviconController now fetches bookmark data itself to maintain proper encapsulation
-    this.faviconController.handleVisibilityChanged(visibleBookmarkIds);
+  private handleVisibilityChanged = (visibleBookmarks: Array<{ id: number; favicon_url?: string }>) => {
+    // Pass bookmark data directly to avoid database coupling
+    this.faviconController.handleVisibilityChanged(visibleBookmarks);
   };
 
   private handlePageChange = async (page: number) => {
@@ -181,19 +230,21 @@ export class BookmarkListContainer extends LitElement {
     }
   };
 
-  private handleFilterChange = async (filter: 'all' | 'unread' | 'archived') => {
+  private handleFilterChange = (filter: 'all' | 'unread' | 'archived') => {
     if (filter !== this.filter) {
-      // Use anchor bookmark ID to find the correct page in the new filter
-      const targetPage = await DatabaseService.getPageFromAnchorBookmark(
-        this.anchorBookmarkId,
-        filter,
-        this.pageSize,
-        1 // fallback to page 1
-      );
-      
       // StateController will automatically persist these changes
       this.filter = filter;
-      this.currentPage = targetPage;
+
+      // Use anchor bookmark ID to find the correct page in the new filter
+      // The reactive query will update when filter changes, so we defer this calculation
+      // to the next microtask when the new positions are available
+      queueMicrotask(() => {
+        const targetPage = this.#getPageFromAnchorBookmark(this.anchorBookmarkId, 1);
+        if (targetPage !== this.currentPage) {
+          this.currentPage = targetPage;
+        }
+      });
+
       // No need to manually load bookmarks - reactive queries handle this
     }
   };

@@ -1,4 +1,5 @@
 import { DatabaseService } from './database';
+import { SettingsService } from './settings-service';
 import { appFetch } from '../utils/fetch-helper';
 import type { LocalAsset } from '../types';
 
@@ -288,14 +289,14 @@ export class FaviconService extends EventTarget {
    */
   private static async isLinkdingServedFavicon(faviconUrl: string): Promise<boolean> {
     try {
-      const settings = await DatabaseService.getSettings();
+      const settings = SettingsService.getCurrentSettings();
       if (!settings?.linkding_url) {
         return false;
       }
-      
+
       const linkdingBaseUrl = new URL(settings.linkding_url);
       const faviconUrlObj = new URL(faviconUrl);
-      
+
       // Check if the favicon URL is from the same origin as the Linkding server
       return faviconUrlObj.origin === linkdingBaseUrl.origin;
     } catch (error) {

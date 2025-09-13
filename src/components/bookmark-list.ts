@@ -60,7 +60,7 @@ export class BookmarkList extends LitElement {
   // Callback props (simplified - no more sync callbacks needed)
   @property({ type: Function }) onBookmarkSelect: (bookmarkId: number) => void = () => {};
   @property({ type: Function }) onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void = () => {};
-  @property({ type: Function }) onVisibilityChanged: (visibleBookmarkIds: number[]) => void = () => {};
+  @property({ type: Function }) onVisibilityChanged: (visibleBookmarks: Array<{ id: number; favicon_url?: string }>) => void = () => {};
   @property({ type: Function }) onPageChange: (page: number) => void = () => {};
   @property({ type: Function }) onFilterChange: (filter: BookmarkFilter) => void = () => {};
 
@@ -483,26 +483,29 @@ export class BookmarkList extends LitElement {
   #setupIntersectionObserver() {
     this.#intersectionObserver = new IntersectionObserver(
       (entries) => {
-        const visibleBookmarkIds: number[] = [];
-        
+        const visibleBookmarks: Array<{ id: number; favicon_url?: string }> = [];
+
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const bookmarkId = parseInt(entry.target.getAttribute('data-bookmark-id') || '0');
             if (bookmarkId > 0) {
-              visibleBookmarkIds.push(bookmarkId);
-              
-              // Find the bookmark and request favicon loading if needed
+              // Find the bookmark data to include favicon_url
               const bookmark = this.bookmarks.find(b => b.id === bookmarkId);
-              if (bookmark?.favicon_url && !this.faviconCache.has(bookmarkId)) {
-                this.onFaviconLoadRequested(bookmarkId, bookmark.favicon_url);
+              if (bookmark) {
+                visibleBookmarks.push({ id: bookmark.id, favicon_url: bookmark.favicon_url });
+
+                // Request favicon loading if needed (keep existing direct loading)
+                if (bookmark.favicon_url && !this.faviconCache.has(bookmarkId)) {
+                  this.onFaviconLoadRequested(bookmarkId, bookmark.favicon_url);
+                }
               }
             }
           }
         });
-        
-        // Notify parent of visibility changes
-        if (visibleBookmarkIds.length > 0) {
-          this.onVisibilityChanged(visibleBookmarkIds);
+
+        // Notify parent of visibility changes with bookmark data
+        if (visibleBookmarks.length > 0) {
+          this.onVisibilityChanged(visibleBookmarks);
         }
       },
       {

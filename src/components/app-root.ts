@@ -1,11 +1,11 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { DatabaseService } from '../services/database';
+import { SettingsService } from '../services/settings-service';
 import { ThemeService } from '../services/theme-service';
 import { DebugService } from '../services/debug-service';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { configureFetchHelper } from '../utils/fetch-helper';
 import { getBasePath } from '../utils/base-path';
-import type { AppSettings } from '../types';
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
 import '@material/web/icon/icon.js';
@@ -17,10 +17,24 @@ import './debug-view';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
+  // Reactive query controller for settings data
+  #settingsQuery = new ReactiveQueryController(
+    this,
+    () => SettingsService.getSettings()
+  );
+
   @state() private currentView: 'bookmarks' | 'reader' | 'settings' | 'debug' | 'not-found' = 'bookmarks';
   @state() private selectedBookmarkId: number | null = null;
-  @state() private settings: AppSettings | null = null;
   @state() private isLoading = true;
+
+  // Getter methods for reactive data
+  get settings() {
+    return this.#settingsQuery.value ?? null;
+  }
+
+  get isSettingsLoading() {
+    return this.#settingsQuery.loading;
+  }
 
   static override styles = css`
     :host {
@@ -199,7 +213,7 @@ export class AppRoot extends LitElement {
 
   override async connectedCallback() {
     super.connectedCallback();
-    await this.loadSettings();
+    this.#initializeApp();
     this.setupRouting();
     this.isLoading = false;
   }
@@ -207,34 +221,53 @@ export class AppRoot extends LitElement {
   override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('popstate', this.handlePopState);
+    SettingsService.cleanup();
   }
 
-  private async loadSettings() {
+  override updated(changedProperties: Map<string | number | symbol, unknown>) {
+    super.updated(changedProperties);
+
+    // Configure services when settings are loaded reactively
+    if (!this.#settingsQuery.loading && this.settings) {
+      this.#configureServicesFromSettings();
+    }
+  }
+
+  #initializeApp() {
     try {
-      this.settings = await DatabaseService.getSettings() || null;
-      
+      // Initialize services
+      ThemeService.init();
+      DebugService.initialize();
+      SettingsService.initialize();
+
+      // The reactive query controller will handle settings loading,
+      // and we'll configure services when settings become available
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+      DebugService.log('error', 'app', 'initializeApp', 'Failed to initialize app', undefined, error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  #configureServicesFromSettings() {
+    try {
       // Configure fetch helper with Linkding URL if available
       if (this.settings?.linkding_url) {
         configureFetchHelper(this.settings.linkding_url);
       }
-      
-      // Initialize services
-      ThemeService.init();
-      await DebugService.initialize();
-      
+
       // Apply theme from settings if available
       if (this.settings?.theme_mode) {
         ThemeService.setThemeFromSettings(this.settings.theme_mode);
       }
-      
+
       // Set debug mode if enabled
       if (this.settings?.debug_mode) {
         DebugService.setDebugMode(true);
         DebugService.logAppEvent('startup', { settings: this.settings });
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
-      DebugService.log('error', 'app', 'loadSettings', 'Failed to load settings', undefined, error instanceof Error ? error : new Error(String(error)));
+      console.error('Failed to configure services from settings:', error);
+      DebugService.log('error', 'app', 'configureServicesFromSettings', 'Failed to configure services from settings', undefined, error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -369,27 +402,28 @@ export class AppRoot extends LitElement {
   }
 
   private async handleSettingsSave(e: CustomEvent) {
-    this.settings = e.detail.settings;
-    
+    // The reactive query controller will automatically update with new settings
+    const newSettings = e.detail.settings;
+
     // Configure fetch helper with updated Linkding URL
-    if (this.settings?.linkding_url) {
-      configureFetchHelper(this.settings.linkding_url);
+    if (newSettings?.linkding_url) {
+      configureFetchHelper(newSettings.linkding_url);
     }
-    
+
     // Apply theme from updated settings
-    if (this.settings?.theme_mode) {
-      ThemeService.setThemeFromSettings(this.settings.theme_mode);
+    if (newSettings?.theme_mode) {
+      ThemeService.setThemeFromSettings(newSettings.theme_mode);
     }
-    
+
     // Update debug mode
-    DebugService.setDebugMode(this.settings?.debug_mode ?? false);
-    if (this.settings?.debug_mode) {
+    DebugService.setDebugMode(newSettings?.debug_mode ?? false);
+    if (newSettings?.debug_mode) {
       DebugService.logAppEvent('settingsUpdated', { debug_mode: true });
     }
-    
+
     this.currentView = 'bookmarks';
     this.updateUrl('bookmarks');
-    
+
     // Wait for the bookmark list to render, then trigger sync
     await this.updateComplete;
     const bookmarkList = this.shadowRoot?.querySelector('bookmark-list-container');
@@ -454,7 +488,7 @@ export class AppRoot extends LitElement {
   }
 
   private renderContent() {
-    if (this.isLoading) {
+    if (this.isLoading || this.isSettingsLoading) {
       return html`
         <div class="loading-container">
           <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>

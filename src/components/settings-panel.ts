@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
+import { SettingsService } from '../services/settings-service';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
@@ -22,7 +23,7 @@ export class SettingsPanel extends LitElement {
   // Reactive query controller for settings data
   #settingsQuery = new ReactiveQueryController(
     this,
-    () => DatabaseService.getSettings()
+    () => SettingsService.getSettings()
   );
 
   @state() private formData: Partial<AppSettings> = {};
@@ -334,7 +335,7 @@ export class SettingsPanel extends LitElement {
         debug_mode: this.formData.debug_mode ?? false
       };
 
-      await DatabaseService.saveSettings(settings);
+      await SettingsService.saveSettings(settings);
       
       // Apply theme setting immediately
       if (settings.theme_mode) {

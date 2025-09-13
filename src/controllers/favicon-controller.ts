@@ -1,5 +1,4 @@
 import type { ReactiveController, ReactiveControllerHost } from 'lit';
-import { DatabaseService } from '../services/database';
 import { FaviconService } from '../services/favicon-service';
 
 export interface FaviconState {
@@ -224,25 +223,17 @@ export class FaviconController implements ReactiveController {
 
   /**
    * Handle visibility changes from external observers
-   * Controller fetches bookmark data itself to avoid coupling
+   * Accepts bookmark data to avoid database coupling
    */
-  async handleVisibilityChanged(visibleBookmarkIds: number[]): Promise<void> {
+  async handleVisibilityChanged(visibleBookmarks: Array<{ id: number; favicon_url?: string }>): Promise<void> {
     if (!this.faviconService) return;
 
     const faviconCache = this.faviconService.getAllCachedFaviconUrls();
-    
-    // Get bookmark data directly from database for visible bookmarks
-    for (const bookmarkId of visibleBookmarkIds) {
-      if (!faviconCache.has(bookmarkId)) {
-        try {
-          const bookmark = await DatabaseService.getBookmark(bookmarkId);
-          
-          if (bookmark?.favicon_url) {
-            this.loadFavicon(bookmarkId, bookmark.favicon_url);
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch bookmark ${bookmarkId} for favicon loading:`, error);
-        }
+
+    // Load favicons for visible bookmarks that have favicon URLs and aren't cached
+    for (const bookmark of visibleBookmarks) {
+      if (!faviconCache.has(bookmark.id) && bookmark.favicon_url) {
+        this.loadFavicon(bookmark.id, bookmark.favicon_url);
       }
     }
   }
