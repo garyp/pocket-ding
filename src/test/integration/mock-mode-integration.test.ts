@@ -41,7 +41,7 @@ describe('Mock Mode Integration', () => {
     document.body.appendChild(settingsPanel);
     
     // Wait for component to be ready
-    await new Promise(resolve => setTimeout(resolve, 100));
+    vi.advanceTimersByTime(100);
   });
 
   afterEach(() => {

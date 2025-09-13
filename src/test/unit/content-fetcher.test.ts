@@ -278,9 +278,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should return available content sources with assets', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, mockAssets);
 
       expect(sources).toHaveLength(3); // 2 assets + Live URL
       expect(sources[0]).toEqual({
@@ -300,9 +298,7 @@ describe('ContentFetcher', () => {
     });
 
     it('should return empty sources when no assets available', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
-
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, []);
 
       expect(sources).toHaveLength(1); // No assets, but still have Live URL
       expect(sources[0]).toEqual({
@@ -325,11 +321,9 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:30:00Z',
       };
 
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, [assetWithoutName]);
 
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
-
-      expect(sources).toHaveLength(2); // Asset + Readability
+      expect(sources).toHaveLength(2); // Asset + Live URL
       expect(sources[0]?.label).toBe('Asset 3');
     });
   });
@@ -554,9 +548,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should include on-demand label for archived bookmark assets', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark, mockUncachedAssets);
 
       expect(sources).toHaveLength(3); // 2 assets + Live URL
       expect(sources[0]).toEqual({
@@ -582,21 +574,34 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:00:00Z'
       }));
 
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark, cachedAssets);
 
       expect(sources[0]?.label).toBe('Page Snapshot'); // No (on-demand) suffix
       expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
     });
 
     it('should not add on-demand label for unarchived bookmarks', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, mockUncachedAssets);
 
       expect(sources[0]?.label).toBe('Page Snapshot'); // No (on-demand) suffix
       expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
+    });
+
+    it('should process only the assets provided', async () => {
+      const providedAssets = [mockUncachedAssets[0]!]; // Only provide first asset
+
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, providedAssets);
+
+      expect(sources).toHaveLength(2); // 1 provided asset + Live URL
+      expect(sources[0]).toEqual({
+        type: 'asset',
+        label: 'Page Snapshot',
+        assetId: 1,
+      });
+      expect(sources[1]).toEqual({
+        type: 'url',
+        label: 'Live URL',
+      });
     });
   });
 
