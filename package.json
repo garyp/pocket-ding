@@ -33,6 +33,7 @@
   "dependencies": {
     "@fontsource/material-symbols-outlined": "^5.2.16",
     "@lit/reactive-element": "^2.1.0",
+    "@lit/task": "^1.0.3",
     "@material/web": "^2.3.0",
     "@mozilla/readability": "^0.6.0",
     "dexie": "^4.0.11",

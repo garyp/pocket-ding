@@ -30,10 +30,11 @@ export class BookmarkList extends LitElement {
     () => DatabaseService.getAllFilterCounts()
   );
 
-  // Assets query - uses pagination state to determine which bookmarks to check
+  // Assets query - uses bookmarks data to determine which bookmarks to check
   #assetsQuery = new ReactiveQueryController(
     this,
-    () => DatabaseService.getBookmarksWithAssetCounts(this.#getCurrentBookmarkIds())
+    (bookmarks: LocalBookmark[]) => DatabaseService.getBookmarksWithAssetCounts(bookmarks.map(b => b.id)),
+    (): [LocalBookmark[]] => [this.#bookmarksQuery.value || []]
   );
 
   // Remove old data props that are now handled by reactive controllers
@@ -588,11 +589,7 @@ export class BookmarkList extends LitElement {
           this.paginationState.pageSize
         )
       );
-      
-      // Also update assets query when pagination changes since bookmarks will change
-      this.#assetsQuery.updateQuery(() => 
-        DatabaseService.getBookmarksWithAssetCounts(this.#getCurrentBookmarkIds())
-      );
+      // Assets query will automatically update when bookmarks change via dependency function
     }
     
     // Restore scroll position after the first render
@@ -621,14 +618,6 @@ export class BookmarkList extends LitElement {
     });
   }
 
-  /**
-   * Get current bookmark IDs for assets query
-   * Uses bookmarks data without creating circular dependency
-   */
-  #getCurrentBookmarkIds(): number[] {
-    const currentBookmarks = this.#bookmarksQuery.value || [];
-    return currentBookmarks.map(bookmark => bookmark.id);
-  }
 
   get filteredBookmarks() {
     if (this.paginationState.filter === 'unread') {

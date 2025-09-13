@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { Task, TaskStatus } from '@lit/task';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DatabaseService } from '../services/database';
 import { ContentFetcher } from '../services/content-fetcher';
@@ -44,6 +45,22 @@ export class BookmarkReader extends LitElement {
     (): [number] => [this.bookmarkId]
   );
 
+
+
+  // Task for loading content based on selected source
+  #contentTask = new Task(this, {
+    task: async ([bookmark, source]: [LocalBookmark | undefined, ContentSourceOption | null]) => {
+      if (!bookmark || !source) return null;
+      
+      return await ContentFetcher.fetchBookmarkContent(
+        bookmark, 
+        source.type, 
+        source.assetId
+      );
+    },
+    args: (): [LocalBookmark | undefined, ContentSourceOption | null] => [this.bookmark, this.selectedContentSource]
+  });
+
   // Getter methods for reactive data
   get bookmark(): LocalBookmark | undefined {
     return this.#bookmarkQuery.value;
@@ -57,21 +74,50 @@ export class BookmarkReader extends LitElement {
     return this.#assetsQuery.value || [];
   }
 
+  get availableContentSources(): ContentSourceOption[] {
+    if (!this.bookmark) return [];
+    return ContentFetcher.getAvailableContentSources(this.bookmark, this.assets) || [];
+  }
+
   get isDataLoading(): boolean {
     return this.#bookmarkQuery.loading || this.#readProgressQuery.loading || this.#assetsQuery.loading;
   }
 
-  #initialized = false;
+  get defaultContentSource(): ContentSourceOption | null {
+    if (!this.availableContentSources.length) return null;
+    
+    // Auto-select default content source using existing logic
+    const assetSources = this.availableContentSources.filter(source => source.type === 'asset');
+    if (assetSources.length > 0) {
+      return assetSources[0] ?? null;
+    }
+    return this.availableContentSources.find(s => s.type === 'url') ?? null;
+  }
+
+  get selectedContentSource(): ContentSourceOption | null {
+    // Return manual selection if user has chosen one, otherwise use default
+    return this.manuallySelectedSource || this.defaultContentSource;
+  }
+
+  get contentResult(): ContentResult | null {
+    return this.#contentTask.value || null;
+  }
+
+  get isLoadingContent(): boolean {
+    return this.#contentTask.status === TaskStatus.PENDING;
+  }
+
+  get contentSourceType(): 'saved' | 'live' {
+    const source = this.selectedContentSource;
+    return source?.type === 'asset' ? 'saved' : 'live';
+  }
+
 
 
   @state() private readingMode: 'original' | 'readability' = 'readability';
   @state() private readProgress = 0;
   @state() private scrollPosition = 0;
-  @state() private selectedContentSource: ContentSourceOption | null = null;
-  @state() private availableContentSources: ContentSourceOption[] = [];
-  @state() private isLoadingContent = false;
-  @state() private contentResult: ContentResult | null = null;
-  @state() private contentSourceType: 'saved' | 'live' = 'saved';
+  @state() private manuallySelectedSource: ContentSourceOption | null = null;
   @state() private darkModeOverride: 'light' | 'dark' | null = null;
   @state() private systemTheme: 'light' | 'dark' = 'light';
   @state() private showInfoModal = false;
@@ -81,6 +127,7 @@ export class BookmarkReader extends LitElement {
   private readMarkTimeout: ReturnType<typeof setTimeout> | null = null;
   private hasBeenMarkedAsRead = false;
   private secureIframe: any = null;
+  #themeChangeListener: ((theme: 'light' | 'dark') => void) | null = null;
 
   static override styles = css`
     :host {
@@ -558,19 +605,16 @@ export class BookmarkReader extends LitElement {
   override async connectedCallback() {
     super.connectedCallback();
     
-    // Listen for system theme changes
-    ThemeService.addThemeChangeListener((theme) => {
+    // Create a theme change listener function and store reference for cleanup
+    this.#themeChangeListener = (theme: 'light' | 'dark') => {
       this.systemTheme = theme;
       this.updateReaderTheme();
-    });
+    };
+    
+    // Listen for system theme changes
+    ThemeService.addThemeChangeListener(this.#themeChangeListener);
   }
 
-  override willUpdate(changedProperties: Map<string, any>) {
-    // Reset initialization when bookmark ID changes
-    if (changedProperties.has('bookmarkId') && this.#initialized) {
-      this.#initialized = false;
-    }
-  }
 
   override updated(changedProperties: Map<string, any>) {
     // Get reference to secure iframe after render
@@ -578,11 +622,79 @@ export class BookmarkReader extends LitElement {
       this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
     }
     
+    // Reset manual selection if bookmark changed
+    if (changedProperties.has('bookmarkId')) {
+      this.manuallySelectedSource = null;
+    }
+    
+    // Initialize state from reactive read progress data when available
+    this.#initializeFromProgress();
+    
+    // Handle content-dependent logic
+    this.#handleContentChanges(changedProperties);
+    
     // Ensure select value is set after rendering
-    if (changedProperties.has('availableContentSources') || 
-        changedProperties.has('selectedContentSource') || 
-        changedProperties.has('contentSourceType')) {
-      this.updateSelectValue();
+    this.updateSelectValue();
+  }
+
+  /**
+   * Initialize state from reactive read progress data when available
+   */
+  #initializeFromProgress() {
+    // Only initialize once we have bookmark data and no manual user selection is active
+    // Skip initialization if progress values have been manually set (not at defaults)
+    if (!this.bookmark || this.manuallySelectedSource) {
+      return;
+    }
+    
+    // Don't override if progress values have been manually modified from defaults
+    const hasManualProgress = this.readProgress !== 0 || this.scrollPosition !== 0;
+    if (hasManualProgress) {
+      return;
+    }
+
+    // Initialize state from reactive read progress data
+    const progressData = this.readProgressData;
+    if (progressData) {
+      this.readProgress = progressData.progress;
+      this.scrollPosition = progressData.scroll_position;
+      this.readingMode = progressData.reading_mode;
+      this.darkModeOverride = progressData.dark_mode_override || null;
+    } else {
+      // Reset to defaults for new bookmarks with no saved progress
+      this.readProgress = 0;
+      this.scrollPosition = 0;
+      this.readingMode = this.bookmark.reading_mode || 'readability';
+      this.darkModeOverride = null;
+    }
+
+    // Update theme immediately after setting dark mode override
+    this.updateReaderTheme();
+    
+    // Set up read marking and load content when we have a selected content source
+    if (this.selectedContentSource) {
+      this.setupReadMarking();
+      
+      // Load content automatically on first initialization
+      // Only if we don't already have content loaded (to avoid reloading)
+      if (!this.contentResult) {
+        this.#contentTask.run();
+      }
+    }
+  }
+
+  /**
+   * Handle content-dependent logic when content changes
+   */
+  #handleContentChanges(_changedProperties: Map<string, any>) {
+    const content = this.contentResult;
+    if (content) {
+      // Switch to original mode if readability is not available but user is in readability mode
+      if (!content.readability_content && this.readingMode === 'readability') {
+        this.readingMode = 'original';
+      }
+      
+      // Content successfully loaded
     }
   }
 
@@ -591,57 +703,16 @@ export class BookmarkReader extends LitElement {
     this.saveProgress();
     this.cleanupTimeouts();
     
-    // Remove theme change listener
-    ThemeService.removeThemeChangeListener((theme) => {
-      this.systemTheme = theme;
-      this.updateReaderTheme();
-    });
+    // Remove theme change listener using stored reference
+    if (this.#themeChangeListener) {
+      ThemeService.removeThemeChangeListener(this.#themeChangeListener);
+      this.#themeChangeListener = null;
+    }
   }
 
   // loadBookmark method removed - replaced by reactive queries
 
-  private async loadContent() {
-    if (!this.bookmark || !this.selectedContentSource) return;
-
-    try {
-      this.isLoadingContent = true;
-      
-      // Fetch content using the selected source
-      const result = await ContentFetcher.fetchBookmarkContent(
-        this.bookmark, 
-        this.selectedContentSource.type, 
-        this.selectedContentSource.assetId
-      );
-      
-      // Store the content result for template rendering
-      this.contentResult = result;
-      
-      // Switch to original mode if readability is not available but user is in readability mode
-      if (!result.readability_content && this.readingMode === 'readability') {
-        this.readingMode = 'original';
-      }
-      
-      console.log(`Loaded content from source: ${result.source}${this.selectedContentSource.assetId ? ` (asset ${this.selectedContentSource.assetId})` : ''}`);
-    } catch (error) {
-      console.error('Failed to load content:', error);
-      // Create a generic error result for template rendering
-      this.contentResult = {
-        source: 'asset',
-        content_type: 'error',
-        error: {
-          type: 'server_error',
-          message: 'Failed to load content from the selected source.',
-          suggestions: ['Try selecting a different content source', 'Read online']
-        }
-      };
-      // Switch to original mode if readability is not available but user is in readability mode
-      if (!this.contentResult?.readability_content && this.readingMode === 'readability') {
-        this.readingMode = 'original';
-      }
-    } finally {
-      this.isLoadingContent = false;
-    }
-  }
+  // Content loading is now handled by the #contentTask
 
 
 
@@ -673,6 +744,7 @@ export class BookmarkReader extends LitElement {
     
     this.scheduleProgressSave();
   }
+
 
   private handleIframeContentLoaded = (_event: CustomEvent) => {
     // Content loaded in iframe, no additional action needed
@@ -920,68 +992,7 @@ export class BookmarkReader extends LitElement {
 
 
 
-  /**
-   * Initialize component data when all reactive queries are loaded
-   */
-  async #initializeComponent() {
-    if (!this.bookmark) return;
-    try {
-      // Update local state from reactive read progress data
-      const progressData = this.readProgressData;
-      if (progressData) {
-        this.readProgress = progressData.progress;
-        this.scrollPosition = progressData.scroll_position;
-        this.readingMode = progressData.reading_mode;
-        this.darkModeOverride = progressData.dark_mode_override || null;
-      } else {
-        // Reset to defaults for new bookmarks with no saved progress
-        this.readProgress = 0;
-        this.scrollPosition = 0;
-        this.readingMode = this.bookmark.reading_mode || 'readability';
-        this.darkModeOverride = null;
-      }
 
-      // Load available content sources from reactive assets query
-      await this.#loadAvailableContentSources();
-      
-      // Load content
-      await this.loadContent();
-
-      // Set up read marking and theme
-      this.setupReadMarking();
-      this.updateReaderTheme();
-      
-      // Ensure theme is applied after component update
-      this.requestUpdate();
-    } catch (error) {
-      console.error('Failed to initialize component:', error);
-    }
-  }
-
-  /**
-   * Load available content sources from reactive assets data
-   */
-  async #loadAvailableContentSources() {
-    if (!this.bookmark) return;
-    
-    this.availableContentSources = await ContentFetcher.getAvailableContentSources(this.bookmark);
-    
-    // Determine content source type (prefer saved artifacts if available)
-    const assetSources = this.availableContentSources.filter(source => source.type === 'asset');
-    this.contentSourceType = assetSources.length > 0 ? 'saved' : 'live';
-    
-    // Set default content source - prefer first asset or URL
-    if (assetSources.length > 0) {
-      this.selectedContentSource = assetSources[0] || null;
-    } else {
-      this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
-    }
-    
-    // Trigger re-render and then update select value
-    this.requestUpdate();
-    await this.updateComplete;
-    this.updateSelectValue();
-  }
 
   private cleanupTimeouts() {
     if (this.progressSaveTimeout) {
@@ -1006,17 +1017,16 @@ export class BookmarkReader extends LitElement {
       // Handle type-based selection (for single asset case)
       const selectedType = selectedValue as 'saved' | 'live';
       if (selectedType !== this.contentSourceType) {
-        this.contentSourceType = selectedType;
-        
-        // Select appropriate content source based on type
+        // Select appropriate content source based on type  
         if (selectedType === 'saved') {
-          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'asset') || null;
+          this.manuallySelectedSource = this.availableContentSources.find(source => source.type === 'asset') || null;
         } else {
-          this.selectedContentSource = this.availableContentSources.find(source => source.type === 'url') || null;
+          this.manuallySelectedSource = this.availableContentSources.find(source => source.type === 'url') || null;
         }
         
         if (this.selectedContentSource) {
-          await this.loadContent();
+          // Manually trigger Task since it doesn't automatically detect computed property changes
+          this.#contentTask.run();
           this.scrollPosition = 0;
           this.saveProgress();
         }
@@ -1028,19 +1038,18 @@ export class BookmarkReader extends LitElement {
       
       if (sourceKey === 'live') {
         newSource = this.availableContentSources.find(source => source.type === 'url') || null;
-        this.contentSourceType = 'live';
       } else {
         // Parse asset ID from value like "asset-123"
         const assetId = parseInt(sourceKey.replace('asset-', ''));
         newSource = this.availableContentSources.find(source => 
           source.type === 'asset' && source.assetId === assetId
         ) || null;
-        this.contentSourceType = 'saved';
       }
       
       if (newSource && newSource !== this.selectedContentSource) {
-        this.selectedContentSource = newSource;
-        await this.loadContent();
+        this.manuallySelectedSource = newSource;
+        // Manually trigger Task since it doesn't automatically detect computed property changes
+        this.#contentTask.run();
         this.scrollPosition = 0;
         this.saveProgress();
       }
@@ -1159,6 +1168,7 @@ export class BookmarkReader extends LitElement {
       const content = this.readingMode === 'original' 
         ? this.contentResult.html_content
         : this.contentResult.readability_content;
+
 
       if (!content) {
         return html`
@@ -1374,11 +1384,6 @@ export class BookmarkReader extends LitElement {
       `;
     }
 
-    // Initialize component data once all reactive queries are loaded
-    if (this.bookmark && !this.isDataLoading && !this.#initialized) {
-      this.#initialized = true;
-      queueMicrotask(() => this.#initializeComponent());
-    }
 
     return html`
       <div class="reader-container">
