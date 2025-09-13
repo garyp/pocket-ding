@@ -1,7 +1,19 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { waitFor } from '@testing-library/dom';
 import '../setup';
 import { BookmarkList } from '../../components/bookmark-list';
 import type { LocalBookmark } from '../../types';
+
+// Mock Database Service to provide test data
+vi.mock('../../services/database', () => ({
+  DatabaseService: {
+    getBookmarksPaginated: vi.fn(),
+    getAllFilterCounts: vi.fn(),
+    getBookmarksWithAssetCounts: vi.fn(),
+  },
+}));
+
+import { DatabaseService } from '../../services/database';
 
 // Store original navigator.onLine value
 const originalOnLine = navigator.onLine;
@@ -66,8 +78,21 @@ const mockBookmarkWithEmptyPreview: LocalBookmark = {
 describe('BookmarkList - Preview Images', () => {
   let element: BookmarkList;
 
+  // Helper to wait for bookmarks to render
+  const waitForBookmarksToRender = async () => {
+    await waitFor(() => {
+      const bookmarks = element.shadowRoot?.querySelectorAll('[data-bookmark-id]');
+      return bookmarks && bookmarks.length > 0;
+    }, { timeout: 3000 });
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Setup default mock data
+    vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([]);
+    vi.mocked(DatabaseService.getAllFilterCounts).mockResolvedValue({ all: 0, unread: 0, archived: 0 });
+    vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
   });
 
   afterEach(() => {
@@ -184,16 +209,25 @@ describe('BookmarkList - Preview Images', () => {
     });
 
     it('should display preview image when online and preview_image_url is available', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
-      
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
+
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const previewImage = element.shadowRoot?.querySelector('.bookmark-preview') as HTMLImageElement;
       expect(previewImage).toBeTruthy();
       expect(previewImage.src).toBe('https://example.com/preview.jpg');
@@ -203,32 +237,50 @@ describe('BookmarkList - Preview Images', () => {
     });
 
     it('should add bookmark-with-preview class when preview image is shown', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const bookmarkContent = element.shadowRoot?.querySelector('.bookmark-content');
       expect(bookmarkContent).toBeTruthy();
       expect(bookmarkContent?.classList.contains('bookmark-with-preview')).toBe(true);
     });
 
     it('should wrap content in bookmark-text-content div when preview is shown', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const textContent = element.shadowRoot?.querySelector('.bookmark-text-content');
       expect(textContent).toBeTruthy();
       
@@ -238,16 +290,25 @@ describe('BookmarkList - Preview Images', () => {
     });
 
     it('should not display preview image when preview_image_url is empty', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithoutPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithoutPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const previewImage = element.shadowRoot?.querySelector('.bookmark-preview');
       expect(previewImage).toBeFalsy();
       
@@ -256,16 +317,25 @@ describe('BookmarkList - Preview Images', () => {
     });
 
     it('should not display preview image when preview_image_url is whitespace only', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithEmptyPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithEmptyPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const previewImage = element.shadowRoot?.querySelector('.bookmark-preview');
       expect(previewImage).toBeFalsy();
       
@@ -274,16 +344,25 @@ describe('BookmarkList - Preview Images', () => {
     });
 
     it('should display both preview image and regular content layout together', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview, mockBookmarkWithoutPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview, mockBookmarkWithoutPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 2,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       // First bookmark should have preview
       const firstBookmarkContent = element.shadowRoot?.querySelector('.bookmark-card:first-child .bookmark-content');
       expect(firstBookmarkContent?.classList.contains('bookmark-with-preview')).toBe(true);
@@ -311,16 +390,25 @@ describe('BookmarkList - Preview Images', () => {
     });
 
     it('should not display preview image when offline even with valid preview_image_url', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const previewImage = element.shadowRoot?.querySelector('.bookmark-preview');
       expect(previewImage).toBeFalsy();
       
@@ -329,31 +417,49 @@ describe('BookmarkList - Preview Images', () => {
     });
 
     it('should not add bookmark-with-preview class when offline', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const bookmarkContent = element.shadowRoot?.querySelector('.bookmark-content');
       expect(bookmarkContent?.classList.contains('bookmark-with-preview')).toBe(false);
     });
 
     it('should render normal layout when offline', async () => {
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       // Should render title directly in content, not wrapped in bookmark-text-content
       const title = element.shadowRoot?.querySelector('.bookmark-content .bookmark-title');
       expect(title).toBeTruthy();
@@ -374,12 +480,20 @@ describe('BookmarkList - Preview Images', () => {
         value: false
       });
 
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
@@ -407,16 +521,25 @@ describe('BookmarkList - Preview Images', () => {
         value: true
       });
 
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       // Should show preview when online
       let previewImage = element.shadowRoot?.querySelector('.bookmark-preview');
       expect(previewImage).toBeTruthy();
@@ -439,16 +562,25 @@ describe('BookmarkList - Preview Images', () => {
         value: false
       });
 
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       // Should not have preview class when offline
       let bookmarkContent = element.shadowRoot?.querySelector('.bookmark-content');
       expect(bookmarkContent?.classList.contains('bookmark-with-preview')).toBe(false);
@@ -481,16 +613,25 @@ describe('BookmarkList - Preview Images', () => {
         value: true
       });
 
+      // Setup mock data for this test
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
       
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       const previewImage = element.shadowRoot?.querySelector('.bookmark-preview') as HTMLImageElement;
       expect(previewImage).toBeTruthy();
       
@@ -512,29 +653,63 @@ describe('BookmarkList - Preview Images', () => {
         value: true
       });
 
+      // First test: verify initial image loads correctly
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([mockBookmarkWithPreview]);
+      vi.mocked(DatabaseService.getBookmarksWithAssetCounts).mockResolvedValue(new Map());
+
       element = new BookmarkList();
-      element.bookmarks = [mockBookmarkWithPreview];
-      element.isLoading = false;
-      element.bookmarksWithAssets = new Set();
       element.faviconCache = new Map();
       element.syncedBookmarkIds = new Set();
-      
+      element.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
+
       document.body.appendChild(element);
       await element.updateComplete;
-      
+      await waitForBookmarksToRender();
+
       let previewImage = element.shadowRoot?.querySelector('.bookmark-preview') as HTMLImageElement;
       expect(previewImage.src).toBe('https://example.com/preview.jpg');
-      
-      // Update bookmark with new preview URL
+
+      // Clean up first element
+      element.remove();
+
+      // Second test: verify component with different data shows different image
       const updatedBookmark = {
         ...mockBookmarkWithPreview,
         preview_image_url: 'https://example.com/new-preview.jpg'
       };
-      element.bookmarks = [updatedBookmark];
-      await element.updateComplete;
-      
-      previewImage = element.shadowRoot?.querySelector('.bookmark-preview') as HTMLImageElement;
-      expect(previewImage.src).toBe('https://example.com/new-preview.jpg');
+      vi.mocked(DatabaseService.getBookmarksPaginated).mockResolvedValue([updatedBookmark]);
+
+      const newElement = new BookmarkList();
+      newElement.faviconCache = new Map();
+      newElement.syncedBookmarkIds = new Set();
+      newElement.paginationState = {
+        currentPage: 1,
+        pageSize: 25,
+        totalCount: 1,
+        totalPages: 1,
+        filter: 'all'
+      };
+
+      document.body.appendChild(newElement);
+      await newElement.updateComplete;
+
+      // Wait for bookmarks to render with new element
+      await waitFor(() => {
+        const bookmarks = newElement.shadowRoot?.querySelectorAll('[data-bookmark-id]');
+        return bookmarks && bookmarks.length > 0;
+      }, { timeout: 3000 });
+
+      const newPreviewImage = newElement.shadowRoot?.querySelector('.bookmark-preview') as HTMLImageElement;
+      expect(newPreviewImage.src).toBe('https://example.com/new-preview.jpg');
+
+      // Clean up second element
+      newElement.remove();
     });
   });
 });
