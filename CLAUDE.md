@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI agents (including Claude, GPT, etc.) when working with code in this repository.
 
 ## Project Overview
 
@@ -31,25 +31,30 @@ Pocket Ding is a Progressive Web App (PWA) that provides an offline reading expe
 
 **Components** (`src/components/`):
 - `app-root.ts`: Main application shell with routing between views
-- `bookmark-list.ts`: Displays and filters bookmarks with sync functionality
+- `bookmark-list.ts`: Displays and filters bookmarks with reactive database queries
 - `bookmark-reader.ts`: Reading interface with original/readability modes
 - `settings-panel.ts`: Configuration UI for Linkding API connection
 
 **Services** (`src/services/`):
 - `linkding-api.ts`: Handles API communication with Linkding server
-- `database.ts`: Local storage operations using Dexie/IndexedDB
+- `database.ts`: Local storage operations using Dexie/IndexedDB with reactive queries
 - `sync-service.ts`: Synchronizes bookmarks between Linkding and local storage
 - `content-fetcher.ts`: Processes article content with Readability
+
+**Controllers** (`src/controllers/`):
+- `reactive-query-controller.ts`: Manages reactive database queries with automatic UI updates
+- `state-controller.ts`: Handles persistent component state
 
 **Data Flow**:
 1. Settings configured → API connection established
 2. Sync service fetches bookmarks from Linkding
-3. Content fetcher processes articles for offline reading
+3. Reactive queries automatically update UI when data changes
 4. Local database stores bookmarks and reading progress
-5. Components display cached content with real-time sync
+5. Components display cached content with real-time reactivity
 
 ### Key Features
 - Offline reading with content caching
+- Reactive database queries with automatic UI updates
 - Reading progress tracking with scroll position
 - Dual reading modes (original HTML vs. Readability processed)
 - Background sync with configurable intervals
@@ -65,15 +70,45 @@ Tests use Vitest with Happy DOM environment. The setup includes:
 
 All tests should pass before considering features complete. The CI expects zero test failures.
 
-## Development Notes
+## Code Style Guidelines
 
-- Uses Material Web Components for UI with Material Design 3 styling
-- Implements strict TypeScript with unused parameter/variable checking
-- Service worker registration for PWA functionality
-- CSS custom properties for theming consistency
-- Web Components follow Lit's reactive property patterns
+### Private Class Members
+**IMPORTANT**: Use JavaScript `#` syntax for private class variables and methods instead of TypeScript `private` syntax.
 
-### Code Style
+**❌ Bad - TypeScript private syntax:**
+```typescript
+class MyComponent extends LitElement {
+  private myProperty: string = '';
+  private myMethod() { /* ... */ }
+}
+```
+
+**✅ Good - JavaScript # syntax:**
+```typescript
+class MyComponent extends LitElement {
+  #myProperty: string = '';
+  #myMethod() { /* ... */ }
+}
+```
+
+### Reactive Query Controller Naming
+**IMPORTANT**: When creating instances of `ReactiveQueryController`, use the suffix `Query` instead of `Controller` for clarity.
+
+**❌ Bad - Controller suffix:**
+```typescript
+class BookmarkList extends LitElement {
+  private bookmarksController = new ReactiveQueryController(/*...*/);
+}
+```
+
+**✅ Good - Query suffix:**
+```typescript
+class BookmarkList extends LitElement {
+  #bookmarksQuery = new ReactiveQueryController(/*...*/);
+}
+```
+
+### Other Style Rules
 
 - **Interface Naming**: Do NOT use "I" prefix for interfaces. Name interfaces directly (e.g., `LinkdingAPI` not `ILinkdingAPI`)
 - **Event Handlers**: Use arrow functions instead of `bind()` for configuring event handlers. Arrow functions maintain lexical scope and are more readable than `.bind(this)` calls.
@@ -106,32 +141,114 @@ The application includes comprehensive dark mode support:
 - **Theme Service**: Manages global theme state and Material Design theme switching
 - **Persistent Preferences**: Dark mode overrides are saved per bookmark
 
-## Testing Requirements
+## Reactive Database Architecture
 
-**IMPORTANT**: Always add comprehensive tests for new features without being asked. This includes:
+**IMPORTANT**: The app uses reactive database queries that automatically update the UI when data changes.
 
-### Required Test Coverage for New Features:
-1. **Unit Tests**: Core functionality and edge cases
-2. **Component Tests**: UI behavior and event handling  
-3. **Integration Tests**: Full user workflows
-4. **Error Handling**: Failure scenarios and recovery
-5. **Performance**: Non-blocking behavior and responsiveness
+### Key Components:
+- **ReactiveQueryController**: Manages Dexie liveQuery subscriptions with proper lifecycle
+- **Database Service**: Provides both traditional and reactive (`*Live()`) query methods
+- **Automatic Updates**: Components re-render when relevant database data changes
 
-### Test File Locations:
-- Unit tests: `src/test/unit/[feature-name].test.ts`
-- Component tests: `src/test/unit/[component-name].test.ts` 
-- Integration tests: `src/test/integration/[workflow-name].test.ts`
+### Usage Pattern:
+```typescript
+class MyComponent extends LitElement {
+  #dataQuery = new ReactiveQueryController(
+    this,
+    () => DatabaseService.getDataLive()
+  );
+  
+  get data() { return this.#dataQuery.value ?? []; }
+  get isLoading() { return this.#dataQuery.loading; }
+}
+```
 
-### Test Categories to Cover:
-- Happy path functionality
-- Error conditions and recovery
-- Component lifecycle (connect/disconnect)
-- Event system behavior
-- State persistence across navigation
-- User interaction during background operations
-- Performance and responsiveness
+### Benefits:
+- No manual refresh callbacks needed
+- Automatic UI updates on database changes
+- Simplified component logic
+- Better performance through targeted updates
 
-Remember: Tests should be written as part of feature development, not as an afterthought.
+## Testing Philosophy
+
+**IMPORTANT**: This codebase follows a **user-behavior-focused testing approach** that prioritizes maintainability and clarity over implementation coverage.
+
+### Core Testing Principles:
+1. **Test User Behavior, Not Implementation**: Focus on what users can do and see, not internal code structure
+2. **Minimal Mocking**: Only mock external dependencies (APIs, databases), never internal services
+3. **Integration Over Units**: Prefer integration tests that exercise complete user workflows
+4. **Regression Protection**: Tests should catch bugs that break real user functionality
+5. **Fast & Reliable**: Test suite runs in <3 seconds with zero flaky tests
+
+### Test Suite Architecture:
+
+**Test Categories:**
+1. **Unit Tests** (`src/test/unit/`): Core service logic (ContentFetcher, SecurityService)
+2. **Integration Tests** (`src/test/integration/`): Component interactions and security workflows
+3. **Workflow Tests** (`src/test/workflows/`): User journeys, error scenarios, and accessibility testing
+
+### Testing Guidelines:
+
+**✅ DO Test:**
+- Complete user workflows (bookmark sync, reading content, security features)
+- Critical service functionality (content fetching, security processing)  
+- Error scenarios users encounter (network failures, invalid content)
+- Component interactions and UI state changes
+- Regression scenarios from real bugs
+
+**❌ DON'T Test:**
+- Internal method calls or implementation details
+- Every possible code path or edge case
+- Mock interactions between internal services
+- Component lifecycle methods unless user-visible
+- Trivial getters/setters or utility functions
+
+### New Feature Testing:
+
+When adding new features, write **all tests necessary to validate the user workflows**:
+1. **Integration tests** covering all user workflows enabled by the feature
+2. **Unit tests** for complex service logic with edge cases
+3. **Error handling tests** for user-visible failure scenarios
+4. **Accessibility tests** when the feature affects user interaction
+
+Focus on **quality and conciseness over quantity** - write comprehensive tests for user journeys and error scenarios, but avoid testing implementation details.
+
+### Test Writing Patterns:
+
+**✅ Good - User-focused test:**
+```typescript
+it('should display bookmarks when user loads app with valid settings', async () => {
+  // Setup: User has valid settings
+  DatabaseService.getSettingsLive.mockReturnValue(of(validSettings));
+  DatabaseService.getBookmarksLive.mockReturnValue(of(mockBookmarks));
+  
+  // Action: User loads app  
+  const element = await fixture(html`<app-root></app-root>`);
+  await element.updateComplete;
+  
+  // Verify: User sees bookmarks
+  expect(element.shadowRoot.querySelector('bookmark-list')).to.exist;
+  expect(element.shadowRoot.textContent).to.include('Test Bookmark');
+});
+```
+
+**❌ Bad - Implementation-focused test:**
+```typescript  
+it('should call syncBookmarks method when sync button clicked', async () => {
+  const syncSpy = vi.spyOn(component, 'syncBookmarks');
+  
+  component.handleSyncClick();
+  
+  expect(syncSpy).toHaveBeenCalled();
+});
+```
+
+### Coverage Philosophy:
+
+- **Focus on critical user paths** rather than overall coverage percentages
+- **Prioritize branch coverage** over statement coverage  
+- **100% coverage not required** - quality and user-behavior focus is more important
+- **Security services should have comprehensive coverage** due to their critical nature
 
 ### Testing Instead of Manual Validation
 
@@ -142,51 +259,106 @@ Remember: Tests should be written as part of feature development, not as an afte
 - Tests provide reliable, repeatable validation and prevent regressions
 - Manual testing with the dev server should only be used for exploratory work, not validation
 
-### Fake Timers for Deterministic Testing
+### Component-Aware Testing Utilities
 
-**IMPORTANT**: Use vitest fake timers instead of real delays for deterministic tests.
+**IMPORTANT**: Use component-aware utilities for testing Lit components with timing dependencies.
 
-**❌ Bad - Brittle timing with real delays:**
+#### waitForComponent() - Enhanced waitFor with Timer Management
+
+Use `waitForComponent()` instead of regular `waitFor()` for component operations:
+
+**✅ Good - Component-aware waiting:**
 ```typescript
-// Don't do this - brittle and slow
-await new Promise(resolve => setTimeout(resolve, 1000));
-expect(someAsyncBehavior).toHaveOccurred();
+import { waitForComponent, waitForComponentReady } from '../utils/component-aware-wait-for';
 
-// Don't do this - incorrect workaround
-vi.stubGlobal('setTimeout', (fn: Function) => fn());
-```
-
-**✅ Good - Deterministic fake timers:**
-```typescript
-it('should clear highlights after timeout', () => {
-  vi.useFakeTimers();
+it('should display bookmarks when component loads', async () => {
+  const appRoot = document.createElement('app-root') as AppRoot;
+  document.body.appendChild(appRoot);
   
-  try {
-    // Trigger code that uses setTimeout
-    component.startTimeout();
-    
-    // Fast-forward time deterministically
-    vi.advanceTimersByTime(3000);
-    
-    // Assert expected behavior
-    expect(component.isHighlighted()).toBe(false);
-  } finally {
-    vi.useRealTimers(); // Always restore
-  }
+  // Wait for component initialization
+  await waitForComponentReady(appRoot);
+  
+  // Wait for specific UI state
+  await waitForComponent(() => {
+    const container = appRoot.shadowRoot?.querySelector('bookmark-list-container');
+    expect(container).toBeTruthy();
+    return container;
+  });
 });
 ```
 
-**When to use fake timers:**
-- Any code that uses `setTimeout`, `setInterval`, or other timer functions
-- Debounced operations (like save-after-scroll)
-- Delayed UI state changes (like clearing highlights)
-- Background processes with timing dependencies
+**❌ Bad - setTimeout delays (antipattern):**
+```typescript
+// Don't do this - brittle and non-deterministic
+await new Promise(resolve => setTimeout(resolve, 100));
+```
 
-**Fake timer patterns:**
-- `vi.useFakeTimers()` - Enable fake timers at start of test
-- `vi.advanceTimersByTime(ms)` - Fast-forward time by specified milliseconds
-- `vi.runAllTimers()` - Execute all pending timers immediately
-- `vi.useRealTimers()` - Always restore in finally block or afterEach
+#### Targeted Fake Timers for Specific Tests
+
+For testing specific timing behavior, use targeted fake timers:
+
+```typescript
+import { withFakeTimers, createTestTimeout } from '../utils/targeted-fake-timers';
+
+it('should debounce user input', async () => {
+  await withFakeTimers(async () => {
+    const mockSave = vi.fn();
+    component.onInput('search term');
+    
+    // Advance time to trigger debounce
+    vi.advanceTimersByTime(300);
+    expect(mockSave).toHaveBeenCalledWith('search term');
+  });
+});
+```
+
+#### Testing Patterns:
+
+**Component Creation:**
+```typescript
+// Create component and wait for ready state
+const component = document.createElement('my-component') as MyComponent;
+document.body.appendChild(component);
+await waitForComponentReady(component);
+```
+
+**Waiting for UI Changes:**
+```typescript
+// Wait for specific DOM state with automatic timer handling
+await waitForComponent(() => {
+  const element = component.shadowRoot?.querySelector('.expected-class');
+  expect(element).toBeTruthy();
+  return element;
+});
+```
+
+**Custom Timing Options:**
+```typescript
+// Customize timeout and timer advancement for slow operations
+await waitForComponent(() => {
+  expect(component.isFullyLoaded).toBe(true);
+}, {
+  timeout: 10000,
+  interval: 100,
+  timerAdvancement: 50
+});
+```
+
+**Disable Timer Advancement:**
+```typescript
+// For non-component operations, disable timer advancement
+await waitForComponent(() => {
+  expect(mockApi.callCount).toBe(3);
+}, { 
+  advanceTimers: false 
+});
+```
+
+#### Key Benefits:
+- **Component-compatible**: Works seamlessly with Lit component lifecycle
+- **Deterministic**: Controlled timer advancement eliminates flakiness  
+- **Flexible**: Can be customized or disabled per test scenario
+- **Drop-in replacement**: Gradual adoption without breaking existing tests
 
 ### Reader View Optimization
 
@@ -200,3 +372,6 @@ it('should clear highlights after timeout', () => {
 ### Development Best Practices
 
 - Always check that the build works after you've gotten the tests passing
+- Use reactive database queries instead of manual data management
+- Follow the JavaScript `#` syntax for private members
+- Name reactive query controllers with `Query` suffix for clarity

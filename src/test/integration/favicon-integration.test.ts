@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FaviconService } from '../../services/favicon-service';
 import { DatabaseService } from '../../services/database';
+import { SettingsService } from '../../services/settings-service';
 import { appFetch } from '../../utils/fetch-helper';
 import type { LocalBookmark, LocalAsset } from '../../types';
 
@@ -23,6 +24,15 @@ vi.mock('../../services/database', () => ({
   },
 }));
 
+// Mock SettingsService
+vi.mock('../../services/settings-service', () => ({
+  SettingsService: {
+    getCurrentSettings: vi.fn(),
+    initialize: vi.fn(),
+    cleanup: vi.fn(),
+  },
+}));
+
 describe('Favicon Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,9 +41,9 @@ describe('Favicon Integration Tests', () => {
     vi.mocked(DatabaseService.saveAsset).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.deleteAssetsByBookmarkId).mockResolvedValue(undefined);
-    
+
     // Mock settings to make favicon URLs appear as Linkding-served
-    vi.mocked(DatabaseService.getSettings).mockResolvedValue({
+    vi.mocked(SettingsService.getCurrentSettings).mockReturnValue({
       linkding_url: 'https://linkding.example.com',
       linkding_token: 'test-token',
       sync_interval: 5,

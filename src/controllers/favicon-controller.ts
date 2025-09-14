@@ -223,16 +223,18 @@ export class FaviconController implements ReactiveController {
 
   /**
    * Handle visibility changes from external observers
+   * Accepts bookmark data to avoid database coupling
    */
-  handleVisibilityChanged(visibleBookmarkIds: number[], bookmarks: Array<{ id: number; favicon_url?: string }>): void {
+  async handleVisibilityChanged(visibleBookmarks: Array<{ id: number; favicon_url?: string }>): Promise<void> {
     if (!this.faviconService) return;
 
     const faviconCache = this.faviconService.getAllCachedFaviconUrls();
-    visibleBookmarkIds.forEach(bookmarkId => {
-      const bookmark = bookmarks.find(b => b.id === bookmarkId);
-      if (bookmark?.favicon_url && !faviconCache.has(bookmarkId)) {
-        this.loadFavicon(bookmarkId, bookmark.favicon_url);
+
+    // Load favicons for visible bookmarks that have favicon URLs and aren't cached
+    for (const bookmark of visibleBookmarks) {
+      if (!faviconCache.has(bookmark.id) && bookmark.favicon_url) {
+        this.loadFavicon(bookmark.id, bookmark.favicon_url);
       }
-    });
+    }
   }
 }

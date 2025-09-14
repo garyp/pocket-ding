@@ -1,5 +1,6 @@
 import { Readability } from '@mozilla/readability';
 import { DatabaseService } from './database';
+import { SettingsService } from './settings-service';
 import { createLinkdingAPI } from './linkding-api';
 import { DebugService } from './debug-service';
 import type { LocalBookmark, ContentSource, ContentSourceOption, LocalAsset, ContentResult } from '../types';
@@ -63,8 +64,8 @@ export class ContentFetcher {
           bookmark_id: bookmark.id,
           bookmark_archived: bookmark.is_archived
         });
-        const settings = await DatabaseService.getSettings();
-        if (!settings) {
+        const settings = SettingsService.getCurrentSettings();
+        if (!settings || !SettingsService.hasValidSettings()) {
           DebugService.logError(new Error('No settings found for on-demand asset fetching'), 'app', 'Missing settings for asset fetching', { asset_id: htmlAsset.id, bookmark_id: bookmark.id });
           return null;
         }
@@ -132,8 +133,8 @@ export class ContentFetcher {
       // For archived bookmarks or uncached assets, fetch on-demand
       if (!asset.content && asset.status === 'complete') {
         DebugService.logInfo('app', `Fetching asset ${assetId} on-demand for ${bookmark.is_archived ? 'archived' : 'uncached'} bookmark ${bookmark.id}`, { asset_id: assetId, bookmark_id: bookmark.id, bookmark_archived: bookmark.is_archived });
-        const settings = await DatabaseService.getSettings();
-        if (!settings) {
+        const settings = SettingsService.getCurrentSettings();
+        if (!settings || !SettingsService.hasValidSettings()) {
           DebugService.logError(new Error('No settings found for on-demand asset fetching'), 'app', 'Missing settings for asset fetching', { asset_id: assetId, bookmark_id: bookmark.id });
           return null;
         }
@@ -358,14 +359,11 @@ export class ContentFetcher {
     };
   }
 
-  static async getAvailableContentSources(bookmark: LocalBookmark): Promise<ContentSourceOption[]> {
+  static getAvailableContentSources(bookmark: LocalBookmark, assets: LocalAsset[]): ContentSourceOption[] {
     const sources: ContentSourceOption[] = [];
     
-    // Check for completed assets and add each one individually
-    // For archived bookmarks, include all assets even if not cached
-    const completedAssets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmark.id);
-    
-    for (const asset of completedAssets) {
+    // Add asset sources
+    for (const asset of assets) {
       const label = asset.display_name || `Asset ${asset.id}`;
       const sourceLabel = bookmark.is_archived && !asset.content ? 
         `${label} (on-demand)` : label;

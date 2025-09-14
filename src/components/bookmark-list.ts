@@ -2,6 +2,8 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { LocalBookmark, BookmarkFilter, BookmarkListState, PaginationState } from '../types';
 import { StateController } from '../controllers/state-controller';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
+import { DatabaseService } from '../services/database';
 import '@material/web/labs/card/outlined-card.js';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/button/filled-button.js';
@@ -13,15 +15,37 @@ import './pagination-controls.js';
 
 @customElement('bookmark-list')
 export class BookmarkList extends LitElement {
-  // Data props
-  @property({ type: Array }) bookmarks: LocalBookmark[] = [];
-  @property({ type: Boolean }) isLoading = false;
-  @property({ type: Set }) bookmarksWithAssets: Set<number> = new Set<number>();
+  // Reactive query controllers
+  #bookmarksQuery = new ReactiveQueryController(
+    this,
+    () => DatabaseService.getBookmarksPaginated(
+      this.paginationState.filter,
+      this.paginationState.currentPage,
+      this.paginationState.pageSize
+    )
+  );
+
+  #filterCountsQuery = new ReactiveQueryController(
+    this,
+    () => DatabaseService.getAllFilterCounts()
+  );
+
+  // Assets query - uses bookmarks data to determine which bookmarks to check
+  #assetsQuery = new ReactiveQueryController(
+    this,
+    (bookmarks: LocalBookmark[]) => DatabaseService.getBookmarksWithAssetCounts(bookmarks.map(b => b.id)),
+    (): [LocalBookmark[]] => [this.#bookmarksQuery.value || []]
+  );
+
+  // Remove old data props that are now handled by reactive controllers
+  // @property({ type: Array }) bookmarks: LocalBookmark[] = [];
+  // @property({ type: Boolean }) isLoading = false;
+  // @property({ type: Set }) bookmarksWithAssets: Set<number> = new Set<number>();
   
   // Favicon props
   @property({ type: Map }) faviconCache: Map<number, string> = new Map<number, string>();
   
-  // Sync props
+  // Sync state props
   @property({ type: Set }) syncedBookmarkIds: Set<number> = new Set<number>();
   
   // Pagination state props
@@ -33,22 +57,58 @@ export class BookmarkList extends LitElement {
     filter: 'all'
   };
   
-  // Callback props
+  // Callback props (simplified - no more sync callbacks needed)
   @property({ type: Function }) onBookmarkSelect: (bookmarkId: number) => void = () => {};
-  @property({ type: Function }) onSyncRequested: () => void = () => {};
   @property({ type: Function }) onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void = () => {};
-  @property({ type: Function }) onVisibilityChanged: (visibleBookmarkIds: number[]) => void = () => {};
+  @property({ type: Function }) onVisibilityChanged: (visibleBookmarks: Array<{ id: number; favicon_url?: string }>) => void = () => {};
   @property({ type: Function }) onPageChange: (page: number) => void = () => {};
   @property({ type: Function }) onFilterChange: (filter: BookmarkFilter) => void = () => {};
+
+  // Getter methods for reactive data
+  get bookmarks(): LocalBookmark[] {
+    return this.#bookmarksQuery.value || [];
+  }
+
+  get isLoading(): boolean {
+    return this.#bookmarksQuery.loading || this.#filterCountsQuery.loading;
+  }
+
+  get bookmarksWithAssets(): Set<number> {
+    const assetMap = this.#assetsQuery.value || new Map<number, boolean>();
+    const assetsSet = new Set<number>();
+    for (const [bookmarkId, hasAssets] of assetMap) {
+      if (hasAssets) {
+        assetsSet.add(bookmarkId);
+      }
+    }
+    return assetsSet;
+  }
+
+  get filterCounts() {
+    return this.#filterCountsQuery.value || { all: 0, unread: 0, archived: 0 };
+  }
   
-  // UI state (internal only)
-  @state() private scrollPosition: number = 0;
+  // UI state (persisted via StateController)
+  @state()
+  private _scrollPosition: number = 0;
   @state() private isOnline: boolean = navigator.onLine;
+
+  get scrollPosition(): number {
+    return this._scrollPosition;
+  }
+
+  set scrollPosition(value: number) {
+    this._scrollPosition = Math.max(0, value);
+    // Trigger update to sync state with StateController
+    this.requestUpdate('scrollPosition', this._scrollPosition);
+  }
   
-  private scrollContainer: Element | null = null;
-  private intersectionObserver: IntersectionObserver | null = null;
+  #scrollContainer: Element | null = null;
+  #intersectionObserver: IntersectionObserver | null = null;
+  #observedElements: Set<Element> = new Set();
   
-  // State controller for persistence with automatic observation
+  // State controller for persistence (auto-sync scrollPosition)
+  // @ts-expect-error - Used automatically by Lit's ReactiveController pattern
   private stateController = new StateController<BookmarkListState>(this, {
     storageKey: 'bookmark-list-state',
     defaultState: { 
@@ -354,88 +414,98 @@ export class BookmarkList extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.initializeState();
-    this.setupScrollTracking();
-    this.setupIntersectionObserver();
-    this.setupOnlineDetection();
+    this.#initializeState();
+    this.#setupScrollTracking();
+    this.#setupIntersectionObserver();
+    this.#setupOnlineDetection();
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    this.saveCurrentScrollPosition();
+    // Only save from scroll container if we have a real scroll container
+    // In tests, the scroll position is managed directly via the property
+    if (this.#scrollContainer && this.#scrollContainer.scrollTop !== undefined) {
+      this.#saveCurrentScrollPosition();
+    }
     
     // Clean up scroll event listener
-    if (this.scrollContainer && (this as any)._scrollHandler) {
-      this.scrollContainer.removeEventListener('scroll', (this as any)._scrollHandler);
+    if (this.#scrollContainer && (this as any)._scrollHandler) {
+      this.#scrollContainer.removeEventListener('scroll', (this as any)._scrollHandler);
     }
     
     // Clean up intersection observer
-    this.cleanupIntersectionObserver();
-    
+    this.#cleanupIntersectionObserver();
+
     // Clean up online detection
-    this.cleanupOnlineDetection();
+    this.#cleanupOnlineDetection();
   }
 
-  private initializeState() {
-    // State is automatically restored by StateController to observed properties
-    // No manual restoration needed
+  #initializeState() {
+    // State is automatically restored by StateController when observedProperties is configured
+    // No manual restoration needed - the StateController will sync saved state to component properties
   }
 
-  private saveCurrentScrollPosition() {
-    if (this.scrollContainer) {
-      this.scrollPosition = Math.max(0, this.scrollContainer.scrollTop);
-      // State is automatically saved by StateController observing scrollPosition property
-      // Manual trigger to ensure state is saved in test environments
-      this.stateController.setProp('scrollPosition', this.scrollPosition);
+  #saveCurrentScrollPosition() {
+    if (this.#scrollContainer) {
+      const currentScrollTop = this.#scrollContainer.scrollTop;
+      // Only update scroll position if container actually has scroll content
+      // This prevents overwriting restored state with 0 from fresh/empty containers
+      if (currentScrollTop > 0 || this.#scrollContainer.scrollHeight > this.#scrollContainer.clientHeight) {
+        this.scrollPosition = currentScrollTop;
+        // ScrollPosition is auto-synced by StateController
+      }
     }
   }
 
-  private restoreScrollPosition() {
-    if (this.scrollContainer) {
-      this.scrollContainer.scrollTop = this.scrollPosition;
+  #restoreScrollPosition() {
+    if (this.#scrollContainer) {
+      this.#scrollContainer.scrollTop = this.scrollPosition;
     }
   }
 
-  private setupScrollTracking() {
+  #setupScrollTracking() {
     // Find the scroll container (the host element itself or parent container)
-    this.scrollContainer = this.closest('.app-content') || document.documentElement;
+    this.#scrollContainer = this.closest('.app-content') || document.documentElement;
     
-    if (this.scrollContainer) {
+    if (this.#scrollContainer) {
       // Set up scroll event listener to save position
       const scrollHandler = () => {
-        this.saveCurrentScrollPosition();
+        this.#saveCurrentScrollPosition();
       };
       
-      this.scrollContainer.addEventListener('scroll', scrollHandler, { passive: true });
+      this.#scrollContainer.addEventListener('scroll', scrollHandler, { passive: true });
       
       // Save the handler so we can remove it later
       (this as any)._scrollHandler = scrollHandler;
     }
   }
 
-  private setupIntersectionObserver() {
-    this.intersectionObserver = new IntersectionObserver(
+  #setupIntersectionObserver() {
+    this.#intersectionObserver = new IntersectionObserver(
       (entries) => {
-        const visibleBookmarkIds: number[] = [];
-        
+        const visibleBookmarks: Array<{ id: number; favicon_url?: string }> = [];
+
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const bookmarkId = parseInt(entry.target.getAttribute('data-bookmark-id') || '0');
             if (bookmarkId > 0) {
-              visibleBookmarkIds.push(bookmarkId);
-              
-              // Find the bookmark and request favicon loading if needed
+              // Find the bookmark data to include favicon_url
               const bookmark = this.bookmarks.find(b => b.id === bookmarkId);
-              if (bookmark?.favicon_url && !this.faviconCache.has(bookmarkId)) {
-                this.onFaviconLoadRequested(bookmarkId, bookmark.favicon_url);
+              if (bookmark) {
+                visibleBookmarks.push({ id: bookmark.id, favicon_url: bookmark.favicon_url });
+
+                // Request favicon loading if needed (keep existing direct loading)
+                if (bookmark.favicon_url && !this.faviconCache.has(bookmarkId)) {
+                  this.onFaviconLoadRequested(bookmarkId, bookmark.favicon_url);
+                }
               }
             }
           }
         });
-        
-        // Notify parent of visibility changes
-        if (visibleBookmarkIds.length > 0) {
-          this.onVisibilityChanged(visibleBookmarkIds);
+
+        // Notify parent of visibility changes with bookmark data
+        if (visibleBookmarks.length > 0) {
+          this.onVisibilityChanged(visibleBookmarks);
         }
       },
       {
@@ -446,14 +516,15 @@ export class BookmarkList extends LitElement {
     );
   }
 
-  private cleanupIntersectionObserver() {
-    if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect();
-      this.intersectionObserver = null;
+  #cleanupIntersectionObserver() {
+    if (this.#intersectionObserver) {
+      this.#intersectionObserver.disconnect();
+      this.#intersectionObserver = null;
     }
+    this.#observedElements.clear();
   }
 
-  private setupOnlineDetection() {
+  #setupOnlineDetection() {
     const handleOnline = () => {
       this.isOnline = true;
     };
@@ -470,7 +541,7 @@ export class BookmarkList extends LitElement {
     (this as any)._offlineHandler = handleOffline;
   }
 
-  private cleanupOnlineDetection() {
+  #cleanupOnlineDetection() {
     if ((this as any)._onlineHandler) {
       window.removeEventListener('online', (this as any)._onlineHandler);
     }
@@ -479,19 +550,31 @@ export class BookmarkList extends LitElement {
     }
   }
 
-  private updateObservedElements() {
-    if (!this.intersectionObserver) {
+  #updateObservedElements() {
+    if (!this.#intersectionObserver) {
       // Lazy initialization if observer doesn't exist
-      this.setupIntersectionObserver();
+      this.#setupIntersectionObserver();
     }
 
-    // Disconnect and re-observe all bookmark elements
-    this.intersectionObserver!.disconnect();
-    
+    // Get current bookmark elements
     const bookmarkCards = this.renderRoot.querySelectorAll('[data-bookmark-id]');
+    const currentElements = new Set(bookmarkCards);
+    
+    // Unobserve elements that are no longer in the DOM
+    for (const observedElement of this.#observedElements) {
+      if (!currentElements.has(observedElement)) {
+        if (this.#intersectionObserver) {
+          this.#intersectionObserver.unobserve(observedElement);
+        }
+        this.#observedElements.delete(observedElement);
+      }
+    }
+    
+    // Observe new elements that aren't already being observed
     bookmarkCards.forEach((card) => {
-      if (this.intersectionObserver) {
-        this.intersectionObserver.observe(card);
+      if (!this.#observedElements.has(card) && this.#intersectionObserver) {
+        this.#intersectionObserver.observe(card);
+        this.#observedElements.add(card);
       }
     });
   }
@@ -500,13 +583,25 @@ export class BookmarkList extends LitElement {
   override updated(changedProperties: Map<string, any>) {
     super.updated(changedProperties);
     
+    // Update reactive queries when pagination state changes
+    if (changedProperties.has('paginationState')) {
+      this.#bookmarksQuery.updateQuery(() => 
+        DatabaseService.getBookmarksPaginated(
+          this.paginationState.filter,
+          this.paginationState.currentPage,
+          this.paginationState.pageSize
+        )
+      );
+      // Assets query will automatically update when bookmarks change via dependency function
+    }
+    
     // Restore scroll position after the first render
-    if (changedProperties.has('bookmarks') && this.bookmarks.length > 0) {
+    if (changedProperties.has('paginationState') && this.bookmarks.length > 0) {
       // Use requestAnimationFrame to ensure the DOM is fully rendered
       requestAnimationFrame(() => {
         try {
           if (this.isConnected) {
-            this.restoreScrollPosition();
+            this.#restoreScrollPosition();
           }
         } catch (error) {
           console.error('Failed to restore scroll position:', error);
@@ -517,8 +612,8 @@ export class BookmarkList extends LitElement {
     // Always update observed elements after DOM changes to ensure intersection observer works
     requestAnimationFrame(() => {
       try {
-        if (this.isConnected && this.intersectionObserver) {
-          this.updateObservedElements();
+        if (this.isConnected && this.#intersectionObserver) {
+          this.#updateObservedElements();
         }
       } catch (error) {
         console.error('Failed to update observed elements:', error);
@@ -526,7 +621,8 @@ export class BookmarkList extends LitElement {
     });
   }
 
-  private get filteredBookmarks() {
+
+  get filteredBookmarks() {
     if (this.paginationState.filter === 'unread') {
       return this.bookmarks.filter(bookmark => bookmark.unread && !bookmark.is_archived);
     }
@@ -537,19 +633,19 @@ export class BookmarkList extends LitElement {
     return this.bookmarks.filter(bookmark => !bookmark.is_archived);
   }
 
-  private handleFilterChange(filter: BookmarkFilter) {
+  #handleFilterChange(filter: BookmarkFilter) {
     this.onFilterChange(filter);
   }
 
-  private handlePageChange = (page: number) => {
+  #handlePageChange = (page: number) => {
     this.onPageChange(page);
   };
 
-  private handleBookmarkClick(bookmark: LocalBookmark) {
+  #handleBookmarkClick(bookmark: LocalBookmark) {
     this.onBookmarkSelect(bookmark.id);
   }
 
-  private formatDate(dateString: string): string {
+  #formatDate(dateString: string): string {
     const date = new Date(dateString);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
@@ -561,7 +657,7 @@ export class BookmarkList extends LitElement {
     return date.toLocaleDateString();
   }
 
-  private renderStatusIcons(bookmark: LocalBookmark) {
+  #renderStatusIcons(bookmark: LocalBookmark) {
     return html`
       <div class="status-icons">
         ${bookmark.unread ? html`
@@ -579,29 +675,29 @@ export class BookmarkList extends LitElement {
     `;
   }
 
-  private renderBookmarkContent(bookmark: LocalBookmark, hasProgress: boolean) {
+  #renderBookmarkContent(bookmark: LocalBookmark, hasProgress: boolean) {
     return html`
       <div class="bookmark-header">
         <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
         <div class="bookmark-meta">
-          ${this.renderStatusIcons(bookmark)}
+          ${this.#renderStatusIcons(bookmark)}
         </div>
       </div>
-      
+
       ${bookmark.description ? html`
         <p class="bookmark-description">${bookmark.description}</p>
       ` : ''}
-      
+
       <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
-        <img 
-          class="favicon" 
-          src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
+        <img
+          class="favicon"
+          src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'}
           alt="Favicon"
           loading="lazy"
         />
         ${bookmark.url}
       </a>
-      
+
       ${bookmark.tag_names.length > 0 ? html`
         <div class="bookmark-tags">
           ${bookmark.tag_names.map(tag => html`
@@ -609,7 +705,7 @@ export class BookmarkList extends LitElement {
           `)}
         </div>
       ` : ''}
-      
+
       ${hasProgress ? html`
         <div class="bookmark-progress">
           <div class="progress-text">
@@ -618,29 +714,29 @@ export class BookmarkList extends LitElement {
           <md-linear-progress .value=${bookmark.read_progress! / 100}></md-linear-progress>
         </div>
       ` : ''}
-      
+
       <div class="bookmark-date">
-        Added ${this.formatDate(bookmark.date_added)}
+        Added ${this.#formatDate(bookmark.date_added)}
       </div>
     `;
   }
 
-  private renderRestOfBookmarkContent(bookmark: LocalBookmark, hasProgress: boolean) {
+  #renderRestOfBookmarkContent(bookmark: LocalBookmark, hasProgress: boolean) {
     return html`
       ${bookmark.description ? html`
         <p class="bookmark-description">${bookmark.description}</p>
       ` : ''}
-      
+
       <a class="bookmark-url" href=${bookmark.url} target="_blank" @click=${(e: Event) => e.stopPropagation()}>
-        <img 
-          class="favicon" 
-          src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'} 
+        <img
+          class="favicon"
+          src=${this.faviconCache.get(bookmark.id) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzk0YTNiOCIvPgo8L3N2Zz4K'}
           alt="Favicon"
           loading="lazy"
         />
         ${bookmark.url}
       </a>
-      
+
       ${bookmark.tag_names.length > 0 ? html`
         <div class="bookmark-tags">
           ${bookmark.tag_names.map(tag => html`
@@ -648,7 +744,7 @@ export class BookmarkList extends LitElement {
           `)}
         </div>
       ` : ''}
-      
+
       ${hasProgress ? html`
         <div class="bookmark-progress">
           <div class="progress-text">
@@ -657,23 +753,22 @@ export class BookmarkList extends LitElement {
           <md-linear-progress .value=${bookmark.read_progress! / 100}></md-linear-progress>
         </div>
       ` : ''}
-      
+
       <div class="bookmark-date">
-        Added ${this.formatDate(bookmark.date_added)}
+        Added ${this.#formatDate(bookmark.date_added)}
       </div>
     `;
   }
 
-  private renderBookmark(bookmark: LocalBookmark) {
+  #renderBookmark(bookmark: LocalBookmark) {
     const hasProgress = Boolean(bookmark.read_progress && bookmark.read_progress > 0);
-    const isRecentlySynced = this.syncedBookmarkIds.has(bookmark.id);
     const hasPreviewImage = this.isOnline && bookmark.preview_image_url && bookmark.preview_image_url.trim() !== '';
     
     return html`
       <md-outlined-card 
-        class="bookmark-card ${isRecentlySynced ? 'synced' : ''}"
+        class="bookmark-card ${this.syncedBookmarkIds.has(bookmark.id) ? 'synced' : ''}"
         data-bookmark-id="${bookmark.id}"
-        @click=${() => this.handleBookmarkClick(bookmark)}
+        @click=${() => this.#handleBookmarkClick(bookmark)}
       >
         <div class="bookmark-content ${hasPreviewImage ? 'bookmark-with-preview' : ''}">
           ${hasPreviewImage ? html`
@@ -681,20 +776,20 @@ export class BookmarkList extends LitElement {
               <div class="bookmark-header">
                 <h3 class="bookmark-title md-typescale-title-medium">${bookmark.title}</h3>
                 <div class="bookmark-meta">
-                  ${this.renderStatusIcons(bookmark)}
+                  ${this.#renderStatusIcons(bookmark)}
                 </div>
               </div>
-              <img 
-                class="bookmark-preview" 
-                src=${bookmark.preview_image_url} 
+              <img
+                class="bookmark-preview"
+                src=${bookmark.preview_image_url}
                 alt="Preview of ${bookmark.title}"
                 loading="lazy"
                 referrerpolicy="no-referrer"
               />
-              ${this.renderRestOfBookmarkContent(bookmark, hasProgress)}
+              ${this.#renderRestOfBookmarkContent(bookmark, hasProgress)}
             </div>
           ` : html`
-            ${this.renderBookmarkContent(bookmark, hasProgress)}
+            ${this.#renderBookmarkContent(bookmark, hasProgress)}
           `}
         </div>
       </md-outlined-card>
@@ -717,41 +812,41 @@ export class BookmarkList extends LitElement {
       <div class="filters">
         ${this.paginationState.filter === 'all' ? html`
           <md-filled-button
-            @click=${() => this.handleFilterChange('all')}
+            @click=${() => this.#handleFilterChange('all')}
           >
-            All (${this.paginationState.totalCount})
+            All (${this.filterCounts.all})
           </md-filled-button>
         ` : html`
           <md-text-button
-            @click=${() => this.handleFilterChange('all')}
+            @click=${() => this.#handleFilterChange('all')}
           >
-            All (${this.paginationState.filterCounts?.all ?? 0})
+            All (${this.filterCounts.all})
           </md-text-button>
         `}
         ${this.paginationState.filter === 'unread' ? html`
           <md-filled-button
-            @click=${() => this.handleFilterChange('unread')}
+            @click=${() => this.#handleFilterChange('unread')}
           >
-            Unread (${this.paginationState.totalCount})
+            Unread (${this.filterCounts.unread})
           </md-filled-button>
         ` : html`
           <md-text-button
-            @click=${() => this.handleFilterChange('unread')}
+            @click=${() => this.#handleFilterChange('unread')}
           >
-            Unread (${this.paginationState.filterCounts?.unread ?? 0})
+            Unread (${this.filterCounts.unread})
           </md-text-button>
         `}
         ${this.paginationState.filter === 'archived' ? html`
           <md-filled-button
-            @click=${() => this.handleFilterChange('archived')}
+            @click=${() => this.#handleFilterChange('archived')}
           >
-            Archived (${this.paginationState.totalCount})
+            Archived (${this.filterCounts.archived})
           </md-filled-button>
         ` : html`
           <md-text-button
-            @click=${() => this.handleFilterChange('archived')}
+            @click=${() => this.#handleFilterChange('archived')}
           >
-            Archived (${this.paginationState.filterCounts?.archived ?? 0})
+            Archived (${this.filterCounts.archived})
           </md-text-button>
         `}
       </div>
@@ -764,23 +859,19 @@ export class BookmarkList extends LitElement {
               ? 'You have no unread bookmarks.' 
               : this.paginationState.filter === 'archived'
               ? 'You have no archived bookmarks.'
-              : 'Sync your bookmarks to get started.'}
+              : 'Your bookmarks will appear here after syncing.'}
           </p>
-          <md-filled-button @click=${() => this.onSyncRequested()}>
-            <md-icon slot="icon">sync</md-icon>
-            Sync Now
-          </md-filled-button>
         </div>
       ` : html`
         <div class="bookmark-list">
-          ${bookmarks.map(bookmark => this.renderBookmark(bookmark))}
+          ${bookmarks.map(bookmark => this.#renderBookmark(bookmark))}
         </div>
         
         <pagination-controls
           .currentPage=${this.paginationState.currentPage}
           .totalPages=${this.paginationState.totalPages}
           .disabled=${this.isLoading}
-          .onPageChange=${this.handlePageChange}
+          .onPageChange=${this.#handlePageChange}
         ></pagination-controls>
       `}
     `;

@@ -1,7 +1,45 @@
-import { beforeEach, vi } from 'vitest';
+import { beforeEach, afterEach, vi } from 'vitest';
 
 // Setup DOM environment
 import '@testing-library/jest-dom/vitest';
+
+// Mock Dexie liveQuery globally
+vi.mock('dexie', async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  
+  // Create a proper liveQuery mock that returns an observable
+  const mockLiveQuery = vi.fn().mockImplementation((queryFn: () => any) => {
+    const mockSubscription = { unsubscribe: vi.fn() };
+    
+    const mockObservable = {
+      subscribe: vi.fn((observer: any) => {
+        try {
+          const result = queryFn();
+          // Handle both sync and async query results
+          if (result && typeof (result as any).then === 'function') {
+            (result as Promise<any>).then((value: any) => {
+              observer.next(value);
+            }).catch((error: any) => {
+              observer.error?.(error);
+            });
+          } else {
+            observer.next(result);
+          }
+        } catch (error) {
+          observer.error?.(error);
+        }
+        return mockSubscription;
+      })
+    };
+    
+    return mockObservable;
+  });
+  
+  return {
+    ...actual,
+    liveQuery: mockLiveQuery
+  };
+});
 
 // Mock console.error globally to prevent stderr output in tests
 const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -141,6 +179,20 @@ if (!HTMLElement.prototype.attachInternals) {
   };
 }
 
+// Mock localStorage for comprehensive cleanup
+const mockLocalStorage = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+
+// Make it available globally for tests that need it
+Object.defineProperty(global, 'localStorage', {
+  value: mockLocalStorage,
+  writable: true,
+});
+
 // Mock Web Animations API for Material Dialog components
 if (!Element.prototype.animate) {
   Element.prototype.animate = function(_keyframes: any, _options?: any) {
@@ -176,13 +228,146 @@ if (!Element.prototype.animate) {
   };
 }
 
-beforeEach(() => {
+
+beforeEach(async () => {
+  // Enable fake timers globally
+  vi.useFakeTimers();
+  
   // Clear specific mocks but don't touch IntersectionObserver since it uses persistent implementations
   if (global.fetch && vi.isMockFunction(global.fetch)) {
     (global.fetch as any).mockClear();
   }
   consoleErrorSpy.mockClear();
   
+  // Always re-establish liveQuery mock to handle clearAllMocks calls in individual tests
+  const { liveQuery } = await import('dexie');
+  
+  // Create the liveQuery mock implementation
+  const liveQueryMock = vi.mocked(liveQuery);
+  liveQueryMock.mockImplementation((queryFn: () => any) => {
+    const mockSubscription = { unsubscribe: vi.fn() };
+    
+    const mockObservable = {
+      subscribe: vi.fn((observer: any) => {
+        try {
+          const result = queryFn();
+          // Handle both sync and async query results
+          if (result && typeof (result as any).then === 'function') {
+            (result as Promise<any>).then((value: any) => {
+              observer.next(value);
+            }).catch((error: any) => {
+              observer.error?.(error);
+            });
+          } else {
+            observer.next(result);
+          }
+        } catch (error) {
+          observer.error?.(error);
+        }
+        return mockSubscription;
+      })
+    };
+    
+    return mockObservable as any;
+  });
+  
   // Note: IntersectionObserver uses persistent implementations that are immune to vi.clearAllMocks()
   // Individual test files can call vi.clearAllMocks() without breaking existing IntersectionObserver instances
 });
+
+// Global afterEach cleanup for comprehensive teardown
+afterEach(() => {
+  // Clear all pending timers to prevent memory leaks and cross-test interference
+  vi.clearAllTimers();
+  
+  // Restore real timers after each test
+  vi.useRealTimers();
+  
+  // Clean up DOM elements that might have been left behind
+  const testElements = document.querySelectorAll('app-root, bookmark-reader, bookmark-list, bookmark-list-container, settings-panel, secure-iframe, md-dialog');
+  testElements.forEach(element => {
+    try {
+      element.remove();
+    } catch (error) {
+      // Ignore cleanup errors for elements that might already be removed
+    }
+  });
+  
+  // Clean up any remaining children in document.body that might be test artifacts
+  if (document.body && document.body.children) {
+    Array.from(document.body.children).forEach(child => {
+      // Only remove elements that look like test artifacts (not essential browser elements)
+      if (child.tagName && !['SCRIPT', 'STYLE', 'META', 'LINK', 'TITLE'].includes(child.tagName)) {
+        try {
+          child.remove();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
+    });
+  }
+  
+  // Clear document classes that might have been set by theme service or components
+  document.documentElement.className = '';
+  document.body.className = '';
+  
+  // Clear any style elements that might have been added by Material theme or components
+  const dynamicStyles = document.querySelectorAll('style[data-material-theme], style[data-test]');
+  dynamicStyles.forEach(style => {
+    try {
+      style.remove();
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  });
+  
+  // Reset any global state that might have been modified
+  if (typeof window !== 'undefined') {
+    // Clear any event listeners on window that might have been added
+    // This is handled by components themselves during disconnection, but we ensure cleanup
+    
+    // Reset localStorage mock state if it was modified
+    if (mockLocalStorage && typeof mockLocalStorage.clear === 'function') {
+      mockLocalStorage.clear();
+    }
+    
+    // Reset any global variables that might have been set by services
+    // Most services should clean up after themselves, but we ensure global state is clean
+  }
+  
+  // Comprehensive mock cleanup to prevent cross-test interference
+  // Clear mock call history but preserve mock implementations
+  if (global.fetch && vi.isMockFunction(global.fetch)) {
+    (global.fetch as any).mockClear();
+  }
+  
+  if (global.IntersectionObserver && vi.isMockFunction(global.IntersectionObserver)) {
+    // Note: IntersectionObserver uses persistent implementations, so we don't clear it
+    // This is intentional to prevent breaking subsequent tests
+  }
+  
+  // Clear console mock calls
+  if (consoleErrorSpy && typeof consoleErrorSpy.mockClear === 'function') {
+    consoleErrorSpy.mockClear();
+  }
+  
+  // Reset matchMedia mock if it exists
+  if (window.matchMedia && vi.isMockFunction(window.matchMedia)) {
+    const matchMediaMock = vi.mocked(window.matchMedia);
+    matchMediaMock.mockClear();
+  }
+  
+  // Ensure no pending timers remain (this is also handled by vi.clearAllTimers but double-check)
+  // Only check timer count if fake timers are currently active
+  try {
+    if (vi.getTimerCount && vi.getTimerCount() > 0) {
+      vi.runAllTimers();
+      vi.clearAllTimers();
+    }
+  } catch (error) {
+    // vi.getTimerCount() throws when timers are not mocked, which is fine
+    // Just ensure we clear any timers that might exist
+    vi.clearAllTimers();
+  }
+});
+

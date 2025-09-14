@@ -1,9 +1,11 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
+import { SettingsService } from '../services/settings-service';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DataManagementController } from '../controllers/data-management-controller';
 import type { AppSettings } from '../types';
 import '@material/web/textfield/outlined-text-field.js';
@@ -18,7 +20,12 @@ import '@material/web/progress/linear-progress.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
-  @property({ type: Object }) settings: AppSettings | null = null;
+  // Reactive query controller for settings data
+  #settingsQuery = new ReactiveQueryController(
+    this,
+    () => SettingsService.getSettings()
+  );
+
   @state() private formData: Partial<AppSettings> = {};
   @state() private isLoading = false;
   @state() private testStatus: 'idle' | 'testing' | 'success' | 'error' = 'idle';
@@ -27,7 +34,16 @@ export class SettingsPanel extends LitElement {
   @state() private fullSyncProgress = 0;
   @state() private fullSyncTotal = 0;
 
-  private dataManagementController = new DataManagementController(this);
+  #dataManagementController = new DataManagementController(this);
+
+  // Getter methods for reactive data
+  get settings() { 
+    return this.#settingsQuery.value ?? null; 
+  }
+  
+  get isSettingsLoading() { 
+    return this.#settingsQuery.loading; 
+  }
 
   static override styles = css`
     :host {
@@ -240,10 +256,19 @@ export class SettingsPanel extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.initializeForm();
+    // Reactive controller will handle initial data loading
   }
 
-  private initializeForm() {
+  override updated(changedProperties: Map<string | number | symbol, unknown>) {
+    super.updated(changedProperties);
+    
+    // Initialize form data when settings are loaded reactively
+    if (!this.#settingsQuery.loading && this.settings && Object.keys(this.formData).length === 0) {
+      this.#initializeForm();
+    }
+  }
+
+  #initializeForm() {
     this.formData = {
       linkding_url: this.settings?.linkding_url || '',
       linkding_token: this.settings?.linkding_token || '',
@@ -255,14 +280,14 @@ export class SettingsPanel extends LitElement {
     };
   }
 
-  private handleInputChange(field: keyof AppSettings, value: any) {
+  #handleInputChange(field: keyof AppSettings, value: any) {
     this.formData = {
       ...this.formData,
       [field]: value
     };
   }
 
-  private async handleTestConnection() {
+  async #handleTestConnection() {
     if (!this.formData.linkding_url || !this.formData.linkding_token) {
       this.testStatus = 'error';
       this.testMessage = 'Please enter both URL and token';
@@ -290,7 +315,7 @@ export class SettingsPanel extends LitElement {
     }
   }
 
-  private async handleSave() {
+  async #handleSave() {
     if (!this.formData.linkding_url || !this.formData.linkding_token) {
       this.testStatus = 'error';
       this.testMessage = 'Please enter both URL and token';
@@ -310,7 +335,7 @@ export class SettingsPanel extends LitElement {
         debug_mode: this.formData.debug_mode ?? false
       };
 
-      await DatabaseService.saveSettings(settings);
+      await SettingsService.saveSettings(settings);
       
       // Apply theme setting immediately
       if (settings.theme_mode) {
@@ -329,7 +354,7 @@ export class SettingsPanel extends LitElement {
     }
   }
 
-  private async handleClearData() {
+  async #handleClearData() {
     if (confirm('Are you sure you want to clear all data? This will remove all bookmarks and reading progress.')) {
       try {
         await DatabaseService.clearAll();
@@ -343,7 +368,7 @@ export class SettingsPanel extends LitElement {
     }
   }
 
-  private async handleFullSync() {
+  async #handleFullSync() {
     if (!this.settings?.linkding_url || !this.settings?.linkding_token) {
       this.testStatus = 'error';
       this.testMessage = 'Please save your Linkding settings first.';
@@ -380,12 +405,12 @@ export class SettingsPanel extends LitElement {
     }
   }
 
-  private async handleExportData() {
-    await this.dataManagementController.exportData();
+  async #handleExportData() {
+    await this.#dataManagementController.exportData();
   }
 
-  private handleImportClick() {
-    this.dataManagementController.startImport();
+  #handleImportClick() {
+    this.#dataManagementController.startImport();
   }
 
   override render() {
@@ -404,7 +429,7 @@ export class SettingsPanel extends LitElement {
               id="url"
               placeholder="https://your-linkding-instance.com"
               .value=${this.formData.linkding_url || ''}
-              @input=${(e: any) => this.handleInputChange('linkding_url', e.target.value)}
+              @input=${(e: any) => this.#handleInputChange('linkding_url', e.target.value)}
             ></md-outlined-text-field>
           </div>
           
@@ -415,13 +440,13 @@ export class SettingsPanel extends LitElement {
               type="password"
               placeholder="Your API token"
               .value=${this.formData.linkding_token || ''}
-              @input=${(e: any) => this.handleInputChange('linkding_token', e.target.value)}
+              @input=${(e: any) => this.#handleInputChange('linkding_token', e.target.value)}
             ></md-outlined-text-field>
           </div>
           
           <div class="test-connection">
             <md-text-button
-              @click=${this.handleTestConnection}
+              @click=${this.#handleTestConnection}
               ?disabled=${this.testStatus === 'testing'}
             >
               ${this.testStatus === 'testing' ? html`
@@ -446,7 +471,7 @@ export class SettingsPanel extends LitElement {
             <md-switch
               id="auto-sync"
               ?selected=${this.formData.auto_sync}
-              @change=${(e: any) => this.handleInputChange('auto_sync', e.target.selected)}
+              @change=${(e: any) => this.#handleInputChange('auto_sync', e.target.selected)}
             >
               Automatically sync bookmarks
             </md-switch>
@@ -460,13 +485,13 @@ export class SettingsPanel extends LitElement {
               min="5"
               max="1440"
               .value=${this.formData.sync_interval?.toString() || '60'}
-              @input=${(e: any) => this.handleInputChange('sync_interval', parseInt(e.target.value))}
+              @input=${(e: any) => this.#handleInputChange('sync_interval', parseInt(e.target.value))}
             ></md-outlined-text-field>
           </div>
 
           <div class="sync-actions">
             <md-text-button
-              @click=${this.handleFullSync}
+              @click=${this.#handleFullSync}
               ?disabled=${this.isFullSyncing || !this.settings?.linkding_url || !this.settings?.linkding_token}
             >
               ${this.isFullSyncing ? 'Syncing...' : 'Force Full Sync'}
@@ -493,7 +518,7 @@ export class SettingsPanel extends LitElement {
             <md-outlined-select
               id="reading-mode"
               .value=${this.formData.reading_mode || 'readability'}
-              @change=${(e: any) => this.handleInputChange('reading_mode', e.target.value)}
+              @change=${(e: any) => this.#handleInputChange('reading_mode', e.target.value)}
             >
               <md-select-option value="readability">Reader Mode</md-select-option>
               <md-select-option value="original">Original</md-select-option>
@@ -505,7 +530,7 @@ export class SettingsPanel extends LitElement {
             <md-outlined-select
               id="theme-mode"
               .value=${this.formData.theme_mode || 'system'}
-              @change=${(e: any) => this.handleInputChange('theme_mode', e.target.value)}
+              @change=${(e: any) => this.#handleInputChange('theme_mode', e.target.value)}
             >
               <md-select-option value="system">Follow System</md-select-option>
               <md-select-option value="light">Light</md-select-option>
@@ -522,7 +547,7 @@ export class SettingsPanel extends LitElement {
             <md-switch
               id="debug-mode"
               ?selected=${this.formData.debug_mode}
-              @change=${(e: any) => this.handleInputChange('debug_mode', e.target.selected)}
+              @change=${(e: any) => this.#handleInputChange('debug_mode', e.target.selected)}
             >
               Enable debugging for sync troubleshooting
             </md-switch>
@@ -531,7 +556,7 @@ export class SettingsPanel extends LitElement {
         
         <div class="form-actions">
           <md-filled-button
-            @click=${this.handleSave}
+            @click=${this.#handleSave}
             ?disabled=${this.isLoading}
           >
             Save Settings
@@ -545,35 +570,35 @@ export class SettingsPanel extends LitElement {
         
         <div class="data-actions">
           <md-text-button
-            @click=${this.handleExportData}
-            ?disabled=${this.dataManagementController.state.isExporting || this.dataManagementController.state.isImporting}
+            @click=${this.#handleExportData}
+            ?disabled=${this.#dataManagementController.state.isExporting || this.#dataManagementController.state.isImporting}
           >
-            ${this.dataManagementController.state.isExporting ? html`
+            ${this.#dataManagementController.state.isExporting ? html`
               <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
               Exporting...
             ` : 'Export Data'}
           </md-text-button>
           
           <md-text-button
-            @click=${this.handleImportClick}
-            ?disabled=${this.dataManagementController.state.isExporting || this.dataManagementController.state.isImporting}
+            @click=${this.#handleImportClick}
+            ?disabled=${this.#dataManagementController.state.isExporting || this.#dataManagementController.state.isImporting}
           >
-            ${this.dataManagementController.state.isImporting ? html`
+            ${this.#dataManagementController.state.isImporting ? html`
               <md-circular-progress indeterminate slot="icon" class="circular-progress-16"></md-circular-progress>
               Importing...
             ` : 'Import Data'}
           </md-text-button>
         </div>
         
-        ${this.dataManagementController.state.importResult ? html`
-          <div class="import-result ${this.dataManagementController.state.importResult.success ? 'import-result-success' : 'import-result-error'}">
-            <div>Import ${this.dataManagementController.state.importResult.success ? 'completed' : 'failed'}</div>
+        ${this.#dataManagementController.state.importResult ? html`
+          <div class="import-result ${this.#dataManagementController.state.importResult.success ? 'import-result-success' : 'import-result-error'}">
+            <div>Import ${this.#dataManagementController.state.importResult.success ? 'completed' : 'failed'}</div>
             <div class="import-details">
-              Reading progress: ${this.dataManagementController.state.importResult.imported_progress_count} imported, ${this.dataManagementController.state.importResult.skipped_progress_count} skipped<br>
-              ${this.dataManagementController.state.importResult.orphaned_progress_count > 0 ? html`Orphaned progress: ${this.dataManagementController.state.importResult.orphaned_progress_count} bookmarks not found<br>` : ''}
-              Settings: ${this.dataManagementController.state.importResult.imported_settings ? 'updated' : 'not updated'}<br>
-              Sync metadata: ${this.dataManagementController.state.importResult.imported_sync_metadata ? 'updated' : 'not updated'}
-              ${this.dataManagementController.state.importResult.errors.length > 0 ? html`<br>Errors: ${this.dataManagementController.state.importResult.errors.join(', ')}` : ''}
+              Reading progress: ${this.#dataManagementController.state.importResult.imported_progress_count} imported, ${this.#dataManagementController.state.importResult.skipped_progress_count} skipped<br>
+              ${this.#dataManagementController.state.importResult.orphaned_progress_count > 0 ? html`Orphaned progress: ${this.#dataManagementController.state.importResult.orphaned_progress_count} bookmarks not found<br>` : ''}
+              Settings: ${this.#dataManagementController.state.importResult.imported_settings ? 'updated' : 'not updated'}<br>
+              Sync metadata: ${this.#dataManagementController.state.importResult.imported_sync_metadata ? 'updated' : 'not updated'}
+              ${this.#dataManagementController.state.importResult.errors.length > 0 ? html`<br>Errors: ${this.#dataManagementController.state.importResult.errors.join(', ')}` : ''}
             </div>
           </div>
         ` : ''}
@@ -583,7 +608,7 @@ export class SettingsPanel extends LitElement {
         <h3>Danger Zone</h3>
         <p>This will permanently delete all your bookmarks and reading progress stored locally.</p>
         <md-filled-button
-          @click=${this.handleClearData}
+          @click=${this.#handleClearData}
           class="error-button"
         >
           Clear All Data

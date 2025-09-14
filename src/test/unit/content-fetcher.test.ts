@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContentFetcher } from '../../services/content-fetcher';
 import { DatabaseService } from '../../services/database';
+import { SettingsService } from '../../services/settings-service';
 import { createLinkdingAPI } from '../../services/linkding-api';
 import { DebugService } from '../../services/debug-service';
 import type { LocalBookmark } from '../../types';
@@ -24,8 +25,15 @@ vi.mock('../../services/database', () => ({
     getCompletedAssetsByBookmarkId: vi.fn().mockResolvedValue([]),
     getAssetsByBookmarkId: vi.fn().mockResolvedValue([]),
     getAsset: vi.fn().mockResolvedValue(null),
-    getSettings: vi.fn().mockResolvedValue(null),
     saveAsset: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+// Mock SettingsService
+vi.mock('../../services/settings-service', () => ({
+  SettingsService: {
+    getCurrentSettings: vi.fn().mockReturnValue(null),
+    hasValidSettings: vi.fn().mockReturnValue(false),
   },
 }));
 
@@ -72,14 +80,17 @@ describe('ContentFetcher', () => {
     (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
     (DatabaseService.getAssetsByBookmarkId as any).mockResolvedValue([]);
     (DatabaseService.getAsset as any).mockResolvedValue(null);
-    (DatabaseService.getSettings as any).mockResolvedValue(null);
     (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
-    
+
+    // Reset settings service mocks to default values
+    (SettingsService.getCurrentSettings as any).mockReturnValue(null);
+    (SettingsService.hasValidSettings as any).mockReturnValue(false);
+
     // Reset linkding API mock to default
     (createLinkdingAPI as any).mockReturnValue({
       downloadAsset: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
     });
-    
+
     // Clear DebugService mocks
     (DebugService.logInfo as any).mockClear();
     (DebugService.logError as any).mockClear();
@@ -278,9 +289,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should return available content sources with assets', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, mockAssets);
 
       expect(sources).toHaveLength(3); // 2 assets + Live URL
       expect(sources[0]).toEqual({
@@ -300,9 +309,7 @@ describe('ContentFetcher', () => {
     });
 
     it('should return empty sources when no assets available', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
-
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, []);
 
       expect(sources).toHaveLength(1); // No assets, but still have Live URL
       expect(sources[0]).toEqual({
@@ -325,11 +332,9 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:30:00Z',
       };
 
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([assetWithoutName]);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, [assetWithoutName]);
 
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
-
-      expect(sources).toHaveLength(2); // Asset + Readability
+      expect(sources).toHaveLength(2); // Asset + Live URL
       expect(sources[0]?.label).toBe('Asset 3');
     });
   });
@@ -397,7 +402,8 @@ describe('ContentFetcher', () => {
       
       // Set up fresh mocks for each test
       (DatabaseService.getAsset as any).mockResolvedValue(freshMockAsset);
-      (DatabaseService.getSettings as any).mockResolvedValue(mockSettings);
+      (SettingsService.getCurrentSettings as any).mockReturnValue(mockSettings);
+      (SettingsService.hasValidSettings as any).mockReturnValue(true);
       (DatabaseService.saveAsset as any).mockResolvedValue(undefined);
       
       // Reset LinkdingAPI mock
@@ -509,7 +515,8 @@ describe('ContentFetcher', () => {
 
     it('should handle missing settings gracefully', async () => {
       // Override settings for this specific test and ensure empty assets
-      (DatabaseService.getSettings as any).mockResolvedValue(null);
+      (SettingsService.getCurrentSettings as any).mockReturnValue(null);
+      (SettingsService.hasValidSettings as any).mockReturnValue(false);
       (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue([]);
 
       const result = await ContentFetcher.fetchBookmarkContent(archivedBookmark, 'asset', 1);
@@ -554,9 +561,7 @@ describe('ContentFetcher', () => {
     ];
 
     it('should include on-demand label for archived bookmark assets', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark, mockUncachedAssets);
 
       expect(sources).toHaveLength(3); // 2 assets + Live URL
       expect(sources[0]).toEqual({
@@ -582,21 +587,34 @@ describe('ContentFetcher', () => {
         cached_at: '2024-01-01T10:00:00Z'
       }));
 
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(cachedAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(archivedBookmark, cachedAssets);
 
       expect(sources[0]?.label).toBe('Page Snapshot'); // No (on-demand) suffix
       expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
     });
 
     it('should not add on-demand label for unarchived bookmarks', async () => {
-      (DatabaseService.getCompletedAssetsByBookmarkId as any).mockResolvedValue(mockUncachedAssets);
-
-      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark);
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, mockUncachedAssets);
 
       expect(sources[0]?.label).toBe('Page Snapshot'); // No (on-demand) suffix
       expect(sources[1]?.label).toBe('Document.pdf'); // No (on-demand) suffix
+    });
+
+    it('should process only the assets provided', async () => {
+      const providedAssets = [mockUncachedAssets[0]!]; // Only provide first asset
+
+      const sources = await ContentFetcher.getAvailableContentSources(mockBookmark, providedAssets);
+
+      expect(sources).toHaveLength(2); // 1 provided asset + Live URL
+      expect(sources[0]).toEqual({
+        type: 'asset',
+        label: 'Page Snapshot',
+        assetId: 1,
+      });
+      expect(sources[1]).toEqual({
+        type: 'url',
+        label: 'Live URL',
+      });
     });
   });
 
