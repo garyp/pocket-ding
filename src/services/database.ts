@@ -7,12 +7,24 @@ interface SyncMetadata {
   last_sync_timestamp: string;
 }
 
+interface SyncState {
+  id?: number;
+  checkpoint?: {
+    lastProcessedId?: number;
+    phase: 'bookmarks' | 'assets' | 'read-status';
+    timestamp: number;
+  };
+  retryCount?: number;
+  lastError?: string;
+}
+
 export class PocketDingDatabase extends Dexie {
   bookmarks!: Table<LocalBookmark>;
   readProgress!: Table<ReadProgress>;
   settings!: Table<AppSettings>;
   syncMetadata!: Table<SyncMetadata>;
   assets!: Table<LocalAsset>;
+  syncState!: Table<SyncState>;
 
   constructor() {
     super('PocketDingDB');
@@ -47,6 +59,14 @@ export class PocketDingDatabase extends Dexie {
       syncMetadata: '++id, last_sync_timestamp',
       assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
     });
+    this.version(6).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync',
+      readProgress: '++id, bookmark_id, last_read_at, dark_mode_override',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp',
+      assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at',
+      syncState: '++id'
+    });
   }
 }
 
@@ -67,6 +87,14 @@ export class DatabaseService {
 
   static async getUnreadBookmarks(): Promise<LocalBookmark[]> {
     return await db.bookmarks.where('unread').equals(1).toArray();
+  }
+
+  static async getUnarchivedBookmarks(): Promise<LocalBookmark[]> {
+    return await db.bookmarks.where('is_archived').equals(false).toArray();
+  }
+
+  static async deleteBookmark(id: number): Promise<void> {
+    await db.bookmarks.delete(id);
   }
 
   static async getBookmarksPaginated(filter: 'all' | 'unread' | 'archived', page: number, pageSize: number): Promise<LocalBookmark[]> {
@@ -260,13 +288,66 @@ export class DatabaseService {
     await db.assets.where('bookmark_id').equals(bookmarkId).delete();
   }
 
-  static async clearAssetContent(bookmarkId: number): Promise<void> {
-    const assets = await this.getAssetsByBookmarkId(bookmarkId);
-    for (const asset of assets) {
+  static async clearAssetContent(assetId: string): Promise<void> {
+    const asset = await db.assets.get(assetId);
+    if (asset) {
       // Clear content but keep metadata
       delete asset.content;
-      delete asset.cached_at;
-      await this.saveAsset(asset);
+      await db.assets.put(asset);
+    }
+  }
+
+  static async deleteAsset(id: string): Promise<void> {
+    await db.assets.delete(id);
+  }
+
+  // Sync State Management
+  static async getSyncCheckpoint(): Promise<SyncState['checkpoint'] | null> {
+    const state = await db.syncState.toCollection().first();
+    return state?.checkpoint || null;
+  }
+
+  static async setSyncCheckpoint(checkpoint: SyncState['checkpoint'] | null): Promise<void> {
+    const state = await db.syncState.toCollection().first();
+    if (state) {
+      await db.syncState.update(state.id!, { checkpoint });
+    } else {
+      await db.syncState.add({ checkpoint });
+    }
+  }
+
+  static async clearSyncCheckpoint(): Promise<void> {
+    await db.syncState.clear();
+  }
+
+  static async getSyncRetryCount(): Promise<number> {
+    const state = await db.syncState.toCollection().first();
+    return state?.retryCount || 0;
+  }
+
+  static async incrementSyncRetryCount(): Promise<void> {
+    const state = await db.syncState.toCollection().first();
+    const currentCount = state?.retryCount || 0;
+    if (state) {
+      await db.syncState.update(state.id!, { retryCount: currentCount + 1 });
+    } else {
+      await db.syncState.add({ retryCount: 1 });
+    }
+  }
+
+  static async resetSyncRetryCount(): Promise<void> {
+    const state = await db.syncState.toCollection().first();
+    if (state) {
+      await db.syncState.update(state.id!, { retryCount: 0 });
+    }
+  }
+
+  static async setLastSyncError(error: string | null): Promise<void> {
+    const state = await db.syncState.toCollection().first();
+    if (state) {
+      await db.syncState.update(state.id!, { lastError: error || undefined });
+    } else {
+      await db.syncState.add({ lastError: error || undefined });
     }
   }
 

@@ -7,6 +7,7 @@ import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DataManagementController } from '../controllers/data-management-controller';
+import { SyncController } from '../controllers/sync-controller';
 import type { AppSettings } from '../types';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/button/filled-button.js';
@@ -33,8 +34,11 @@ export class SettingsPanel extends LitElement {
   @state() private isFullSyncing = false;
   @state() private fullSyncProgress = 0;
   @state() private fullSyncTotal = 0;
+  @state() private periodicSyncSupported = false;
+  @state() private periodicSyncPermission: 'prompt' | 'granted' | 'denied' = 'prompt';
 
   #dataManagementController = new DataManagementController(this);
+  #syncController = new SyncController(this);
 
   // Getter methods for reactive data
   get settings() { 
@@ -254,9 +258,30 @@ export class SettingsPanel extends LitElement {
     }
   `;
 
-  override connectedCallback() {
+  override async connectedCallback() {
     super.connectedCallback();
     // Reactive controller will handle initial data loading
+    
+    // Check periodic sync support
+    if ('serviceWorker' in navigator && 'periodicSync' in ServiceWorkerRegistration.prototype) {
+      this.periodicSyncSupported = true;
+      await this.#checkPeriodicSyncPermission();
+    }
+  }
+  
+  async #checkPeriodicSyncPermission() {
+    if ('permissions' in navigator) {
+      try {
+        const permission = await (navigator as any).permissions.query({ name: 'periodic-background-sync' });
+        this.periodicSyncPermission = permission.state;
+        permission.addEventListener('change', () => {
+          this.periodicSyncPermission = permission.state;
+        });
+      } catch (error) {
+        // Permission API not available for periodic-background-sync
+        console.log('Periodic sync permission check not available');
+      }
+    }
   }
 
   override updated(changedProperties: Map<string | number | symbol, unknown>) {
@@ -340,6 +365,14 @@ export class SettingsPanel extends LitElement {
       // Apply theme setting immediately
       if (settings.theme_mode) {
         ThemeService.setThemeFromSettings(settings.theme_mode);
+      }
+      
+      // Enable/disable periodic sync based on auto_sync setting
+      if (this.#syncController) {
+        await this.#syncController.setPeriodicSync(
+          settings.auto_sync,
+          settings.sync_interval ? settings.sync_interval * 60 * 1000 : undefined
+        );
       }
       
       this.dispatchEvent(new CustomEvent('settings-saved', {
@@ -473,18 +506,28 @@ export class SettingsPanel extends LitElement {
               ?selected=${this.formData.auto_sync}
               @change=${(e: any) => this.#handleInputChange('auto_sync', e.target.selected)}
             >
-              Automatically sync bookmarks
+              ${this.periodicSyncSupported ? 'Enable background sync' : 'Automatically sync bookmarks'}
             </md-switch>
+            ${this.periodicSyncSupported && this.formData.auto_sync ? html`
+              <div style="margin-top: 0.5rem; padding-left: 1rem; font-size: 0.875rem; color: var(--md-sys-color-on-surface-variant);">
+                ${this.periodicSyncPermission === 'granted' 
+                  ? html`✓ Background sync enabled - syncs 1-2 times daily when app is closed`
+                  : this.periodicSyncPermission === 'denied'
+                  ? html`⚠️ Background sync permission denied - syncs only when app is open`
+                  : html`Background sync will be enabled when permission is granted`
+                }
+              </div>
+            ` : ''}
           </div>
           
-          <div class="form-group">
+          <div class="form-group" style="display: none;">
             <label for="sync-interval">Sync Interval (minutes)</label>
             <md-outlined-text-field
               id="sync-interval"
               type="number"
               min="5"
               max="1440"
-              .value=${this.formData.sync_interval?.toString() || '60'}
+              .value=${this.formData.sync_interval?.toString() || '720'}
               @input=${(e: any) => this.#handleInputChange('sync_interval', parseInt(e.target.value))}
             ></md-outlined-text-field>
           </div>
