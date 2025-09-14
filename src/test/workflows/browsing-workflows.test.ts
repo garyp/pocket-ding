@@ -169,15 +169,25 @@ describe('Browsing Workflows - Bookmark Discovery and Navigation', () => {
     });
 
     it('should support bookmark filtering workflow', async () => {
-      const bookmarkList = document.createElement('bookmark-list') as BookmarkList;
-      document.body.appendChild(bookmarkList);
+      const bookmarkContainer = document.createElement('bookmark-list-container') as BookmarkListContainer;
+      document.body.appendChild(bookmarkContainer);
 
-      // Wait for component to initialize
-      await bookmarkList.updateComplete;
+      // Wait for component to initialize and load data
+      await bookmarkContainer.updateComplete;
 
-      // Verify database methods are called for filtering
+      // Wait for the reactive queries to load data
+      await waitFor(() => {
+        const bookmarkList = bookmarkContainer.shadowRoot?.querySelector('bookmark-list');
+        return bookmarkList;
+      });
+
+      // Verify database methods are called for filtering by the container
       expect(DatabaseService.getBookmarksPaginated).toHaveBeenCalled();
       expect(DatabaseService.getAllFilterCounts).toHaveBeenCalled();
+
+      // Verify filter buttons are present
+      const filterButtons = bookmarkContainer.shadowRoot?.querySelectorAll('md-filled-button, md-text-button');
+      expect(filterButtons?.length).toBeGreaterThan(0);
     });
   });
 });

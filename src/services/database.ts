@@ -269,4 +269,5 @@ export class DatabaseService {
       await this.saveAsset(asset);
     }
   }
+
 }

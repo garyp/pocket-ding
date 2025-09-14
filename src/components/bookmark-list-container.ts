@@ -1,21 +1,36 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { db } from '../services/database';
+import { DatabaseService } from '../services/database';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
 import { StateController } from '../controllers/state-controller';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
-import type { LocalBookmark, PaginationState, BookmarkListContainerState } from '../types';
+import type { LocalBookmark, PaginationState, BookmarkListContainerState, BookmarkFilter } from '../types';
 import '@material/web/labs/badge/badge.js';
+import '@material/web/button/filled-button.js';
+import '@material/web/button/text-button.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
 import './bookmark-list';
+import './pagination-controls';
+import './paginated-list';
 
 @customElement('bookmark-list-container')
 export class BookmarkListContainer extends LitElement {
   static override styles = css`
     :host {
       display: block;
+      padding: 1rem;
+      max-width: 50rem; /* 800px - responsive max width */
+      margin: 0 auto;
+    }
+
+    .filters {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      padding: 0 0.25rem;
     }
 
     .sync-progress {
@@ -44,6 +59,18 @@ export class BookmarkListContainer extends LitElement {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
     }
+
+    @media (max-width: 48rem) { /* 768px breakpoint */
+      :host {
+        padding: 0.75rem; /* 12px - reduced for mobile */
+      }
+
+      .filters {
+        padding: 0;
+        gap: 0.375rem; /* 6px - tighter on mobile */
+        margin-bottom: 0.75rem;
+      }
+    }
   `;
   // Persistent state properties (automatically observed by StateController)
   @state() private currentPage: number = 1;
@@ -56,12 +83,18 @@ export class BookmarkListContainer extends LitElement {
 
 
   // Reactive controllers
-  private syncController = new SyncController(this, {
-    onSyncCompleted: () => this.handleSyncCompleted(),
-    onBookmarkSynced: (bookmarkId: number, bookmark: any) => this.handleBookmarkSynced(bookmarkId, bookmark),
+  #syncController = new SyncController(this, {
+    onSyncCompleted: () => this.#handleSyncCompleted(),
+    onBookmarkSynced: (bookmarkId: number, bookmark: any) => this.#handleBookmarkSynced(bookmarkId, bookmark),
   });
 
-  private faviconController = new FaviconController(this);
+  #faviconController = new FaviconController(this);
+
+  // Reactive query for filter counts
+  #filterCountsQuery = new ReactiveQueryController(
+    this,
+    () => DatabaseService.getAllFilterCounts()
+  );
 
   // Reactive query to track bookmark positions for pagination calculations
   #bookmarkPositionsQuery = new ReactiveQueryController(
@@ -70,9 +103,20 @@ export class BookmarkListContainer extends LitElement {
     (): ['all' | 'unread' | 'archived'] => [this.filter]
   );
 
+  // Reactive query to get filtered bookmarks for the current page
+  #bookmarksQuery = new ReactiveQueryController<any, [BookmarkFilter, number, number]>(
+    this,
+    () => DatabaseService.getBookmarksPaginated(
+      this.filter,
+      this.currentPage,
+      this.pageSize
+    ),
+    () => [this.filter, this.currentPage, this.pageSize]
+  );
+
   // State controller for pagination persistence with automatic observation
   // The controller automatically observes and persists state changes via observedProperties
-  private stateController = new StateController<BookmarkListContainerState>(this, {
+  #stateController = new StateController<BookmarkListContainerState>(this, {
     storageKey: 'bookmark-list-container-state',
     defaultState: {
       currentPage: 1,
@@ -141,14 +185,21 @@ export class BookmarkListContainer extends LitElement {
     return Math.floor(index / this.pageSize) + 1;
   }
 
-  // Simplified pagination state - data counts now handled by reactive queries in bookmark-list
+  // Pagination state computed from reactive filter counts
   private get paginationState(): PaginationState {
+    const filterCounts = this.filterCounts;
+    const totalCount = this.filter === 'all' ? filterCounts.all :
+                      this.filter === 'unread' ? filterCounts.unread :
+                      filterCounts.archived;
+    const totalPages = Math.max(1, Math.ceil(totalCount / this.pageSize));
+
     return {
       currentPage: this.currentPage,
       pageSize: this.pageSize,
-      totalCount: 0, // Will be computed by reactive queries
-      totalPages: 1, // Will be computed by reactive queries
+      totalCount,
+      totalPages,
       filter: this.filter,
+      filterCounts,
       ...(this.anchorBookmarkId ? { anchorBookmarkId: this.anchorBookmarkId } : {})
     };
   }
@@ -156,25 +207,25 @@ export class BookmarkListContainer extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     // StateController automatically handles persistence via observedProperties
-    void this.stateController; // Suppress TS6133: declared but never read warning
-    this.addEventListener('sync-requested', this.handleSyncRequested);
+    void this.#stateController; // Suppress TS6133: declared but never read warning
+    this.addEventListener('sync-requested', this.#handleSyncRequested);
     // No need to loadBookmarks - data now handled by reactive queries in bookmark-list
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    this.removeEventListener('sync-requested', this.handleSyncRequested);
+    this.removeEventListener('sync-requested', this.#handleSyncRequested);
   }
 
 
   // Controller event handlers
-  private async handleSyncCompleted() {
+  async #handleSyncCompleted() {
     // No need to reload bookmarks - they're updated automatically via reactive queries
     console.log('Sync completed');
   }
 
  
-  private handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
+  #handleBookmarkSynced(bookmarkId: number, updatedBookmark: LocalBookmark) {
     if (!updatedBookmark || !bookmarkId) return;
 
     // If this is the anchor bookmark, ensure we're on the correct page to show it
@@ -190,7 +241,7 @@ export class BookmarkListContainer extends LitElement {
   }
 
   // Callback handlers
-  private handleBookmarkSelect = (bookmarkId: number) => {
+  #handleBookmarkSelect = (bookmarkId: number) => {
     // Set the selected bookmark as the anchor for position memory
     // StateController will automatically persist this change
     this.anchorBookmarkId = bookmarkId;
@@ -201,28 +252,28 @@ export class BookmarkListContainer extends LitElement {
     }));
   };
 
-  private handleSyncRequested = async () => {
+  #handleSyncRequested = async () => {
     try {
-      await this.syncController.requestSync();
+      await this.#syncController.requestSync();
     } catch (error) {
       console.error('Failed to request sync:', error);
     }
   };
 
-  private handleFaviconLoadRequested = async (bookmarkId: number, faviconUrl: string) => {
+  #handleFaviconLoadRequested = async (bookmarkId: number, faviconUrl: string) => {
     try {
-      await this.faviconController.loadFavicon(bookmarkId, faviconUrl);
+      await this.#faviconController.loadFavicon(bookmarkId, faviconUrl);
     } catch (error) {
       console.error('Failed to load favicon:', error);
     }
   };
 
-  private handleVisibilityChanged = (visibleBookmarks: Array<{ id: number; favicon_url?: string }>) => {
+  #handleVisibilityChanged = (visibleBookmarks: Array<{ id: number; favicon_url?: string }>) => {
     // Pass bookmark data directly to avoid database coupling
-    this.faviconController.handleVisibilityChanged(visibleBookmarks);
+    this.#faviconController.handleVisibilityChanged(visibleBookmarks);
   };
 
-  private handlePageChange = async (page: number) => {
+  #handlePageChange = async (page: number) => {
     if (page !== this.currentPage) {
       // StateController will automatically persist these changes
       this.currentPage = page;
@@ -230,7 +281,7 @@ export class BookmarkListContainer extends LitElement {
     }
   };
 
-  private handleFilterChange = (filter: 'all' | 'unread' | 'archived') => {
+  #handleFilterChange = (filter: BookmarkFilter) => {
     if (filter !== this.filter) {
       // StateController will automatically persist these changes
       this.filter = filter;
@@ -249,39 +300,115 @@ export class BookmarkListContainer extends LitElement {
     }
   };
 
+
+  get filterCounts() {
+    return this.#filterCountsQuery.value || { all: 0, unread: 0, archived: 0 };
+  }
+
+  get bookmarks(): LocalBookmark[] {
+    return this.#bookmarksQuery.value || [];
+  }
+
+  get isLoading(): boolean {
+    return this.#bookmarksQuery.loading || this.#filterCountsQuery.loading;
+  }
+
+  get totalCount(): number {
+    const counts = this.filterCounts;
+    switch (this.filter) {
+      case 'unread':
+        return counts.unread;
+      case 'archived':
+        return counts.archived;
+      case 'all':
+      default:
+        return counts.all;
+    }
+  }
+
   override render() {
-    const syncState = this.syncController.getSyncState();
-    const faviconState = this.faviconController.getFaviconState();
-    
+    const syncState = this.#syncController.getSyncState();
+    const faviconState = this.#faviconController.getFaviconState();
+
     return html`
       ${syncState.isSyncing ? html`
         <div class="sync-progress">
           <div class="sync-progress-text">
             <span>
-              ${syncState.syncTotal > 0 
+              ${syncState.syncTotal > 0
                 ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
                 : 'Starting sync...'
               }
             </span>
             <md-icon class="sync-badge">sync</md-icon>
           </div>
-          <md-linear-progress 
+          <md-linear-progress
             .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
             ?indeterminate=${syncState.syncTotal === 0}
           ></md-linear-progress>
         </div>
       ` : ''}
-      
-      <bookmark-list
-        .faviconCache=${faviconState.faviconCache}
-        .paginationState=${this.paginationState}
-        .syncedBookmarkIds=${syncState.syncedBookmarkIds}
-        .onBookmarkSelect=${this.handleBookmarkSelect}
-        .onFaviconLoadRequested=${this.handleFaviconLoadRequested}
-        .onVisibilityChanged=${this.handleVisibilityChanged}
-        .onPageChange=${this.handlePageChange}
-        .onFilterChange=${this.handleFilterChange}
-      ></bookmark-list>
+
+      <div class="filters">
+        ${this.filter === 'all' ? html`
+          <md-filled-button
+            @click=${() => this.#handleFilterChange('all')}
+          >
+            All (${this.filterCounts.all})
+          </md-filled-button>
+        ` : html`
+          <md-text-button
+            @click=${() => this.#handleFilterChange('all')}
+          >
+            All (${this.filterCounts.all})
+          </md-text-button>
+        `}
+        ${this.filter === 'unread' ? html`
+          <md-filled-button
+            @click=${() => this.#handleFilterChange('unread')}
+          >
+            Unread (${this.filterCounts.unread})
+          </md-filled-button>
+        ` : html`
+          <md-text-button
+            @click=${() => this.#handleFilterChange('unread')}
+          >
+            Unread (${this.filterCounts.unread})
+          </md-text-button>
+        `}
+        ${this.filter === 'archived' ? html`
+          <md-filled-button
+            @click=${() => this.#handleFilterChange('archived')}
+          >
+            Archived (${this.filterCounts.archived})
+          </md-filled-button>
+        ` : html`
+          <md-text-button
+            @click=${() => this.#handleFilterChange('archived')}
+          >
+            Archived (${this.filterCounts.archived})
+          </md-text-button>
+        `}
+      </div>
+
+      <paginated-list
+        .totalCount=${this.totalCount}
+        .currentPage=${this.currentPage}
+        .pageSize=${this.pageSize}
+        .loading=${this.isLoading}
+        .onPageChange=${this.#handlePageChange}
+      >
+        <bookmark-list
+          .bookmarks=${this.bookmarks}
+          .isLoading=${false}
+          .faviconCache=${faviconState.faviconCache}
+          .paginationState=${this.paginationState}
+          .syncedBookmarkIds=${syncState.syncedBookmarkIds}
+          .onBookmarkSelect=${this.#handleBookmarkSelect}
+          .onFaviconLoadRequested=${this.#handleFaviconLoadRequested}
+          .onVisibilityChanged=${this.#handleVisibilityChanged}
+        ></bookmark-list>
+      </paginated-list>
     `;
   }
 }
