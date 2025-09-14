@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+/// <reference path="./types/service-worker.d.ts" />
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
@@ -45,8 +46,7 @@ async function broadcastToClients(message: SyncMessage): Promise<void> {
  */
 async function getSettings(): Promise<AppSettings | null> {
   try {
-    const db = new DatabaseService();
-    return await db.getSettings();
+    return await DatabaseService.getSettings();
   } catch (error) {
     console.error('Failed to get settings:', error);
     return null;
@@ -74,9 +74,10 @@ async function performSync(fullSync = false): Promise<void> {
     }
     
     // Load checkpoint from database if not a full sync
-    let syncCheckpoint: SyncCheckpoint | null = null;
+    let syncCheckpoint: SyncCheckpoint | undefined = undefined;
     if (!fullSync) {
-      syncCheckpoint = await DatabaseService.getSyncCheckpoint();
+      const checkpoint = await DatabaseService.getSyncCheckpoint();
+      syncCheckpoint = checkpoint as SyncCheckpoint | undefined;
     } else {
       // Clear checkpoint and sync timestamp for full sync
       await DatabaseService.clearSyncCheckpoint();
@@ -95,7 +96,7 @@ async function performSync(fullSync = false): Promise<void> {
     
     await broadcastToClients(SyncMessages.syncStatus('syncing'));
     
-    const result = await currentSyncCore.performSync(settings, syncCheckpoint);
+    const result = await currentSyncCore.performSync(settings, syncCheckpoint ?? undefined);
     
     if (result.success) {
       lastSyncTimestamp = result.timestamp;
@@ -140,7 +141,7 @@ async function performSync(fullSync = false): Promise<void> {
         await DatabaseService.incrementSyncRetryCount();
         console.log(`Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
         setTimeout(() => {
-          self.registration.sync.register('sync-bookmarks');
+          self.registration.sync?.register('sync-bookmarks');
         }, delay);
       }
     }
@@ -163,7 +164,7 @@ self.addEventListener('message', async (event) => {
         await performSync(message.fullSync);
       } else {
         // For background sync, register sync event
-        await self.registration.sync.register('sync-bookmarks');
+        await self.registration.sync?.register('sync-bookmarks');
       }
       break;
       
@@ -267,7 +268,7 @@ self.addEventListener('activate', (event) => {
 /**
  * Track user engagement for periodic sync
  */
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (_event) => {
   // Browser automatically tracks engagement, but we can add custom logic here if needed
   // For now, just let Workbox handle the fetch
 });

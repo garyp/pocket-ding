@@ -20,16 +20,19 @@ const mockServiceWorkerRegistration = {
 describe('Background Sync User Workflows', () => {
   beforeEach(() => {
     // Setup service worker mock
-    Object.defineProperty(navigator, 'serviceWorker', {
-      value: {
-        ready: Promise.resolve(mockServiceWorkerRegistration as any),
-        register: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn()
-      },
-      writable: true,
-      configurable: true
-    });
+    if (!navigator.serviceWorker || !(navigator.serviceWorker as any).__mock) {
+      Object.defineProperty(navigator, 'serviceWorker', {
+        value: {
+          ready: Promise.resolve(mockServiceWorkerRegistration as any),
+          register: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          __mock: true
+        },
+        writable: true,
+        configurable: true
+      });
+    }
     
     // Mock Periodic Sync API availability
     Object.defineProperty(ServiceWorkerRegistration.prototype, 'periodicSync', {
@@ -50,9 +53,10 @@ describe('Background Sync User Workflows', () => {
       // User has valid settings
       const settings: AppSettings = {
         linkding_url: 'https://test.linkding.com',
-        linkding_api_key: 'test-key',
+        linkding_token: 'test-key',
         auto_sync: false,
-        sync_interval: 720 // 12 hours
+        sync_interval: 720, // 12 hours
+        reading_mode: 'original' as const
       };
       
       await SettingsService.saveSettings(settings);
@@ -80,9 +84,10 @@ describe('Background Sync User Workflows', () => {
       // User has auto-sync enabled
       const settings: AppSettings = {
         linkding_url: 'https://test.linkding.com',
-        linkding_api_key: 'test-key',
+        linkding_token: 'test-key',
         auto_sync: true,
-        sync_interval: 720
+        sync_interval: 720,
+        reading_mode: 'original' as const
       };
       
       await SettingsService.saveSettings(settings);
@@ -293,7 +298,7 @@ describe('Background Sync User Workflows', () => {
       // Browser tracks this automatically, but we can influence it
       
       // User interacts with app
-      const userActions = [
+      const _userActions = [
         'clicks sync button',
         'reads articles',
         'bookmarks items',

@@ -37,7 +37,6 @@ export class SyncController implements ReactiveController {
     syncProgress: 0,
     syncTotal: 0,
     syncedBookmarkIds: new Set<number>(),
-    syncPhase: undefined,
     syncStatus: 'idle'
   };
 
@@ -74,7 +73,7 @@ export class SyncController implements ReactiveController {
 
   private cleanupSync() {
     // Clean up message handler
-    if (this.#messageHandler && 'serviceWorker' in navigator) {
+    if (this.#messageHandler && 'serviceWorker' in navigator && navigator.serviceWorker?.removeEventListener) {
       navigator.serviceWorker.removeEventListener('message', this.#messageHandler);
       this.#messageHandler = null;
     }
@@ -87,7 +86,7 @@ export class SyncController implements ReactiveController {
     }
 
     try {
-      const registration = await navigator.serviceWorker.ready;
+      await navigator.serviceWorker.ready;
       this.#serviceWorkerReady = true;
 
       // Setup message handler
@@ -193,10 +192,10 @@ export class SyncController implements ReactiveController {
   }
 
   // Bookmark synced tracking for visual highlights
-  private trackBookmarkSynced(bookmarkId: number) {
+  private _trackBookmarkSynced(_bookmarkId: number) {
     this._syncState = {
       ...this._syncState,
-      syncedBookmarkIds: new Set([...this._syncState.syncedBookmarkIds, bookmarkId]),
+      syncedBookmarkIds: new Set([...this._syncState.syncedBookmarkIds, _bookmarkId]),
     };
     this.#host.requestUpdate();
   }

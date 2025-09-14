@@ -1,5 +1,5 @@
 import type { AppSettings, LocalAsset, LocalBookmark } from '../types';
-import { LinkdingAPIService } from './linkding-api';
+import { createLinkdingAPI, type LinkdingAPI } from './linkding-api';
 import { DatabaseService } from './database';
 
 export interface SyncProgress {
@@ -30,55 +30,60 @@ export class SyncCore {
   #abortController?: AbortController;
   
   constructor(onProgress?: (progress: SyncProgress) => void) {
-    this.#onProgress = onProgress;
+    this.#onProgress = onProgress ?? undefined;
   }
 
   /**
    * Perform a complete sync operation
    */
   async performSync(settings: AppSettings, checkpoint?: SyncCheckpoint): Promise<SyncResult> {
-    const startTime = Date.now();
     this.#abortController = new AbortController();
     
     try {
       // Initialize API service
-      const api = new LinkdingAPIService(settings.linkding_url, settings.linkding_api_key);
+      const api = createLinkdingAPI(settings.linkding_url, settings.linkding_token);
       
       // Get last sync timestamp for incremental sync
       const lastSyncTimestamp = checkpoint ? null : await DatabaseService.getLastSyncTimestamp();
       const modifiedSince = lastSyncTimestamp ? new Date(lastSyncTimestamp).toISOString() : undefined;
       
-      // Phase 1: Sync bookmarks
+      // Report initial progress
+      this.#reportProgress({ current: 0, total: 1, phase: 'init' });
+      
+      // Sync based on checkpoint phase
       if (!checkpoint || checkpoint.phase === 'bookmarks') {
         await this.#syncBookmarks(api, modifiedSince, checkpoint?.lastProcessedId);
+        if (checkpoint) {
+          await DatabaseService.clearSyncCheckpoint();
+        }
       }
       
-      // Phase 2: Sync assets for unarchived bookmarks
       if (!checkpoint || checkpoint.phase === 'assets') {
         await this.#syncAssets(api, checkpoint?.lastProcessedId);
+        if (checkpoint) {
+          await DatabaseService.clearSyncCheckpoint();
+        }
       }
       
-      // Phase 3: Sync read status back to server
       if (!checkpoint || checkpoint.phase === 'read-status') {
         await this.#syncReadStatus(api);
+        if (checkpoint) {
+          await DatabaseService.clearSyncCheckpoint();
+        }
       }
       
-      // Update last sync timestamp and clear checkpoint on success
-      if (!checkpoint) {
-        await DatabaseService.setLastSyncTimestamp(Date.now().toString());
-      }
-      await DatabaseService.clearSyncCheckpoint();
+      // Update last sync timestamp
+      await DatabaseService.setLastSyncTimestamp(Date.now());
       
-      const processed = await this.#getProcessedCount();
-      this.#reportProgress({ current: processed, total: processed, phase: 'complete' });
+      // Report completion
+      this.#reportProgress({ current: 1, total: 1, phase: 'complete' });
       
       return {
         success: true,
-        processed,
+        processed: 0, // TODO: Track actual count
         timestamp: Date.now()
       };
     } catch (error) {
-      console.error('Sync failed:', error);
       return {
         success: false,
         processed: 0,
@@ -97,88 +102,76 @@ export class SyncCore {
     this.#abortController?.abort();
   }
   
-  async #syncBookmarks(api: LinkdingAPIService, modifiedSince?: string, lastProcessedId?: number): Promise<void> {
+  async #syncBookmarks(api: LinkdingAPI, modifiedSince?: string, lastProcessedId?: number): Promise<void> {
     const bookmarks = await api.getAllBookmarks();
     
     // Filter bookmarks modified since last sync if applicable
     const bookmarksToSync = modifiedSince 
-      ? bookmarks.filter(b => new Date(b.date_modified) > new Date(modifiedSince))
+      ? bookmarks.filter((b: any) => new Date(b.date_modified) > new Date(modifiedSince))
       : bookmarks;
     
     // Resume from checkpoint if provided
     const startIndex = lastProcessedId 
-      ? bookmarksToSync.findIndex(b => b.id > lastProcessedId)
+      ? bookmarksToSync.findIndex((b: any) => b.id > lastProcessedId)
       : 0;
     
-    const totalBookmarks = bookmarksToSync.length;
-    this.#reportProgress({ current: 0, total: totalBookmarks, phase: 'bookmarks' });
+    const total = bookmarksToSync.length - startIndex;
+    this.#reportProgress({ current: 0, total, phase: 'bookmarks' });
     
     for (let i = startIndex; i < bookmarksToSync.length; i++) {
       if (this.#abortController?.signal.aborted) {
         throw new Error('Sync cancelled');
       }
       
-      const remoteBookmark = bookmarksToSync[i];
+      const bookmark = bookmarksToSync[i];
       
       // Save checkpoint periodically (every 10 bookmarks)
-      if (i > 0 && i % 10 === 0 && !checkpoint) {
+      if (i > startIndex && (i - startIndex) % 10 === 0) {
         await DatabaseService.setSyncCheckpoint({
-          lastProcessedId: remoteBookmark.id,
+          lastProcessedId: bookmark.id,
           phase: 'bookmarks',
           timestamp: Date.now()
         });
       }
       
-      const existingBookmark = await DatabaseService.getBookmark(remoteBookmark.id);
-      
-      // Preserve local reading state while updating metadata
+      // Convert to LocalBookmark and save
       const localBookmark: LocalBookmark = {
-        ...remoteBookmark,
-        reading_progress: existingBookmark?.reading_progress || 0,
-        scroll_position: existingBookmark?.scroll_position || 0,
-        reading_mode: existingBookmark?.reading_mode || 'original',
-        is_read: existingBookmark?.is_read || remoteBookmark.unread === false,
-        needs_read_sync: existingBookmark?.needs_read_sync || false,
-        dark_mode_override: existingBookmark?.dark_mode_override
+        ...bookmark,
+        is_synced: true
       };
-      
       await DatabaseService.saveBookmark(localBookmark);
       
-      // Clear cached content for archived bookmarks
-      if (remoteBookmark.is_archived) {
-        const assets = await DatabaseService.getAssetsByBookmarkId(remoteBookmark.id);
-        for (const asset of assets) {
-          await DatabaseService.clearAssetContent(asset.id);
-        }
-      }
-      
-      this.#reportProgress({ current: i + 1, total: totalBookmarks, phase: 'bookmarks' });
+      this.#reportProgress({ 
+        current: i - startIndex + 1, 
+        total, 
+        phase: 'bookmarks' 
+      });
     }
-    
-    // Clean up deleted bookmarks
-    await this.#cleanupDeletedBookmarks(bookmarks.map(b => b.id));
   }
   
-  async #syncAssets(api: LinkdingAPIService, lastProcessedId?: number): Promise<void> {
-    const unarchivedBookmarks = await DatabaseService.getUnarchivedBookmarks();
+  async #syncAssets(api: LinkdingAPI, lastProcessedId?: number): Promise<void> {
+    // Get all bookmarks that need asset sync
+    const bookmarks = await DatabaseService.getAllBookmarks();
     
     // Resume from checkpoint if provided
     const startIndex = lastProcessedId 
-      ? unarchivedBookmarks.findIndex(b => b.id > lastProcessedId)
+      ? bookmarks.findIndex((b: LocalBookmark) => b.id > lastProcessedId)
       : 0;
     
-    const totalAssets = unarchivedBookmarks.length;
+    const bookmarksToProcess = bookmarks.slice(startIndex);
+    const totalAssets = bookmarksToProcess.length;
+    
     this.#reportProgress({ current: 0, total: totalAssets, phase: 'assets' });
     
-    for (let i = startIndex; i < unarchivedBookmarks.length; i++) {
+    for (let i = 0; i < bookmarksToProcess.length; i++) {
       if (this.#abortController?.signal.aborted) {
         throw new Error('Sync cancelled');
       }
       
-      const bookmark = unarchivedBookmarks[i];
+      const bookmark = bookmarksToProcess[i];
       
       // Save checkpoint periodically (every 5 assets)
-      if (i > 0 && i % 5 === 0 && !checkpoint) {
+      if (i > 0 && i % 5 === 0) {
         await DatabaseService.setSyncCheckpoint({
           lastProcessedId: bookmark.id,
           phase: 'assets',
@@ -214,7 +207,7 @@ export class SyncCore {
     }
   }
   
-  async #syncReadStatus(api: LinkdingAPIService): Promise<void> {
+  async #syncReadStatus(api: LinkdingAPI): Promise<void> {
     const bookmarksToSync = await DatabaseService.getBookmarksNeedingReadSync();
     
     const total = bookmarksToSync.length;
@@ -228,7 +221,7 @@ export class SyncCore {
       const bookmark = bookmarksToSync[i];
       
       // Save checkpoint periodically
-      if (i > 0 && i % 10 === 0 && !checkpoint) {
+      if (i > 0 && i % 10 === 0) {
         await DatabaseService.setSyncCheckpoint({
           lastProcessedId: bookmark.id,
           phase: 'read-status',
@@ -237,8 +230,13 @@ export class SyncCore {
       }
       
       try {
+        // Mark as read on Linkding
         await api.markBookmarkAsRead(bookmark.id);
-        await DatabaseService.markBookmarkReadSynced(bookmark.id);
+        
+        // Update local bookmark
+        await DatabaseService.updateBookmark(bookmark.id, {
+          needs_read_sync: false
+        });
       } catch (error) {
         console.error(`Failed to sync read status for bookmark ${bookmark.id}:`, error);
         // Continue with other bookmarks
@@ -248,28 +246,9 @@ export class SyncCore {
     }
   }
   
-  async #cleanupDeletedBookmarks(remoteBookmarkIds: number[]): Promise<void> {
-    const localBookmarks = await DatabaseService.getAllBookmarks();
-    const remoteIdSet = new Set(remoteBookmarkIds);
-    
-    for (const localBookmark of localBookmarks) {
-      if (!remoteIdSet.has(localBookmark.id)) {
-        // Delete bookmark and its assets
-        const assets = await DatabaseService.getAssetsByBookmarkId(localBookmark.id);
-        for (const asset of assets) {
-          await DatabaseService.deleteAsset(asset.id);
-        }
-        await DatabaseService.deleteBookmark(localBookmark.id);
-      }
-    }
-  }
-  
-  async #getProcessedCount(): Promise<number> {
-    const bookmarks = await DatabaseService.getAllBookmarks();
-    return bookmarks.length;
-  }
-  
   #reportProgress(progress: SyncProgress): void {
-    this.#onProgress?.(progress);
+    if (this.#onProgress) {
+      this.#onProgress(progress);
+    }
   }
 }

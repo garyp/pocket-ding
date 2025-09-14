@@ -27,7 +27,7 @@ const mockServiceWorker = {
 class TestSyncComponent extends LitElement {
   syncController = new SyncController(this);
   
-  render() {
+  override render() {
     return html`<div>Test Component</div>`;
   }
 }
@@ -53,9 +53,10 @@ describe('Sync Message Passing Integration', () => {
     // Mock settings
     vi.spyOn(SettingsService, 'getSettings').mockResolvedValue({
       linkding_url: 'https://test.com',
-      linkding_api_key: 'test-key',
+      linkding_token: 'test-key',
       auto_sync: true,
-      sync_interval: 60
+      sync_interval: 60,
+      reading_mode: 'original' as const
     } as AppSettings);
     
     // Create test component

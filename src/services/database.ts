@@ -310,9 +310,9 @@ export class DatabaseService {
   static async setSyncCheckpoint(checkpoint: SyncState['checkpoint'] | null): Promise<void> {
     const state = await db.syncState.toCollection().first();
     if (state) {
-      await db.syncState.update(state.id!, { checkpoint });
+      await db.syncState.update(state.id!, { checkpoint: checkpoint ?? undefined });
     } else {
-      await db.syncState.add({ checkpoint });
+      await db.syncState.add({ checkpoint: checkpoint ?? undefined });
     }
   }
 
@@ -345,9 +345,9 @@ export class DatabaseService {
   static async setLastSyncError(error: string | null): Promise<void> {
     const state = await db.syncState.toCollection().first();
     if (state) {
-      await db.syncState.update(state.id!, { lastError: error || undefined });
+      await db.syncState.update(state.id!, { lastError: error ?? undefined });
     } else {
-      await db.syncState.add({ lastError: error || undefined });
+      await db.syncState.add({ lastError: error ?? undefined });
     }
   }
 
