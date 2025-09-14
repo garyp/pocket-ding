@@ -1,78 +1,42 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { LocalBookmark, BookmarkFilter, BookmarkListState, PaginationState } from '../types';
+import { repeat } from 'lit/directives/repeat.js';
+import type { LocalBookmark, BookmarkListState } from '../types';
 import { StateController } from '../controllers/state-controller';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DatabaseService } from '../services/database';
 import '@material/web/labs/card/outlined-card.js';
 import '@material/web/labs/badge/badge.js';
-import '@material/web/button/filled-button.js';
-import '@material/web/button/text-button.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/circular-progress.js';
 import '@material/web/progress/linear-progress.js';
-import './pagination-controls.js';
 
 @customElement('bookmark-list')
 export class BookmarkList extends LitElement {
-  // Reactive query controllers
-  #bookmarksQuery = new ReactiveQueryController(
-    this,
-    () => DatabaseService.getBookmarksPaginated(
-      this.paginationState.filter,
-      this.paginationState.currentPage,
-      this.paginationState.pageSize
-    )
-  );
-
-  #filterCountsQuery = new ReactiveQueryController(
-    this,
-    () => DatabaseService.getAllFilterCounts()
-  );
+  // Data props - provided by container
+  @property({ type: Array }) bookmarks: LocalBookmark[] = [];
+  @property({ type: Boolean }) isLoading = false;
 
   // Assets query - uses bookmarks data to determine which bookmarks to check
   #assetsQuery = new ReactiveQueryController(
     this,
     (bookmarks: LocalBookmark[]) => DatabaseService.getBookmarksWithAssetCounts(bookmarks.map(b => b.id)),
-    (): [LocalBookmark[]] => [this.#bookmarksQuery.value || []]
+    (): [LocalBookmark[]] => [this.bookmarks]
   );
-
-  // Remove old data props that are now handled by reactive controllers
-  // @property({ type: Array }) bookmarks: LocalBookmark[] = [];
-  // @property({ type: Boolean }) isLoading = false;
-  // @property({ type: Set }) bookmarksWithAssets: Set<number> = new Set<number>();
   
   // Favicon props
   @property({ type: Map }) faviconCache: Map<number, string> = new Map<number, string>();
   
   // Sync state props
   @property({ type: Set }) syncedBookmarkIds: Set<number> = new Set<number>();
-  
-  // Pagination state props
-  @property({ type: Object }) paginationState: PaginationState = {
-    currentPage: 1,
-    pageSize: 25,
-    totalCount: 0,
-    totalPages: 1,
-    filter: 'all'
-  };
-  
-  // Callback props (simplified - no more sync callbacks needed)
+
+
+  // Callback props (simplified - no filter callbacks needed)
   @property({ type: Function }) onBookmarkSelect: (bookmarkId: number) => void = () => {};
   @property({ type: Function }) onFaviconLoadRequested: (bookmarkId: number, faviconUrl: string) => void = () => {};
   @property({ type: Function }) onVisibilityChanged: (visibleBookmarks: Array<{ id: number; favicon_url?: string }>) => void = () => {};
-  @property({ type: Function }) onPageChange: (page: number) => void = () => {};
-  @property({ type: Function }) onFilterChange: (filter: BookmarkFilter) => void = () => {};
 
   // Getter methods for reactive data
-  get bookmarks(): LocalBookmark[] {
-    return this.#bookmarksQuery.value || [];
-  }
-
-  get isLoading(): boolean {
-    return this.#bookmarksQuery.loading || this.#filterCountsQuery.loading;
-  }
-
   get bookmarksWithAssets(): Set<number> {
     const assetMap = this.#assetsQuery.value || new Map<number, boolean>();
     const assetsSet = new Set<number>();
@@ -82,10 +46,6 @@ export class BookmarkList extends LitElement {
       }
     }
     return assetsSet;
-  }
-
-  get filterCounts() {
-    return this.#filterCountsQuery.value || { all: 0, unread: 0, archived: 0 };
   }
   
   // UI state (persisted via StateController)
@@ -128,16 +88,6 @@ export class BookmarkList extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      padding: 1rem;
-      max-width: 50rem; /* 800px - responsive max width */
-      margin: 0 auto;
-    }
-
-    .filters {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-      padding: 0 0.25rem;
     }
 
     .bookmark-list {
@@ -365,10 +315,6 @@ export class BookmarkList extends LitElement {
     }
 
     @media (max-width: 48rem) { /* 768px breakpoint */
-      :host {
-        padding: 0.75rem; /* 12px - reduced for mobile */
-      }
-      
       .bookmark-content {
         padding: 0.75rem;
       }
@@ -378,33 +324,27 @@ export class BookmarkList extends LitElement {
         height: 60px;
         margin-left: 0.75rem;
       }
-      
+
       .bookmark-header {
         margin-bottom: 0.5rem;
       }
-      
+
       .bookmark-title {
         font-size: 0.875rem; /* 14px - smaller on mobile */
         line-height: 1.25rem; /* 20px */
         margin-right: 0.75rem;
       }
-      
+
       .bookmark-description {
         margin-bottom: 0.5rem;
         font-size: 0.75rem; /* 12px - smaller on mobile */
         line-height: 1rem; /* 16px */
       }
-      
-      .filters {
-        padding: 0;
-        gap: 0.375rem; /* 6px - tighter on mobile */
-        margin-bottom: 0.75rem;
-      }
-      
+
       .bookmark-list {
         gap: 0.75rem; /* 12px - tighter spacing on mobile */
       }
-      
+
       .empty-state {
         padding: 1.5rem; /* 24px - reduced on mobile */
         margin: 0.75rem 0;
@@ -582,21 +522,9 @@ export class BookmarkList extends LitElement {
 
   override updated(changedProperties: Map<string, any>) {
     super.updated(changedProperties);
-    
-    // Update reactive queries when pagination state changes
-    if (changedProperties.has('paginationState')) {
-      this.#bookmarksQuery.updateQuery(() => 
-        DatabaseService.getBookmarksPaginated(
-          this.paginationState.filter,
-          this.paginationState.currentPage,
-          this.paginationState.pageSize
-        )
-      );
-      // Assets query will automatically update when bookmarks change via dependency function
-    }
-    
+
     // Restore scroll position after the first render
-    if (changedProperties.has('paginationState') && this.bookmarks.length > 0) {
+    if (changedProperties.has('bookmarks') && this.bookmarks.length > 0) {
       // Use requestAnimationFrame to ensure the DOM is fully rendered
       requestAnimationFrame(() => {
         try {
@@ -608,7 +536,7 @@ export class BookmarkList extends LitElement {
         }
       });
     }
-    
+
     // Always update observed elements after DOM changes to ensure intersection observer works
     requestAnimationFrame(() => {
       try {
@@ -622,24 +550,7 @@ export class BookmarkList extends LitElement {
   }
 
 
-  get filteredBookmarks() {
-    if (this.paginationState.filter === 'unread') {
-      return this.bookmarks.filter(bookmark => bookmark.unread && !bookmark.is_archived);
-    }
-    if (this.paginationState.filter === 'archived') {
-      return this.bookmarks.filter(bookmark => bookmark.is_archived);
-    }
-    // Default 'all' filter shows only unarchived bookmarks
-    return this.bookmarks.filter(bookmark => !bookmark.is_archived);
-  }
 
-  #handleFilterChange(filter: BookmarkFilter) {
-    this.onFilterChange(filter);
-  }
-
-  #handlePageChange = (page: number) => {
-    this.onPageChange(page);
-  };
 
   #handleBookmarkClick(bookmark: LocalBookmark) {
     this.onBookmarkSelect(bookmark.id);
@@ -806,73 +717,16 @@ export class BookmarkList extends LitElement {
       `;
     }
 
-    const bookmarks = this.filteredBookmarks;
-
     return html`
-      <div class="filters">
-        ${this.paginationState.filter === 'all' ? html`
-          <md-filled-button
-            @click=${() => this.#handleFilterChange('all')}
-          >
-            All (${this.filterCounts.all})
-          </md-filled-button>
-        ` : html`
-          <md-text-button
-            @click=${() => this.#handleFilterChange('all')}
-          >
-            All (${this.filterCounts.all})
-          </md-text-button>
-        `}
-        ${this.paginationState.filter === 'unread' ? html`
-          <md-filled-button
-            @click=${() => this.#handleFilterChange('unread')}
-          >
-            Unread (${this.filterCounts.unread})
-          </md-filled-button>
-        ` : html`
-          <md-text-button
-            @click=${() => this.#handleFilterChange('unread')}
-          >
-            Unread (${this.filterCounts.unread})
-          </md-text-button>
-        `}
-        ${this.paginationState.filter === 'archived' ? html`
-          <md-filled-button
-            @click=${() => this.#handleFilterChange('archived')}
-          >
-            Archived (${this.filterCounts.archived})
-          </md-filled-button>
-        ` : html`
-          <md-text-button
-            @click=${() => this.#handleFilterChange('archived')}
-          >
-            Archived (${this.filterCounts.archived})
-          </md-text-button>
-        `}
-      </div>
-
-      ${bookmarks.length === 0 ? html`
+      ${this.bookmarks.length === 0 ? html`
         <div class="empty-state">
           <h3>No bookmarks found</h3>
-          <p>
-            ${this.paginationState.filter === 'unread' 
-              ? 'You have no unread bookmarks.' 
-              : this.paginationState.filter === 'archived'
-              ? 'You have no archived bookmarks.'
-              : 'Your bookmarks will appear here after syncing.'}
-          </p>
+          <p>Your bookmarks will appear here after syncing.</p>
         </div>
       ` : html`
         <div class="bookmark-list">
-          ${bookmarks.map(bookmark => this.#renderBookmark(bookmark))}
+          ${repeat(this.bookmarks, (bookmark) => bookmark.id, (bookmark) => this.#renderBookmark(bookmark))}
         </div>
-        
-        <pagination-controls
-          .currentPage=${this.paginationState.currentPage}
-          .totalPages=${this.paginationState.totalPages}
-          .disabled=${this.isLoading}
-          .onPageChange=${this.#handlePageChange}
-        ></pagination-controls>
       `}
     `;
   }
