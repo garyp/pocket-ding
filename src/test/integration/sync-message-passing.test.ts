@@ -12,12 +12,14 @@ const mockPostMessage = vi.fn();
 const mockAddEventListener = vi.fn();
 const mockRemoveEventListener = vi.fn();
 
+const mockServiceWorkerRegistration = {
+  active: {
+    postMessage: mockPostMessage
+  }
+};
+
 const mockServiceWorker = {
-  ready: Promise.resolve({
-    active: {
-      postMessage: mockPostMessage
-    }
-  }),
+  ready: Promise.resolve(mockServiceWorkerRegistration),
   addEventListener: mockAddEventListener,
   removeEventListener: mockRemoveEventListener
 };
@@ -71,11 +73,15 @@ describe('Sync Message Passing Integration', () => {
   
   describe('Service Worker Communication', () => {
     it('should post sync request message to service worker', async () => {
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
       
-      await component.syncController.requestSync();
+      // Now request sync
+      const syncPromise = component.syncController.requestSync();
       
-      // Wait for async operations
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Advance timers and wait for promise
+      await vi.runAllTimersAsync();
+      await syncPromise;
       
       expect(mockPostMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -138,10 +144,14 @@ describe('Sync Message Passing Integration', () => {
     });
     
     it('should enable periodic sync when auto_sync is enabled', async () => {
-      await component.syncController.setPeriodicSync(true, 720 * 60 * 1000);
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
       
-      // Wait for async operations
-      await new Promise(resolve => setTimeout(resolve, 10));
+      const periodicSyncPromise = component.syncController.setPeriodicSync(true, 720 * 60 * 1000);
+      
+      // Advance timers and wait for promise
+      await vi.runAllTimersAsync();
+      await periodicSyncPromise;
       
       expect(mockPostMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -168,15 +178,19 @@ describe('Sync Message Passing Integration', () => {
     });
     
     it('should cancel sync by posting cancel message', async () => {
-      // Start sync first
-      await component.syncController.requestSync();
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+      
+      // Start sync first - don't await to avoid timeout
+      component.syncController.requestSync();
       await component.updateComplete;
       
       // Cancel sync
-      await component.syncController.cancelSync();
+      const cancelPromise = component.syncController.cancelSync();
       
-      // Wait for async operations
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Advance timers and wait for promise
+      await vi.runAllTimersAsync();
+      await cancelPromise;
       
       expect(mockPostMessage).toHaveBeenCalledWith(
         expect.objectContaining({
