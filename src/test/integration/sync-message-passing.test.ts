@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SyncController } from '../../controllers/sync-controller';
-import { SyncMessages, type SyncMessage } from '../../services/sync-messages';
+import { SyncMessages, type SyncMessage } from '../../types/sync-messages';
 import { SettingsService } from '../../services/settings-service';
 import type { AppSettings } from '../../types';
 import { LitElement, html } from 'lit';

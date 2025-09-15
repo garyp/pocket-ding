@@ -4,7 +4,7 @@ import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
 import { SyncCore, type SyncCheckpoint } from './services/sync-core';
-import { SyncMessages, type SyncMessage } from './services/sync-messages';
+import { SyncMessages, type SyncMessage } from './types/sync-messages';
 import { DatabaseService } from './services/database';
 import type { AppSettings } from './types';
 
@@ -32,6 +32,51 @@ let syncInProgress = false;
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
 
 /**
+ * Service Worker logging helper
+ * Since service workers can't directly use DebugService, we send log messages to clients
+ */
+const swLog = {
+  info: (operation: string, message: string, details?: any) => {
+    // Log to console for debugging
+    console.log(`[SW] ${operation}: ${message}`, details);
+    // Could send to clients if needed for DebugService
+    broadcastToClients({
+      type: 'SW_LOG' as any,
+      level: 'info',
+      operation,
+      message,
+      details
+    } as any).catch(() => {});
+  },
+  
+  error: (operation: string, message: string, error?: any) => {
+    // Log to console for debugging
+    console.error(`[SW] ${operation}: ${message}`, error);
+    // Could send to clients if needed for DebugService
+    broadcastToClients({
+      type: 'SW_LOG' as any,
+      level: 'error',
+      operation,
+      message,
+      error: error?.message || error
+    } as any).catch(() => {});
+  },
+  
+  warn: (operation: string, message: string, details?: any) => {
+    // Log to console for debugging
+    console.warn(`[SW] ${operation}: ${message}`, details);
+    // Could send to clients if needed for DebugService
+    broadcastToClients({
+      type: 'SW_LOG' as any,
+      level: 'warn',
+      operation,
+      message,
+      details
+    } as any).catch(() => {});
+  }
+};
+
+/**
  * Broadcast message to all clients
  */
 async function broadcastToClients(message: SyncMessage): Promise<void> {
@@ -48,7 +93,7 @@ async function getSettings(): Promise<AppSettings | null> {
   try {
     return await DatabaseService.getSettings() ?? null;
   } catch (error) {
-    console.error('Failed to get settings:', error);
+    swLog.error('getSettings', 'Failed to get settings', error);
     return null;
   }
 }
@@ -58,7 +103,7 @@ async function getSettings(): Promise<AppSettings | null> {
  */
 async function performSync(fullSync = false): Promise<void> {
   if (syncInProgress) {
-    console.log('Sync already in progress');
+    swLog.info('performSync', 'Sync already in progress');
     return;
   }
   
@@ -114,7 +159,7 @@ async function performSync(fullSync = false): Promise<void> {
       throw result.error || new Error('Sync failed');
     }
   } catch (error) {
-    console.error('Sync error:', error);
+    swLog.error('performSync', 'Sync error', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') || 
@@ -139,7 +184,7 @@ async function performSync(fullSync = false): Promise<void> {
       if (retryCount < SYNC_RETRY_DELAYS.length) {
         const delay = SYNC_RETRY_DELAYS[retryCount];
         await DatabaseService.incrementSyncRetryCount();
-        console.log(`Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
+        swLog.info('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
         setTimeout(() => {
           (self.registration as any).sync?.register('sync-bookmarks');
         }, delay);
@@ -183,14 +228,14 @@ self.addEventListener('message', async (event) => {
             await (self.registration as any).periodicSync.register('periodic-sync', {
               minInterval: message.minInterval || 12 * 60 * 60 * 1000 // 12 hours default
             });
-            console.log('Periodic sync registered');
+            swLog.info('periodicSync', 'Periodic sync registered');
           } else {
             // Unregister periodic sync
             await (self.registration as any).periodicSync.unregister('periodic-sync');
-            console.log('Periodic sync unregistered');
+            swLog.info('periodicSync', 'Periodic sync unregistered');
           }
         } catch (error) {
-          console.error('Failed to register periodic sync:', error);
+          swLog.error('periodicSync', 'Failed to register periodic sync', error);
           await broadcastToClients(SyncMessages.syncError(
             'Periodic sync not available or permission denied',
             false
@@ -258,7 +303,7 @@ self.addEventListener('activate', (event) => {
             minInterval: settings.sync_interval || 12 * 60 * 60 * 1000
           });
         } catch (error) {
-          console.error('Failed to register periodic sync on activation:', error);
+          swLog.error('activate', 'Failed to register periodic sync on activation', error);
         }
       }
     })()

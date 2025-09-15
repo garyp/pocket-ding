@@ -1,7 +1,8 @@
 import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { SettingsService } from '../services/settings-service';
 import { ReactiveQueryController } from './reactive-query-controller';
-import { SyncMessages, type SyncMessage } from '../services/sync-messages';
+import { SyncMessages, type SyncMessage } from '../types/sync-messages';
+import { DebugService } from '../services/debug-service';
 import type { AppSettings } from '../types';
 
 export interface SyncState {
@@ -81,7 +82,8 @@ export class SyncController implements ReactiveController {
 
   private async setupServiceWorker() {
     if (!('serviceWorker' in navigator)) {
-      console.warn('Service Worker not supported');
+      DebugService.logWarning('sync', 'Service Worker not supported');
+      this.#notifyError('Background sync is not supported in your browser');
       return;
     }
 
@@ -104,7 +106,8 @@ export class SyncController implements ReactiveController {
         ));
       }
     } catch (error) {
-      console.error('Failed to setup service worker:', error);
+      DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { context: 'Service worker setup failed' });
+      this.#notifyError('Failed to initialize sync service');
     }
   }
 
@@ -158,7 +161,8 @@ export class SyncController implements ReactiveController {
         break;
 
       case 'SYNC_ERROR':
-        console.error('Sync error:', message.error);
+        DebugService.logSyncError(new Error(message.error || 'Unknown sync error'), { phase: this._syncState.syncPhase });
+        this.#notifyError(`Sync failed: ${message.error || 'Unknown error'}`);
         this._syncState = {
           ...this._syncState,
           isSyncing: false,
@@ -177,7 +181,7 @@ export class SyncController implements ReactiveController {
 
   private async postToServiceWorker(message: SyncMessage) {
     if (!this.#serviceWorkerReady) {
-      console.warn('Service worker not ready');
+      DebugService.logWarning('sync', 'Service worker not ready for message posting');
       return;
     }
 
@@ -187,7 +191,7 @@ export class SyncController implements ReactiveController {
         registration.active.postMessage(message);
       }
     } catch (error) {
-      console.error('Failed to post message to service worker:', error);
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to post message to service worker');
     }
   }
 
@@ -223,13 +227,15 @@ export class SyncController implements ReactiveController {
     try {
       // Check if settings are still loading
       if (this.isSettingsLoading) {
-        console.warn('Cannot sync while settings are loading');
+        DebugService.logWarning('sync', 'Cannot sync while settings are loading');
+        this.#notifyError('Please wait for settings to load');
         return;
       }
 
       // Check if service worker is ready
       if (!this.#serviceWorkerReady) {
-        console.warn('Service worker not ready');
+        DebugService.logWarning('sync', 'Service worker not ready for sync request');
+        this.#notifyError('Sync service is not ready. Please try again.');
         return;
       }
 
@@ -251,10 +257,12 @@ export class SyncController implements ReactiveController {
         // Request sync from service worker
         await this.postToServiceWorker(SyncMessages.requestSync(true, fullSync));
       } else {
-        console.warn('Cannot sync without valid settings');
+        DebugService.logWarning('sync', 'Cannot sync without valid Linkding settings');
+        this.#notifyError('Please configure your Linkding settings first');
       }
     } catch (error) {
-      console.error('Failed to request sync:', error);
+      DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { fullSync });
+      this.#notifyError('Failed to start sync');
       // Reset sync state on error
       this._syncState = {
         ...this._syncState,
@@ -316,5 +324,24 @@ export class SyncController implements ReactiveController {
       syncedBookmarkIds: new Set<number>(),
     };
     this.#host.requestUpdate();
+  }
+
+  /**
+   * Notify the host about errors
+   */
+  #notifyError(message: string): void {
+    // Call the error callback if provided
+    if (this.#options.onSyncError) {
+      this.#options.onSyncError(new Error(message));
+    }
+    
+    // Dispatch a custom event that components can listen to
+    if ('dispatchEvent' in this.#host) {
+      (this.#host as unknown as EventTarget).dispatchEvent(new CustomEvent('sync-error', { 
+        detail: { message },
+        bubbles: true,
+        composed: true
+      }));
+    }
   }
 }

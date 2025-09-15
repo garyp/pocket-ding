@@ -28,6 +28,7 @@ export interface SyncCheckpoint {
 export class SyncCore {
   #onProgress?: (progress: SyncProgress) => void;
   #abortController?: AbortController;
+  #processedCount: number = 0;
   
   constructor(onProgress?: (progress: SyncProgress) => void) {
     if (onProgress) {
@@ -40,6 +41,7 @@ export class SyncCore {
    */
   async performSync(settings: AppSettings, checkpoint?: SyncCheckpoint): Promise<SyncResult> {
     this.#abortController = new AbortController();
+    this.#processedCount = 0;
     
     try {
       // Initialize API service
@@ -82,13 +84,13 @@ export class SyncCore {
       
       return {
         success: true,
-        processed: 0, // TODO: Track actual count
+        processed: this.#processedCount,
         timestamp: Date.now()
       };
     } catch (error) {
       return {
         success: false,
-        processed: 0,
+        processed: this.#processedCount,
         error: error instanceof Error ? error : new Error('Unknown sync error'),
         timestamp: Date.now()
       };
@@ -158,6 +160,7 @@ export class SyncCore {
         is_synced: true
       };
       await DatabaseService.saveBookmark(localBookmark);
+      this.#processedCount++;
       
       this.#reportProgress({ 
         current: i - startIndex + 1, 
@@ -219,6 +222,7 @@ export class SyncCore {
                 cached_at: new Date().toISOString()
               };
               await DatabaseService.saveAsset(asset);
+              this.#processedCount++;
             }
           }
         }

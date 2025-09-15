@@ -5,6 +5,7 @@ import { DatabaseService } from '../services/database';
 import { SettingsService } from '../services/settings-service';
 import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
+import { DebugService } from '../services/debug-service';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DataManagementController } from '../controllers/data-management-controller';
 import { SyncController } from '../controllers/sync-controller';
@@ -279,7 +280,7 @@ export class SettingsPanel extends LitElement {
         });
       } catch (error) {
         // Permission API not available for periodic-background-sync
-        console.log('Periodic sync permission check not available');
+        DebugService.logInfo('sync', 'Periodic sync permission check not available');
       }
     }
   }
@@ -518,18 +519,6 @@ export class SettingsPanel extends LitElement {
                 }
               </div>
             ` : ''}
-          </div>
-          
-          <div class="form-group" style="display: none;">
-            <label for="sync-interval">Sync Interval (minutes)</label>
-            <md-outlined-text-field
-              id="sync-interval"
-              type="number"
-              min="5"
-              max="1440"
-              .value=${this.formData.sync_interval?.toString() || '720'}
-              @input=${(e: any) => this.#handleInputChange('sync_interval', parseInt(e.target.value))}
-            ></md-outlined-text-field>
           </div>
 
           <div class="sync-actions">

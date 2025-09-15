@@ -1,5 +1,9 @@
 /// <reference lib="webworker" />
 
+// Background Sync API type definitions
+// Based on W3C Background Sync specification: https://wicg.github.io/background-sync/spec/
+// These types are not yet available in TypeScript's lib definitions
+
 // Extend ServiceWorkerRegistration with sync APIs
 interface ServiceWorkerRegistration {
   sync?: SyncManager;
