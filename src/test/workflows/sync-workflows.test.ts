@@ -36,14 +36,7 @@ vi.mock('../../services/database', () => ({
   },
 }));
 
-vi.mock('../../services/sync-service', () => ({
-  SyncService: {
-    syncBookmarks: vi.fn(),
-    getInstance: vi.fn(),
-    isSyncInProgress: vi.fn(() => false),
-    getCurrentSyncProgress: vi.fn(() => ({ current: 0, total: 0 })),
-  },
-}));
+// SyncService mock removed - sync now happens through service worker
 
 vi.mock('../../services/linkding-api', () => ({
   createLinkdingAPI: vi.fn(() => ({
@@ -59,7 +52,7 @@ vi.mock('../../services/content-fetcher', () => ({
 }));
 
 import { DatabaseService } from '../../services/database';
-import { SyncService } from '../../services/sync-service';
+// SyncService import removed - sync now happens through service worker
 
 describe('Sync Workflows - Background Data Synchronization', () => {
   const mockBookmarks: LocalBookmark[] = [
@@ -153,12 +146,8 @@ describe('Sync Workflows - Background Data Synchronization', () => {
       // Should load settings and bookmarks
       expect(DatabaseService.getSettings).toHaveBeenCalled();
       
-      // When sync occurs, it should update the data
-      vi.mocked(SyncService.syncBookmarks).mockResolvedValue({ success: true, processed: 0, timestamp: Date.now() });
-      
-      // Verify sync service is available
-      expect(SyncService.syncBookmarks).toBeDefined();
-      expect(SyncService.isSyncInProgress).toBeDefined();
+      // Sync now happens through service worker
+      // The actual sync will be handled by the SyncController which communicates with the service worker
     });
   });
 });

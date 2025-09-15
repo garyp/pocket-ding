@@ -280,30 +280,3 @@ export class SyncCore {
     }
   }
 }
-
-// Export as SyncService for backwards compatibility with tests
-export const SyncService = {
-  fullSync: async (settings: AppSettings | null, progressCallback?: (current: number, total: number) => void) => {
-    if (!settings) {
-      throw new Error('Settings are required for sync');
-    }
-    
-    const onProgress = progressCallback ? (progress: SyncProgress) => {
-      progressCallback(progress.current, progress.total);
-    } : undefined;
-    
-    const core = new SyncCore(onProgress);
-    return await core.performSync(settings);
-  },
-  
-  // Add dummy methods for backwards compatibility with tests
-  syncBookmarks: async (settings: AppSettings | null): Promise<SyncResult> => {
-    if (!settings) {
-      throw new Error('Settings are required for sync');
-    }
-    const core = new SyncCore();
-    return await core.performSync(settings);
-  },
-  
-  isSyncInProgress: () => false
-};

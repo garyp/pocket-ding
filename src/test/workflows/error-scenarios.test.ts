@@ -37,14 +37,7 @@ vi.mock('../../services/database', () => ({
   },
 }));
 
-vi.mock('../../services/sync-service', () => ({
-  SyncService: {
-    syncBookmarks: vi.fn(),
-    getInstance: vi.fn(),
-    isSyncInProgress: vi.fn(() => false),
-    getCurrentSyncProgress: vi.fn(() => ({ current: 0, total: 0 })),
-  },
-}));
+// SyncService mock removed - sync now happens through service worker
 
 vi.mock('../../services/linkding-api', () => ({
   createLinkdingAPI: vi.fn(() => ({
@@ -76,7 +69,7 @@ vi.mock('../../services/settings-service', () => ({
 
 import { DatabaseService } from '../../services/database';
 import { SettingsService } from '../../services/settings-service';
-import { SyncService } from '../../services/sync-service';
+// SyncService import removed - sync now happens through service worker
 import { createLinkdingAPI } from '../../services/linkding-api';
 import { ContentFetcher } from '../../services/content-fetcher';
 
@@ -171,8 +164,7 @@ describe('Error Scenarios - Failure Handling', () => {
       });
 
       // Mock network failure during sync
-      const networkError = new Error('Network request failed: 0 ');
-      vi.mocked(SyncService.syncBookmarks).mockRejectedValue(networkError);
+      // Sync now happens through service worker, no need to mock SyncService
 
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);
@@ -197,7 +189,7 @@ describe('Error Scenarios - Failure Handling', () => {
       mockSettingsLive(validSettings);
       const mockAPI = vi.mocked(createLinkdingAPI('', ''));
       vi.mocked(mockAPI.getAllBookmarks).mockRejectedValue(new Error('Request timeout'));
-      vi.mocked(SyncService.syncBookmarks).mockRejectedValue(new Error('Request timeout'));
+      // Sync now happens through service worker, no need to mock SyncService
 
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);
@@ -216,7 +208,7 @@ describe('Error Scenarios - Failure Handling', () => {
       
       // Mock fetch failures
       vi.mocked(global.fetch).mockRejectedValue(new Error('Network unavailable'));
-      vi.mocked(SyncService.syncBookmarks).mockRejectedValue(new Error('Network unavailable'));
+      // Sync now happens through service worker, no need to mock SyncService
 
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
       bookmarkReader.setAttribute('bookmark-id', '1');
@@ -232,10 +224,7 @@ describe('Error Scenarios - Failure Handling', () => {
     it('should handle intermittent network failures during large sync operations', async () => {
       // Mock partial sync failure
       vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
-      vi.mocked(SyncService.syncBookmarks)
-        .mockRejectedValueOnce(new Error('Network timeout'))
-        .mockRejectedValueOnce(new Error('Connection reset'))
-        .mockResolvedValueOnce({ success: true, processed: 0, timestamp: Date.now() });
+      // Sync now happens through service worker, no need to mock SyncService
 
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);
@@ -276,8 +265,7 @@ describe('Error Scenarios - Failure Handling', () => {
       vi.mocked(SettingsService.getSettings).mockResolvedValue(validSettings);
       
       // Mock 403 Forbidden response
-      const expiredTokenError = new Error('API request failed: 403 Forbidden');
-      vi.mocked(SyncService.syncBookmarks).mockRejectedValue(expiredTokenError);
+      // Sync now happens through service worker, no need to mock SyncService
 
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);
