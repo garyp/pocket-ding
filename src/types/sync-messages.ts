@@ -58,7 +58,6 @@ export interface SyncErrorMessage {
 export interface RegisterPeriodicSyncMessage {
   type: 'REGISTER_PERIODIC_SYNC';
   enabled: boolean;
-  minInterval?: number;
 }
 
 export interface CheckSyncPermissionMessage {
@@ -146,15 +145,11 @@ export const SyncMessages = {
     };
   },
   
-  registerPeriodicSync(enabled: boolean, minInterval?: number): RegisterPeriodicSyncMessage {
-    const message: RegisterPeriodicSyncMessage = {
+  registerPeriodicSync(enabled: boolean): RegisterPeriodicSyncMessage {
+    return {
       type: 'REGISTER_PERIODIC_SYNC',
       enabled
     };
-    if (minInterval !== undefined) {
-      message.minInterval = minInterval;
-    }
-    return message;
   },
   
   checkSyncPermission(): CheckSyncPermissionMessage {

@@ -77,7 +77,6 @@ describe('Error Scenarios - Failure Handling', () => {
   const validSettings: AppSettings = {
     linkding_url: 'https://linkding.example.com',
     linkding_token: 'valid-token',
-    sync_interval: 60,
     auto_sync: true,
     reading_mode: 'readability',
   };

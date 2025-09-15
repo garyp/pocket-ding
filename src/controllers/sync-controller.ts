@@ -100,10 +100,7 @@ export class SyncController implements ReactiveController {
       // Check if periodic sync should be enabled based on settings
       const settings = this.settings;
       if (settings?.auto_sync) {
-        this.postToServiceWorker(SyncMessages.registerPeriodicSync(
-          true,
-          settings.sync_interval
-        ));
+        this.postToServiceWorker(SyncMessages.registerPeriodicSync(true));
       }
     } catch (error) {
       DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { context: 'Service worker setup failed' });
@@ -302,8 +299,8 @@ export class SyncController implements ReactiveController {
   /**
    * Enable or disable periodic background sync
    */
-  async setPeriodicSync(enabled: boolean, minInterval?: number): Promise<void> {
-    await this.postToServiceWorker(SyncMessages.registerPeriodicSync(enabled, minInterval));
+  async setPeriodicSync(enabled: boolean): Promise<void> {
+    await this.postToServiceWorker(SyncMessages.registerPeriodicSync(enabled));
   }
 
   /**

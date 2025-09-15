@@ -147,9 +147,6 @@ export class ImportService {
     };
 
     // Only update settings that are present in the import
-    if (importSettings.sync_interval !== undefined) {
-      mergedSettings.sync_interval = importSettings.sync_interval;
-    }
     if (importSettings.auto_sync !== undefined) {
       mergedSettings.auto_sync = importSettings.auto_sync;
     }

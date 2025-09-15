@@ -22,7 +22,6 @@ describe('SyncService', () => {
       linkding_url: 'https://test.linkding.com',
       linkding_token: 'test-api-key',
       auto_sync: true,
-      sync_interval: 60,
       reading_mode: 'original' as const
     };
     

@@ -67,7 +67,6 @@ export interface LocalAsset extends LinkdingAsset {
 export interface AppSettings {
   linkding_url: string;
   linkding_token: string;
-  sync_interval: number;
   auto_sync: boolean;
   reading_mode: 'original' | 'readability';
   theme_mode?: ThemeMode;

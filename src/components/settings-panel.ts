@@ -297,7 +297,6 @@ export class SettingsPanel extends LitElement {
     this.formData = {
       linkding_url: this.settings?.linkding_url || '',
       linkding_token: this.settings?.linkding_token || '',
-      sync_interval: this.settings?.sync_interval || 60,
       auto_sync: this.settings?.auto_sync ?? true,
       reading_mode: this.settings?.reading_mode || 'readability',
       theme_mode: this.settings?.theme_mode || 'system',
@@ -353,7 +352,6 @@ export class SettingsPanel extends LitElement {
       const settings: AppSettings = {
         linkding_url: this.formData.linkding_url!,
         linkding_token: this.formData.linkding_token!,
-        sync_interval: this.formData.sync_interval || 60,
         auto_sync: this.formData.auto_sync ?? true,
         reading_mode: this.formData.reading_mode || 'readability',
         theme_mode: this.formData.theme_mode || 'system',
@@ -369,10 +367,7 @@ export class SettingsPanel extends LitElement {
       
       // Enable/disable periodic sync based on auto_sync setting
       if (this.#syncController) {
-        await this.#syncController.setPeriodicSync(
-          settings.auto_sync,
-          settings.sync_interval ? settings.sync_interval * 60 * 1000 : undefined
-        );
+        await this.#syncController.setPeriodicSync(settings.auto_sync);
       }
       
       this.dispatchEvent(new CustomEvent('settings-saved', {

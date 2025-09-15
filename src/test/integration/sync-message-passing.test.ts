@@ -57,7 +57,6 @@ describe('Sync Message Passing Integration', () => {
       linkding_url: 'https://test.com',
       linkding_token: 'test-key',
       auto_sync: true,
-      sync_interval: 60,
       reading_mode: 'original' as const
     } as AppSettings);
     
@@ -147,7 +146,7 @@ describe('Sync Message Passing Integration', () => {
       // Wait for service worker to be ready
       await navigator.serviceWorker.ready;
       
-      const periodicSyncPromise = component.syncController.setPeriodicSync(true, 720 * 60 * 1000);
+      const periodicSyncPromise = component.syncController.setPeriodicSync(true);
       
       // Advance timers and wait for promise
       await vi.runAllTimersAsync();
@@ -156,8 +155,7 @@ describe('Sync Message Passing Integration', () => {
       expect(mockPostMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'REGISTER_PERIODIC_SYNC',
-          enabled: true,
-          minInterval: 720 * 60 * 1000
+          enabled: true
         })
       );
     });

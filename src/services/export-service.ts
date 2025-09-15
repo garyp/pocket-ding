@@ -14,7 +14,6 @@ export interface ExportData {
   export_timestamp: string;
   reading_progress: ExportedReadProgress[];
   app_settings: {
-    sync_interval?: number;
     auto_sync?: boolean;
     reading_mode?: 'original' | 'readability';
     theme_mode?: 'light' | 'dark' | 'system';
@@ -37,16 +36,12 @@ export class ExportService {
       // Get app settings (excluding sensitive server data and default values)
       const settings = await DatabaseService.getSettings();
       const appSettings: {
-        sync_interval?: number;
         auto_sync?: boolean;
         reading_mode?: 'original' | 'readability';
         theme_mode?: 'light' | 'dark' | 'system';
       } = {};
       
       // Only export settings that are explicitly set (not defaults)
-      if (settings?.sync_interval !== undefined && settings.sync_interval !== 60) {
-        appSettings.sync_interval = settings.sync_interval;
-      }
       if (settings?.auto_sync !== undefined && settings.auto_sync !== true) {
         appSettings.auto_sync = settings.auto_sync;
       }
@@ -158,9 +153,6 @@ export class ExportService {
 
     // Validate app settings (all fields are optional)
     const settings = data.app_settings;
-    if (settings.sync_interval !== undefined && typeof settings.sync_interval !== 'number') {
-      return false;
-    }
     if (settings.auto_sync !== undefined && typeof settings.auto_sync !== 'boolean') {
       return false;
     }

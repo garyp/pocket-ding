@@ -101,7 +101,6 @@ describe('Background Sync User Workflows', () => {
         linkding_url: 'https://test.linkding.com',
         linkding_token: 'test-key',
         auto_sync: false,
-        sync_interval: 720, // 12 hours
         reading_mode: 'original' as const
       };
       
@@ -132,7 +131,6 @@ describe('Background Sync User Workflows', () => {
         linkding_url: 'https://test.linkding.com',
         linkding_token: 'test-key',
         auto_sync: true,
-        sync_interval: 720,
         reading_mode: 'original' as const
       };
       

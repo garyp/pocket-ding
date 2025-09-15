@@ -227,10 +227,8 @@ self.addEventListener('message', async (event) => {
       if ('periodicSync' in self.registration) {
         try {
           if (message.enabled) {
-            // Register periodic sync with minimum interval (browser will decide actual frequency)
-            await (self.registration as any).periodicSync.register('periodic-sync', {
-              minInterval: message.minInterval || 12 * 60 * 60 * 1000 // 12 hours default
-            });
+            // Register periodic sync (browser will decide actual frequency)
+            await (self.registration as any).periodicSync.register('periodic-sync');
             swLog.info('periodicSync', 'Periodic sync registered');
           } else {
             // Unregister periodic sync
@@ -302,9 +300,7 @@ self.addEventListener('activate', (event) => {
       const settings = await getSettings();
       if (settings?.auto_sync && 'periodicSync' in self.registration) {
         try {
-          await (self.registration as any).periodicSync.register('periodic-sync', {
-            minInterval: settings.sync_interval || 12 * 60 * 60 * 1000
-          });
+          await (self.registration as any).periodicSync.register('periodic-sync');
         } catch (error) {
           swLog.error('activate', 'Failed to register periodic sync on activation', error);
         }
