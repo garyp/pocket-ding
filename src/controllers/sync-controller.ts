@@ -191,15 +191,6 @@ export class SyncController implements ReactiveController {
     }
   }
 
-  // Bookmark synced tracking for visual highlights
-  private _trackBookmarkSynced(_bookmarkId: number) {
-    this._syncState = {
-      ...this._syncState,
-      syncedBookmarkIds: new Set([...this._syncState.syncedBookmarkIds, _bookmarkId]),
-    };
-    this.#host.requestUpdate();
-  }
-
   // Public API methods
 
   /**

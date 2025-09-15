@@ -261,7 +261,7 @@ export class SyncService extends EventTarget {
       // Clean up any previously cached content if bookmark was just archived
       if (localBookmark && !localBookmark.is_archived) {
         DebugService.logInfo('sync', `Cleaning up cached assets for newly archived bookmark ${bookmarkId}`, { bookmark_id: bookmarkId });
-        await DatabaseService.clearAssetContent(bookmarkId);
+        await DatabaseService.clearAssetContent(String(bookmarkId));
       }
       
       DebugService.logInfo('sync', `Synced metadata for ${completedAssets.length} assets for archived bookmark ${bookmarkId}`, { bookmark_id: bookmarkId, asset_count: completedAssets.length });

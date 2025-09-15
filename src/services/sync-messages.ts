@@ -113,14 +113,17 @@ export const SyncMessages = {
   },
   
   syncComplete(success: boolean, processed: number, duration: number, error?: string): SyncCompleteMessage {
-    return {
+    const message: SyncCompleteMessage = {
       type: 'SYNC_COMPLETE',
       success,
       processed,
       duration,
-      timestamp: Date.now(),
-      error
+      timestamp: Date.now()
     };
+    if (error !== undefined) {
+      message.error = error;
+    }
+    return message;
   },
   
   syncError(error: string, recoverable = false): SyncErrorMessage {
@@ -133,11 +136,14 @@ export const SyncMessages = {
   },
   
   registerPeriodicSync(enabled: boolean, minInterval?: number): RegisterPeriodicSyncMessage {
-    return {
+    const message: RegisterPeriodicSyncMessage = {
       type: 'REGISTER_PERIODIC_SYNC',
-      enabled,
-      minInterval
+      enabled
     };
+    if (minInterval !== undefined) {
+      message.minInterval = minInterval;
+    }
+    return message;
   },
   
   checkSyncPermission(): CheckSyncPermissionMessage {

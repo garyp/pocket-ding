@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { waitForComponent } from '../utils/component-aware-wait-for';
 import { DatabaseService } from '../../services/database';
 import { SettingsService } from '../../services/settings-service';
-import type { AppSettings } from '../../types';
+import type { AppSettings, LocalBookmark } from '../../types';
 
 // Mock service worker registration
 const mockServiceWorkerRegistration = {
@@ -19,27 +18,34 @@ const mockServiceWorkerRegistration = {
 
 describe('Background Sync User Workflows', () => {
   beforeEach(() => {
-    // Setup service worker mock
-    if (!navigator.serviceWorker || !(navigator.serviceWorker as any).__mock) {
-      Object.defineProperty(navigator, 'serviceWorker', {
-        value: {
-          ready: Promise.resolve(mockServiceWorkerRegistration as any),
-          register: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          __mock: true
-        },
+    // Setup service worker mock - check if we can modify it
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
+      if (!descriptor || descriptor.configurable) {
+        Object.defineProperty(navigator, 'serviceWorker', {
+          value: {
+            ready: Promise.resolve(mockServiceWorkerRegistration as any),
+            register: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            __mock: true
+          },
+          writable: true,
+          configurable: true
+        });
+      }
+    } catch (error) {
+      // Property already exists and is not configurable, skip
+    }
+    
+    // Mock Periodic Sync API availability if ServiceWorkerRegistration exists
+    if (typeof ServiceWorkerRegistration !== 'undefined') {
+      Object.defineProperty(ServiceWorkerRegistration.prototype, 'periodicSync', {
+        value: mockServiceWorkerRegistration.periodicSync,
         writable: true,
         configurable: true
       });
     }
-    
-    // Mock Periodic Sync API availability
-    Object.defineProperty(ServiceWorkerRegistration.prototype, 'periodicSync', {
-      value: mockServiceWorkerRegistration.periodicSync,
-      writable: true,
-      configurable: true
-    });
     
     vi.clearAllMocks();
   });
@@ -248,29 +254,34 @@ describe('Background Sync User Workflows', () => {
   describe('Data integrity during sync', () => {
     it('should preserve local reading state during sync', async () => {
       // User has local reading progress
-      const bookmark = {
+      const bookmark: LocalBookmark = {
         id: 1,
         url: 'https://example.com',
         title: 'Test Article',
-        reading_progress: 0.75,
-        scroll_position: 1500,
-        reading_mode: 'readability' as const,
-        is_read: true,
-        needs_read_sync: true,
+        description: '',
+        notes: '',
+        website_title: '',
+        website_description: '',
+        web_archive_snapshot_url: '',
+        favicon_url: '',
+        preview_image_url: '',
         is_archived: false,
         unread: false,
+        shared: false,
+        tag_names: [],
         date_added: '2024-01-01',
-        date_modified: '2024-01-01'
+        date_modified: '2024-01-01',
+        read_progress: 0.75,
+        reading_mode: 'readability' as const,
+        needs_read_sync: true
       };
       
       await DatabaseService.saveBookmark(bookmark);
       
       // After sync, reading state should be preserved
       const savedBookmark = await DatabaseService.getBookmark(1);
-      expect(savedBookmark?.reading_progress).toBe(0.75);
-      expect(savedBookmark?.scroll_position).toBe(1500);
+      expect(savedBookmark?.read_progress).toBe(0.75);
       expect(savedBookmark?.reading_mode).toBe('readability');
-      expect(savedBookmark?.is_read).toBe(true);
     });
     
     it('should handle concurrent sync attempts', async () => {
@@ -298,12 +309,11 @@ describe('Background Sync User Workflows', () => {
       // Browser tracks this automatically, but we can influence it
       
       // User interacts with app
-      const _userActions = [
-        'clicks sync button',
-        'reads articles',
-        'bookmarks items',
-        'changes settings'
-      ];
+      // Actions that trigger engagement (browser tracks automatically):
+      // - clicks sync button
+      // - reads articles
+      // - bookmarks items
+      // - changes settings
       
       // Each action increases engagement score (browser internal)
       // High engagement = periodic sync allowed more frequently

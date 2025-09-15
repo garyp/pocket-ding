@@ -26,7 +26,7 @@ registerRoute(
 // Sync state management
 let currentSyncCore: SyncCore | null = null;
 let syncInProgress = false;
-let lastSyncTimestamp = 0;
+// let lastSyncTimestamp = 0; // Currently unused
 
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
@@ -46,7 +46,7 @@ async function broadcastToClients(message: SyncMessage): Promise<void> {
  */
 async function getSettings(): Promise<AppSettings | null> {
   try {
-    return await DatabaseService.getSettings();
+    return await DatabaseService.getSettings() ?? null;
   } catch (error) {
     console.error('Failed to get settings:', error);
     return null;
@@ -69,7 +69,7 @@ async function performSync(fullSync = false): Promise<void> {
     await broadcastToClients(SyncMessages.syncStatus('starting'));
     
     const settings = await getSettings();
-    if (!settings?.linkding_url || !settings?.linkding_api_key) {
+    if (!settings?.linkding_url || !settings?.linkding_token) {
       throw new Error('Linkding settings not configured');
     }
     
@@ -99,7 +99,7 @@ async function performSync(fullSync = false): Promise<void> {
     const result = await currentSyncCore.performSync(settings, syncCheckpoint ?? undefined);
     
     if (result.success) {
-      lastSyncTimestamp = result.timestamp;
+      // lastSyncTimestamp = result.timestamp; // Currently unused
       await DatabaseService.clearSyncCheckpoint();
       await DatabaseService.resetSyncRetryCount();
       await DatabaseService.setLastSyncError(null);
@@ -141,7 +141,7 @@ async function performSync(fullSync = false): Promise<void> {
         await DatabaseService.incrementSyncRetryCount();
         console.log(`Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
         setTimeout(() => {
-          self.registration.sync?.register('sync-bookmarks');
+          (self.registration as any).sync?.register('sync-bookmarks');
         }, delay);
       }
     }
@@ -164,7 +164,7 @@ self.addEventListener('message', async (event) => {
         await performSync(message.fullSync);
       } else {
         // For background sync, register sync event
-        await self.registration.sync?.register('sync-bookmarks');
+        await (self.registration as any).sync?.register('sync-bookmarks');
       }
       break;
       

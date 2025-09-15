@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fixture, html } from '@open-wc/testing';
 import { SyncController } from '../../controllers/sync-controller';
 import { SyncMessages, type SyncMessage } from '../../services/sync-messages';
 import { SettingsService } from '../../services/settings-service';
 import type { AppSettings } from '../../types';
-import { LitElement } from 'lit';
+import { LitElement, html } from 'lit';
 import { customElement } from 'lit/decorators.js';
+import { waitForComponentReady } from '../utils/component-aware-wait-for';
 
 // Mock navigator.serviceWorker
 const mockPostMessage = vi.fn();
@@ -60,8 +60,9 @@ describe('Sync Message Passing Integration', () => {
     } as AppSettings);
     
     // Create test component
-    component = await fixture(html`<test-sync-component></test-sync-component>`);
-    await component.updateComplete;
+    component = document.createElement('test-sync-component') as TestSyncComponent;
+    document.body.appendChild(component);
+    await waitForComponentReady(component);
   });
   
   afterEach(() => {
@@ -259,8 +260,9 @@ describe('Sync Message Passing Integration', () => {
         writable: true
       });
       
-      const component2 = await fixture(html`<test-sync-component></test-sync-component>`);
-      await component2.updateComplete;
+      const component2 = document.createElement('test-sync-component') as TestSyncComponent;
+      document.body.appendChild(component2);
+      await waitForComponentReady(component2);
       
       // Should not throw when trying to sync
       await expect(component2.syncController.requestSync()).resolves.not.toThrow();
@@ -269,8 +271,9 @@ describe('Sync Message Passing Integration', () => {
     it('should handle settings not configured', async () => {
       vi.spyOn(SettingsService, 'getSettings').mockResolvedValue(undefined);
       
-      const component2 = await fixture(html`<test-sync-component></test-sync-component>`);
-      await component2.updateComplete;
+      const component2 = document.createElement('test-sync-component') as TestSyncComponent;
+      document.body.appendChild(component2);
+      await waitForComponentReady(component2);
       
       await component2.syncController.requestSync();
       

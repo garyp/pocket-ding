@@ -30,7 +30,9 @@ export class SyncCore {
   #abortController?: AbortController;
   
   constructor(onProgress?: (progress: SyncProgress) => void) {
-    this.#onProgress = onProgress ?? undefined;
+    if (onProgress) {
+      this.#onProgress = onProgress;
+    }
   }
 
   /**
@@ -73,7 +75,7 @@ export class SyncCore {
       }
       
       // Update last sync timestamp
-      await DatabaseService.setLastSyncTimestamp(Date.now());
+      await DatabaseService.setLastSyncTimestamp(new Date().toISOString());
       
       // Report completion
       this.#reportProgress({ current: 1, total: 1, phase: 'complete' });
@@ -91,7 +93,7 @@ export class SyncCore {
         timestamp: Date.now()
       };
     } finally {
-      this.#abortController = undefined;
+      (this.#abortController as any) = undefined;
     }
   }
   
@@ -124,6 +126,7 @@ export class SyncCore {
       }
       
       const bookmark = bookmarksToSync[i];
+      if (!bookmark) continue;
       
       // Save checkpoint periodically (every 10 bookmarks)
       if (i > startIndex && (i - startIndex) % 10 === 0) {
@@ -136,7 +139,22 @@ export class SyncCore {
       
       // Convert to LocalBookmark and save
       const localBookmark: LocalBookmark = {
-        ...bookmark,
+        id: bookmark.id!,
+        url: bookmark.url || '',
+        title: bookmark.title || '',
+        description: bookmark.description || '',
+        notes: bookmark.notes || '',
+        website_title: bookmark.website_title || '',
+        website_description: bookmark.website_description || '',
+        web_archive_snapshot_url: bookmark.web_archive_snapshot_url || '',
+        favicon_url: bookmark.favicon_url || '',
+        preview_image_url: bookmark.preview_image_url || '',
+        shared: bookmark.shared ?? false,
+        tag_names: bookmark.tag_names || [],
+        unread: bookmark.unread ?? false,
+        is_archived: bookmark.is_archived ?? false,
+        date_added: bookmark.date_added || '',
+        date_modified: bookmark.date_modified || '',
         is_synced: true
       };
       await DatabaseService.saveBookmark(localBookmark);
@@ -169,6 +187,7 @@ export class SyncCore {
       }
       
       const bookmark = bookmarksToProcess[i];
+      if (!bookmark) continue;
       
       // Save checkpoint periodically (every 5 assets)
       if (i > 0 && i % 5 === 0) {
@@ -183,19 +202,24 @@ export class SyncCore {
         // Check if asset already exists
         const existingAssets = await DatabaseService.getAssetsByBookmarkId(bookmark.id);
         if (existingAssets.length === 0) {
-          // Download and save asset
-          const assetData = await api.getBookmarkAsset(bookmark.id);
-          if (assetData) {
-            const asset: LocalAsset = {
-              id: `${bookmark.id}_${Date.now()}`,
-              bookmark_id: bookmark.id,
-              content: assetData.content,
-              content_type: assetData.content_type,
-              status: assetData.status,
-              status_code: assetData.status_code,
-              timestamp: Date.now()
-            };
-            await DatabaseService.saveAsset(asset);
+          // Download and save asset metadata
+          const assetData = await api.getBookmarkAssets(bookmark.id);
+          if (assetData && assetData.length > 0) {
+            const firstAsset = assetData[0];
+            if (firstAsset) {
+              const asset: LocalAsset = {
+                id: firstAsset.id,
+                asset_type: firstAsset.asset_type,
+                content_type: firstAsset.content_type,
+                display_name: firstAsset.display_name,
+                file_size: firstAsset.file_size,
+                status: firstAsset.status,
+                date_created: firstAsset.date_created,
+                bookmark_id: bookmark.id,
+                cached_at: new Date().toISOString()
+              };
+              await DatabaseService.saveAsset(asset);
+            }
           }
         }
       } catch (error) {
@@ -219,6 +243,7 @@ export class SyncCore {
       }
       
       const bookmark = bookmarksToSync[i];
+      if (!bookmark) continue;
       
       // Save checkpoint periodically
       if (i > 0 && i % 10 === 0) {
@@ -234,9 +259,8 @@ export class SyncCore {
         await api.markBookmarkAsRead(bookmark.id);
         
         // Update local bookmark
-        await DatabaseService.updateBookmark(bookmark.id, {
-          needs_read_sync: false
-        });
+        const updatedBookmark = { ...bookmark, needs_read_sync: false };
+        await DatabaseService.saveBookmark(updatedBookmark);
       } catch (error) {
         console.error(`Failed to sync read status for bookmark ${bookmark.id}:`, error);
         // Continue with other bookmarks

@@ -90,7 +90,7 @@ export class DatabaseService {
   }
 
   static async getUnarchivedBookmarks(): Promise<LocalBookmark[]> {
-    return await db.bookmarks.where('is_archived').equals(false).toArray();
+    return await db.bookmarks.where('is_archived').equals(0).toArray();
   }
 
   static async deleteBookmark(id: number): Promise<void> {
@@ -310,9 +310,17 @@ export class DatabaseService {
   static async setSyncCheckpoint(checkpoint: SyncState['checkpoint'] | null): Promise<void> {
     const state = await db.syncState.toCollection().first();
     if (state) {
-      await db.syncState.update(state.id!, { checkpoint: checkpoint ?? undefined });
+      if (checkpoint) {
+        await db.syncState.update(state.id!, { checkpoint });
+      } else {
+        await db.syncState.update(state.id!, { checkpoint: undefined } as any);
+      }
     } else {
-      await db.syncState.add({ checkpoint: checkpoint ?? undefined });
+      if (checkpoint) {
+        await db.syncState.add({ checkpoint });
+      } else {
+        await db.syncState.add({});
+      }
     }
   }
 
@@ -345,9 +353,17 @@ export class DatabaseService {
   static async setLastSyncError(error: string | null): Promise<void> {
     const state = await db.syncState.toCollection().first();
     if (state) {
-      await db.syncState.update(state.id!, { lastError: error ?? undefined });
+      if (error) {
+        await db.syncState.update(state.id!, { lastError: error });
+      } else {
+        await db.syncState.update(state.id!, { lastError: undefined } as any);
+      }
     } else {
-      await db.syncState.add({ lastError: error ?? undefined });
+      if (error) {
+        await db.syncState.add({ lastError: error });
+      } else {
+        await db.syncState.add({});
+      }
     }
   }
 
