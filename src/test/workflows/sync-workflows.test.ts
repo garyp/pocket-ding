@@ -135,7 +135,30 @@ describe('Sync Workflows - Background Data Synchronization', () => {
       vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(mockBookmarks);
     });
 
-    it('should support sync workflow', async () => {
+    it('should support sync workflow through service worker', async () => {
+      // Mock service worker registration
+      const mockServiceWorker = {
+        postMessage: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
+      
+      const mockRegistration = {
+        active: mockServiceWorker,
+        sync: {
+          register: vi.fn().mockResolvedValue(undefined)
+        }
+      };
+      
+      Object.defineProperty(navigator, 'serviceWorker', {
+        value: {
+          ready: Promise.resolve(mockRegistration),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn()
+        },
+        writable: true
+      });
+      
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);
 
@@ -145,8 +168,53 @@ describe('Sync Workflows - Background Data Synchronization', () => {
       // Should load settings and bookmarks
       expect(DatabaseService.getSettings).toHaveBeenCalled();
       
-      // Sync now happens through service worker
-      // The actual sync will be handled by the SyncController which communicates with the service worker
+      // Navigate to settings
+      const settingsPanel = document.createElement('settings-panel') as SettingsPanel;
+      document.body.appendChild(settingsPanel);
+      await settingsPanel.updateComplete;
+      
+      // Find and click the sync button
+      const syncButton = settingsPanel.shadowRoot?.querySelector('[data-test-id="sync-button"]') as HTMLElement;
+      if (syncButton) {
+        syncButton.click();
+        
+        // Verify that a sync message was sent to the service worker
+        await vi.waitFor(() => {
+          expect(mockServiceWorker.postMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+              type: 'SYNC_REQUEST'
+            })
+          );
+        });
+      }
+      
+      // Simulate sync progress from service worker
+      const messageHandler = vi.mocked(navigator.serviceWorker.addEventListener).mock.calls[0]?.[1] as EventListener;
+      if (messageHandler) {
+        // Send progress update
+        messageHandler(new MessageEvent('message', {
+          data: {
+            type: 'SYNC_PROGRESS',
+            current: 1,
+            total: 2,
+            phase: 'bookmarks'
+          }
+        }));
+        
+        // Send completion
+        messageHandler(new MessageEvent('message', {
+          data: {
+            type: 'SYNC_COMPLETE',
+            success: true,
+            processed: 2
+          }
+        }));
+      }
+      
+      // Verify bookmarks were updated
+      await vi.waitFor(() => {
+        expect(DatabaseService.getAllBookmarks).toHaveBeenCalled();
+      });
     });
   });
 });

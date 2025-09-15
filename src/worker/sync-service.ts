@@ -1,6 +1,7 @@
 import type { AppSettings, LocalAsset, LocalBookmark } from '../types';
-import { createLinkdingAPI, type LinkdingAPI } from './linkding-api';
-import { DatabaseService } from './database';
+import { createLinkdingAPI, type LinkdingAPI } from '../services/linkding-api';
+import { DatabaseService } from '../services/database';
+import { logError } from './sw-logger';
 
 export interface SyncProgress {
   current: number;
@@ -107,60 +108,71 @@ export class SyncService {
   }
   
   async #syncBookmarks(api: LinkdingAPI, modifiedSince?: string, lastProcessedId?: number): Promise<void> {
-    const bookmarks = await api.getAllBookmarks();
+    // Use modifiedSince parameter for incremental sync  
+    const remoteBookmarks = await api.getAllBookmarks(modifiedSince);
     
-    // Filter bookmarks modified since last sync if applicable
-    const bookmarksToSync = modifiedSince 
-      ? bookmarks.filter((b: any) => new Date(b.date_modified) > new Date(modifiedSince))
-      : bookmarks;
+    // Get local bookmarks for comparison
+    const localBookmarks = await DatabaseService.getAllBookmarks();
+    const localBookmarksMap = new Map(localBookmarks.map(b => [b.id, b]));
     
     // Resume from checkpoint if provided
     const startIndex = lastProcessedId 
-      ? bookmarksToSync.findIndex((b: any) => b.id > lastProcessedId)
+      ? remoteBookmarks.findIndex((b: any) => b.id > lastProcessedId)
       : 0;
     
-    const total = bookmarksToSync.length - startIndex;
+    const total = remoteBookmarks.length - startIndex;
     this.#reportProgress({ current: 0, total, phase: 'bookmarks' });
     
-    for (let i = startIndex; i < bookmarksToSync.length; i++) {
+    for (let i = startIndex; i < remoteBookmarks.length; i++) {
       if (this.#abortController?.signal.aborted) {
         throw new Error('Sync cancelled');
       }
       
-      const bookmark = bookmarksToSync[i];
-      if (!bookmark) continue;
+      const remoteBookmark = remoteBookmarks[i];
+      if (!remoteBookmark) continue;
       
-      // Save checkpoint periodically (every 10 bookmarks)
-      if (i > startIndex && (i - startIndex) % 10 === 0) {
-        await DatabaseService.setSyncCheckpoint({
-          lastProcessedId: bookmark.id,
-          phase: 'bookmarks',
-          timestamp: Date.now()
-        });
+      // Check if bookmark needs updating
+      const existingBookmark = localBookmarksMap.get(remoteBookmark.id);
+      const needsUpdate = !existingBookmark || 
+                         new Date(remoteBookmark.date_modified) > new Date(existingBookmark.date_modified);
+      
+      if (needsUpdate) {
+        // Save checkpoint periodically (every 10 bookmarks)
+        if (i > startIndex && (i - startIndex) % 10 === 0) {
+          await DatabaseService.setSyncCheckpoint({
+            lastProcessedId: remoteBookmark.id,
+            phase: 'bookmarks',
+            timestamp: Date.now()
+          });
+        }
+        
+        // Preserve local reading state when updating
+        const localBookmark: LocalBookmark = {
+          id: remoteBookmark.id!,
+          url: remoteBookmark.url || '',
+          title: remoteBookmark.title || '',
+          description: remoteBookmark.description || '',
+          notes: remoteBookmark.notes || '',
+          website_title: remoteBookmark.website_title || '',
+          website_description: remoteBookmark.website_description || '',
+          web_archive_snapshot_url: remoteBookmark.web_archive_snapshot_url || '',
+          favicon_url: remoteBookmark.favicon_url || '',
+          preview_image_url: remoteBookmark.preview_image_url || '',
+          shared: remoteBookmark.shared ?? false,
+          tag_names: remoteBookmark.tag_names || [],
+          unread: remoteBookmark.unread ?? false,
+          is_archived: remoteBookmark.is_archived ?? false,
+          date_added: remoteBookmark.date_added || '',
+          date_modified: remoteBookmark.date_modified || '',
+          is_synced: true,
+          // Preserve local reading state - set to undefined if not present
+          ...(existingBookmark?.last_read_at !== undefined && { last_read_at: existingBookmark.last_read_at }),
+          ...(existingBookmark?.read_progress !== undefined && { read_progress: existingBookmark.read_progress }),
+          ...(existingBookmark?.reading_mode !== undefined && { reading_mode: existingBookmark.reading_mode })
+        };
+        await DatabaseService.saveBookmark(localBookmark);
+        this.#processedCount++;
       }
-      
-      // Convert to LocalBookmark and save
-      const localBookmark: LocalBookmark = {
-        id: bookmark.id!,
-        url: bookmark.url || '',
-        title: bookmark.title || '',
-        description: bookmark.description || '',
-        notes: bookmark.notes || '',
-        website_title: bookmark.website_title || '',
-        website_description: bookmark.website_description || '',
-        web_archive_snapshot_url: bookmark.web_archive_snapshot_url || '',
-        favicon_url: bookmark.favicon_url || '',
-        preview_image_url: bookmark.preview_image_url || '',
-        shared: bookmark.shared ?? false,
-        tag_names: bookmark.tag_names || [],
-        unread: bookmark.unread ?? false,
-        is_archived: bookmark.is_archived ?? false,
-        date_added: bookmark.date_added || '',
-        date_modified: bookmark.date_modified || '',
-        is_synced: true
-      };
-      await DatabaseService.saveBookmark(localBookmark);
-      this.#processedCount++;
       
       this.#reportProgress({ 
         current: i - startIndex + 1, 
@@ -227,7 +239,7 @@ export class SyncService {
           }
         }
       } catch (error) {
-        console.error(`Failed to sync asset for bookmark ${bookmark.id}:`, error);
+        logError('syncAssets', `Failed to sync asset for bookmark ${bookmark.id}`, error);
         // Continue with other assets
       }
       
@@ -266,7 +278,7 @@ export class SyncService {
         const updatedBookmark = { ...bookmark, needs_read_sync: false };
         await DatabaseService.saveBookmark(updatedBookmark);
       } catch (error) {
-        console.error(`Failed to sync read status for bookmark ${bookmark.id}:`, error);
+        logError('syncReadStatus', `Failed to sync read status for bookmark ${bookmark.id}`, error);
         // Continue with other bookmarks
       }
       

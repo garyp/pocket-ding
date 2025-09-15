@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SyncService, type SyncCheckpoint } from '../../services/sync-service';
+import { SyncService, type SyncCheckpoint } from '../../worker/sync-service';
 import { createLinkdingAPI } from '../../services/linkding-api';
 import { DatabaseService } from '../../services/database';
 import type { AppSettings, LocalBookmark } from '../../types';
@@ -29,6 +29,7 @@ describe('SyncService', () => {
     mockApi = {
       getAllBookmarks: vi.fn(),
       getBookmarkAsset: vi.fn(),
+      getBookmarkAssets: vi.fn(),
       markBookmarkAsRead: vi.fn(),
       getArchivedBookmarks: vi.fn(),
       getBookmarks: vi.fn()
@@ -281,9 +282,9 @@ describe('SyncService', () => {
       ];
       
       mockApi.getAllBookmarks.mockResolvedValue(mockBookmarks);
-      mockApi.getBookmarkAsset.mockResolvedValue({
+      mockApi.getBookmarkAssets.mockResolvedValue({
         content: new ArrayBuffer(100),
-        content_type: 'text/html',
+        content_type: 'text/html', 
         status: 'complete',
         status_code: 200
       });

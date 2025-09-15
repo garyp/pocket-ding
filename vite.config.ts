@@ -17,7 +17,7 @@ export default defineConfig(({ command }) => {
       VitePWA({
         registerType: 'autoUpdate',
         strategies: 'injectManifest',
-        srcDir: 'src',
+        srcDir: 'src/worker',
         filename: 'sw.ts',
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg}'],

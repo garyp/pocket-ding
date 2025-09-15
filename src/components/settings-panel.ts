@@ -38,7 +38,10 @@ export class SettingsPanel extends LitElement {
   @state() private periodicSyncPermission: 'prompt' | 'granted' | 'denied' = 'prompt';
 
   #dataManagementController = new DataManagementController(this);
-  #syncController = new SyncController(this);
+  #syncController = new SyncController(this, {
+    onSyncCompleted: () => this.#handleSyncCompleted(),
+    onSyncError: (error: any) => this.#handleSyncError(error)
+  });
 
   // Getter methods for reactive data
   get settings() { 
@@ -291,6 +294,13 @@ export class SettingsPanel extends LitElement {
     if (!this.#settingsQuery.loading && this.settings && Object.keys(this.formData).length === 0) {
       this.#initializeForm();
     }
+    
+    // Update sync progress when sync controller state changes
+    if (this.isFullSyncing) {
+      const syncState = this.#syncController.getSyncState();
+      this.fullSyncProgress = syncState.syncProgress;
+      this.fullSyncTotal = syncState.syncTotal;
+    }
   }
 
   #initializeForm() {
@@ -412,55 +422,32 @@ export class SettingsPanel extends LitElement {
     this.fullSyncTotal = 0;
     this.testStatus = 'idle';
 
-    try {
-      // Create a promise that resolves when sync completes
-      const syncPromise = new Promise<void>((resolve, reject) => {
-        const checkSyncState = () => {
-          const syncState = this.#syncController.getSyncState();
-          
-          // Update progress
-          this.fullSyncProgress = syncState.syncProgress;
-          this.fullSyncTotal = syncState.syncTotal;
-          
-          // Check if sync is complete
-          if (!syncState.isSyncing) {
-            if (syncState.syncStatus === 'completed') {
-              resolve();
-            } else if (syncState.syncStatus === 'failed' || syncState.syncStatus === 'cancelled') {
-              reject(new Error('Sync failed or was cancelled'));
-            }
-            return;
-          }
-          
-          // Continue checking
-          requestAnimationFrame(checkSyncState);
-        };
-        
-        // Start checking after a brief delay to allow sync to start
-        setTimeout(checkSyncState, 100);
-      });
+    // Request the sync
+    await this.#syncController.requestSync(true);
+  }
 
-      // Request the sync
-      await this.#syncController.requestSync(true);
-      
-      // Wait for sync to complete
-      await syncPromise;
-
+  #handleSyncCompleted() {
+    if (this.isFullSyncing) {
       this.testStatus = 'success';
       this.testMessage = 'Full sync completed successfully!';
-      
+      this.isFullSyncing = false;
+      this.fullSyncProgress = 0;
+      this.fullSyncTotal = 0;
       this.dispatchEvent(new CustomEvent('sync-completed'));
-    } catch (error) {
+    }
+  }
+  
+  #handleSyncError(error: any) {
+    if (this.isFullSyncing) {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Full sync failed');
       this.testStatus = 'error';
       this.testMessage = `Full sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    } finally {
       this.isFullSyncing = false;
       this.fullSyncProgress = 0;
       this.fullSyncTotal = 0;
     }
   }
-
+  
   async #handleExportData() {
     await this.#dataManagementController.exportData();
   }
