@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SyncCore, type SyncCheckpoint } from '../../services/sync-service';
+import { SyncService, type SyncCheckpoint } from '../../services/sync-service';
 import { createLinkdingAPI } from '../../services/linkding-api';
 import { DatabaseService } from '../../services/database';
 import type { AppSettings, LocalBookmark } from '../../types';
@@ -8,15 +8,15 @@ import type { AppSettings, LocalBookmark } from '../../types';
 vi.mock('../../services/linkding-api');
 vi.mock('../../services/database');
 
-describe('SyncCore', () => {
-  let syncCore: SyncCore;
+describe('SyncService', () => {
+  let syncService: SyncService;
   let progressCallback: ReturnType<typeof vi.fn>;
   let mockSettings: AppSettings;
   let mockApi: any;
   
   beforeEach(() => {
     progressCallback = vi.fn();
-    syncCore = new SyncCore(progressCallback);
+    syncService = new SyncService(progressCallback);
     
     mockSettings = {
       linkding_url: 'https://test.linkding.com',
@@ -98,7 +98,7 @@ describe('SyncCore', () => {
       vi.mocked(DatabaseService.setLastSyncTimestamp).mockResolvedValue(undefined);
       vi.mocked(DatabaseService.clearSyncCheckpoint).mockResolvedValue(undefined);
       
-      const result = await syncCore.performSync(mockSettings);
+      const result = await syncService.performSync(mockSettings);
       
       expect(result.success).toBe(true);
       expect(progressCallback).toHaveBeenCalledWith(
@@ -161,7 +161,7 @@ describe('SyncCore', () => {
       vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue([]);
       vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
       
-      await syncCore.performSync(mockSettings, checkpoint);
+      await syncService.performSync(mockSettings, checkpoint);
       
       // Verify that existing bookmarks are not re-processed
       expect(mockApi.getAllBookmarks).toHaveBeenCalled();
@@ -171,10 +171,10 @@ describe('SyncCore', () => {
       // Mock API to resolve immediately - empty result simulates quick return
       mockApi.getAllBookmarks.mockResolvedValue([]);
       
-      const syncPromise = syncCore.performSync(mockSettings);
+      const syncPromise = syncService.performSync(mockSettings);
       
       // Cancel sync immediately
-      syncCore.cancelSync();
+      syncService.cancelSync();
       
       const result = await syncPromise;
       
@@ -209,7 +209,7 @@ describe('SyncCore', () => {
       vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
       vi.mocked(DatabaseService.setSyncCheckpoint).mockResolvedValue(undefined);
       
-      await syncCore.performSync(mockSettings);
+      await syncService.performSync(mockSettings);
       
       // Should save checkpoint at regular intervals
       expect(DatabaseService.setSyncCheckpoint).toHaveBeenCalled();
@@ -218,7 +218,7 @@ describe('SyncCore', () => {
     it('should handle network errors and return appropriate error', async () => {
       mockApi.getAllBookmarks.mockRejectedValue(new Error('Network error'));
       
-      const result = await syncCore.performSync(mockSettings);
+      const result = await syncService.performSync(mockSettings);
       
       expect(result.success).toBe(false);
       expect(result.error).toBeInstanceOf(Error);
@@ -251,7 +251,7 @@ describe('SyncCore', () => {
       vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue([]);
       vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
       
-      await syncCore.performSync(mockSettings);
+      await syncService.performSync(mockSettings);
       
       // Verify bookmarks were saved
       expect(DatabaseService.saveBookmark).toHaveBeenCalled();
@@ -293,7 +293,7 @@ describe('SyncCore', () => {
       vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
       vi.mocked(DatabaseService.getAssetsByBookmarkId).mockResolvedValue([]);
       
-      await syncCore.performSync(mockSettings);
+      await syncService.performSync(mockSettings);
       
       // Should report progress for init, bookmarks, assets, and complete phases
       const calledPhases = progressCallback.mock.calls

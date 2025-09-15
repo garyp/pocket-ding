@@ -25,7 +25,7 @@ export interface SyncCheckpoint {
  * Core sync logic that can be used in both main app and service worker contexts
  * This class contains the pure sync logic without UI dependencies
  */
-export class SyncCore {
+export class SyncService {
   #onProgress?: (progress: SyncProgress) => void;
   #abortController?: AbortController;
   #processedCount: number = 0;

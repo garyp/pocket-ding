@@ -3,7 +3,7 @@
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
-import { SyncCore, type SyncCheckpoint } from './services/sync-service';
+import { SyncService, type SyncCheckpoint } from './services/sync-service';
 import { SyncMessages, type SyncMessage, type ServiceWorkerLogMessage } from './types/sync-messages';
 import { DatabaseService } from './services/database';
 import type { AppSettings } from './types';
@@ -24,7 +24,7 @@ registerRoute(
 );
 
 // Sync state management
-let currentSyncCore: SyncCore | null = null;
+let currentSyncService: SyncService | null = null;
 let syncInProgress = false;
 // let lastSyncTimestamp = 0; // Currently unused
 
@@ -133,8 +133,8 @@ async function performSync(fullSync = false): Promise<void> {
       await DatabaseService.resetSyncRetryCount();
     }
     
-    // Create sync core with progress callback
-    currentSyncCore = new SyncCore(async (progress) => {
+    // Create sync service with progress callback
+    currentSyncService = new SyncService(async (progress) => {
       await broadcastToClients(SyncMessages.syncProgress(
         progress.current,
         progress.total,
@@ -144,7 +144,7 @@ async function performSync(fullSync = false): Promise<void> {
     
     await broadcastToClients(SyncMessages.syncStatus('syncing'));
     
-    const result = await currentSyncCore.performSync(settings, syncCheckpoint ?? undefined);
+    const result = await currentSyncService.performSync(settings, syncCheckpoint ?? undefined);
     
     if (result.success) {
       // lastSyncTimestamp = result.timestamp; // Currently unused
@@ -173,8 +173,8 @@ async function performSync(fullSync = false): Promise<void> {
     await DatabaseService.setLastSyncError(errorMessage);
     
     // Save checkpoint if sync was interrupted (not cancelled)
-    if (!isCancelled && currentSyncCore) {
-      // The sync core should have saved its own checkpoint during progress
+    if (!isCancelled && currentSyncService) {
+      // The sync service should have saved its own checkpoint during progress
       // We just need to ensure retry count is updated
     }
     
@@ -195,7 +195,7 @@ async function performSync(fullSync = false): Promise<void> {
     }
   } finally {
     syncInProgress = false;
-    currentSyncCore = null;
+    currentSyncService = null;
   }
 }
 
@@ -217,8 +217,8 @@ self.addEventListener('message', async (event) => {
       break;
       
     case 'CANCEL_SYNC':
-      if (currentSyncCore) {
-        currentSyncCore.cancelSync();
+      if (currentSyncService) {
+        currentSyncService.cancelSync();
         await broadcastToClients(SyncMessages.syncStatus('cancelled'));
       }
       break;
