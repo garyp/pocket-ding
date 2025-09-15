@@ -3,7 +3,6 @@ import { customElement, state } from 'lit/decorators.js';
 import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SettingsService } from '../services/settings-service';
-import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
 import { DebugService } from '../services/debug-service';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
@@ -419,17 +418,45 @@ export class SettingsPanel extends LitElement {
     this.testStatus = 'idle';
 
     try {
-      await SyncService.fullSync(this.settings, (current, total) => {
-        this.fullSyncProgress = current;
-        this.fullSyncTotal = total;
+      // Create a promise that resolves when sync completes
+      const syncPromise = new Promise<void>((resolve, reject) => {
+        const checkSyncState = () => {
+          const syncState = this.#syncController.getSyncState();
+          
+          // Update progress
+          this.fullSyncProgress = syncState.syncProgress;
+          this.fullSyncTotal = syncState.syncTotal;
+          
+          // Check if sync is complete
+          if (!syncState.isSyncing) {
+            if (syncState.syncStatus === 'completed') {
+              resolve();
+            } else if (syncState.syncStatus === 'failed' || syncState.syncStatus === 'cancelled') {
+              reject(new Error('Sync failed or was cancelled'));
+            }
+            return;
+          }
+          
+          // Continue checking
+          requestAnimationFrame(checkSyncState);
+        };
+        
+        // Start checking after a brief delay to allow sync to start
+        setTimeout(checkSyncState, 100);
       });
+
+      // Request the sync
+      await this.#syncController.requestSync(true);
+      
+      // Wait for sync to complete
+      await syncPromise;
 
       this.testStatus = 'success';
       this.testMessage = 'Full sync completed successfully!';
       
       this.dispatchEvent(new CustomEvent('sync-completed'));
     } catch (error) {
-      console.error('Full sync failed:', error);
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Full sync failed');
       this.testStatus = 'error';
       this.testMessage = `Full sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     } finally {

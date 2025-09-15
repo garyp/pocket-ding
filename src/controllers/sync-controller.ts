@@ -118,6 +118,21 @@ export class SyncController implements ReactiveController {
 
   private handleServiceWorkerMessage(message: SyncMessage) {
     switch (message.type) {
+      case 'SW_LOG':
+        // Forward service worker logs to DebugService
+        switch (message.level) {
+          case 'info':
+            DebugService.logInfo('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
+            break;
+          case 'warn':
+            DebugService.logWarning('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
+            break;
+          case 'error':
+            DebugService.logError(new Error(`[SW] ${message.operation}: ${message.message}`), 'sync', 'Service worker error', { details: message.error || message.details });
+            break;
+        }
+        break;
+
       case 'SYNC_STATUS':
         this._syncState = {
           ...this._syncState,

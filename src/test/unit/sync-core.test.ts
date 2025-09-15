@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SyncCore, type SyncCheckpoint } from '../../services/sync-core';
+import { SyncCore, type SyncCheckpoint } from '../../services/sync-service';
 import { createLinkdingAPI } from '../../services/linkding-api';
 import { DatabaseService } from '../../services/database';
 import type { AppSettings, LocalBookmark } from '../../types';

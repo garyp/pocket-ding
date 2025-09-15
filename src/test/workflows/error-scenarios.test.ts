@@ -235,7 +235,7 @@ describe('Error Scenarios - Failure Handling', () => {
       vi.mocked(SyncService.syncBookmarks)
         .mockRejectedValueOnce(new Error('Network timeout'))
         .mockRejectedValueOnce(new Error('Connection reset'))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce({ success: true, processed: 0, timestamp: Date.now() });
 
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);

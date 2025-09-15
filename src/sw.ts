@@ -3,8 +3,8 @@
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
-import { SyncCore, type SyncCheckpoint } from './services/sync-core';
-import { SyncMessages, type SyncMessage } from './types/sync-messages';
+import { SyncCore, type SyncCheckpoint } from './services/sync-service';
+import { SyncMessages, type SyncMessage, type ServiceWorkerLogMessage } from './types/sync-messages';
 import { DatabaseService } from './services/database';
 import type { AppSettings } from './types';
 
@@ -39,40 +39,43 @@ const swLog = {
   info: (operation: string, message: string, details?: any) => {
     // Log to console for debugging
     console.log(`[SW] ${operation}: ${message}`, details);
-    // Could send to clients if needed for DebugService
-    broadcastToClients({
-      type: 'SW_LOG' as any,
+    // Send to clients for DebugService
+    const logMessage: ServiceWorkerLogMessage = {
+      type: 'SW_LOG',
       level: 'info',
       operation,
       message,
       details
-    } as any).catch(() => {});
+    };
+    broadcastToClients(logMessage).catch(() => {});
   },
   
   error: (operation: string, message: string, error?: any) => {
     // Log to console for debugging
     console.error(`[SW] ${operation}: ${message}`, error);
-    // Could send to clients if needed for DebugService
-    broadcastToClients({
-      type: 'SW_LOG' as any,
+    // Send to clients for DebugService
+    const logMessage: ServiceWorkerLogMessage = {
+      type: 'SW_LOG',
       level: 'error',
       operation,
       message,
       error: error?.message || error
-    } as any).catch(() => {});
+    };
+    broadcastToClients(logMessage).catch(() => {});
   },
   
   warn: (operation: string, message: string, details?: any) => {
     // Log to console for debugging
     console.warn(`[SW] ${operation}: ${message}`, details);
-    // Could send to clients if needed for DebugService
-    broadcastToClients({
-      type: 'SW_LOG' as any,
+    // Send to clients for DebugService
+    const logMessage: ServiceWorkerLogMessage = {
+      type: 'SW_LOG',
       level: 'warn',
       operation,
       message,
       details
-    } as any).catch(() => {});
+    };
+    broadcastToClients(logMessage).catch(() => {});
   }
 };
 

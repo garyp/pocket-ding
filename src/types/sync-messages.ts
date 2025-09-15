@@ -10,7 +10,8 @@ export type SyncMessageType =
   | 'SYNC_COMPLETE'
   | 'SYNC_ERROR'
   | 'REGISTER_PERIODIC_SYNC'
-  | 'CHECK_SYNC_PERMISSION';
+  | 'CHECK_SYNC_PERMISSION'
+  | 'SW_LOG';
 
 export interface SyncRequestMessage {
   type: 'REQUEST_SYNC';
@@ -64,6 +65,15 @@ export interface CheckSyncPermissionMessage {
   type: 'CHECK_SYNC_PERMISSION';
 }
 
+export interface ServiceWorkerLogMessage {
+  type: 'SW_LOG';
+  level: 'info' | 'warn' | 'error';
+  operation: string;
+  message: string;
+  details?: any;
+  error?: string;
+}
+
 export type SyncMessage = 
   | SyncRequestMessage
   | CancelSyncMessage
@@ -72,7 +82,8 @@ export type SyncMessage =
   | SyncCompleteMessage
   | SyncErrorMessage
   | RegisterPeriodicSyncMessage
-  | CheckSyncPermissionMessage;
+  | CheckSyncPermissionMessage
+  | ServiceWorkerLogMessage;
 
 /**
  * Helper functions for message creation

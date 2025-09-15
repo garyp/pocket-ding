@@ -154,7 +154,7 @@ describe('Sync Workflows - Background Data Synchronization', () => {
       expect(DatabaseService.getSettings).toHaveBeenCalled();
       
       // When sync occurs, it should update the data
-      vi.mocked(SyncService.syncBookmarks).mockResolvedValue();
+      vi.mocked(SyncService.syncBookmarks).mockResolvedValue({ success: true, processed: 0, timestamp: Date.now() });
       
       // Verify sync service is available
       expect(SyncService.syncBookmarks).toBeDefined();
