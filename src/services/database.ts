@@ -364,6 +364,11 @@ export class DatabaseService {
     }
   }
 
+  static async getLastSyncError(): Promise<string | null> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    return metadata?.last_error || null;
+  }
+
   // New pagination offset methods
   static async getUnarchivedOffset(): Promise<number> {
     const metadata = await db.syncMetadata.toCollection().first();

@@ -1,5 +1,6 @@
-import type { DebugLogEntry, DebugAppState } from '../types';
+import type { DebugLogEntry, DebugAppState, SyncPhase } from '../types';
 import { DatabaseService } from './database';
+import type { SyncMessage } from '../types/sync-messages';
 
 export class DebugService {
   private static instance: DebugService | null = null;
@@ -93,6 +94,10 @@ export class DebugService {
       const assets = await DatabaseService.getAllAssets();
       const settings = await DatabaseService.getSettings();
       const lastSyncTimestamp = await DatabaseService.getLastSyncTimestamp();
+      const lastSyncError = await DatabaseService.getLastSyncError();
+      const syncRetryCount = await DatabaseService.getSyncRetryCount();
+      const unarchivedOffset = await DatabaseService.getUnarchivedOffset();
+      const archivedOffset = await DatabaseService.getArchivedOffset();
 
       // Calculate storage usage if supported
       let storageInfo = {};
@@ -109,8 +114,13 @@ export class DebugService {
         }
       }
 
-      // Get bookmarks with assets
+      // Get bookmarks with assets and sync-related counts
       const bookmarksWithAssets = new Set(assets.map((a: any) => a.bookmark_id));
+      const bookmarksNeedingAssetSync = bookmarks.filter(b => b.needs_asset_sync).length;
+      const bookmarksNeedingReadSync = bookmarks.filter(b => b.needs_read_sync).length;
+
+      // Get service worker information
+      const serviceWorkerInfo = await this.getServiceWorkerInfo();
 
       return {
         bookmarks: {
@@ -121,10 +131,18 @@ export class DebugService {
         },
         sync: {
           isInProgress: false, // Will be updated by sync service
-          ...(lastSyncTimestamp && { lastSyncAt: lastSyncTimestamp })
+          ...(lastSyncTimestamp && { lastSyncAt: lastSyncTimestamp }),
+          ...(lastSyncError && { lastSyncError }),
+          retryCount: syncRetryCount,
+          unarchivedOffset,
+          archivedOffset,
+          bookmarksNeedingAssetSync,
+          bookmarksNeedingReadSync,
+          serviceWorker: serviceWorkerInfo
         },
         api: {
-          ...(settings?.linkding_url && { baseUrl: settings.linkding_url })
+          ...(settings?.linkding_url && { baseUrl: settings.linkding_url }),
+          isConnected: settings?.linkding_url && settings?.linkding_token ? true : false
         },
         storage: storageInfo
       };
@@ -190,5 +208,101 @@ export class DebugService {
 
   static logInfo(category: 'sync' | 'api' | 'database' | 'app', message: string, context?: any): void {
     this.log('info', category, 'info', message, context);
+  }
+
+  // Service Worker related methods
+  static async getServiceWorkerInfo(): Promise<any> {
+    const info: any = {
+      supported: 'serviceWorker' in navigator,
+      registered: false,
+      active: false,
+      periodicSyncSupported: false,
+      backgroundSyncSupported: false,
+      permissionState: 'unknown'
+    };
+
+    if (!info.supported) {
+      return info;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        info.registered = true;
+        info.active = !!registration.active;
+        info.scope = registration.scope;
+        info.updateViaCache = registration.updateViaCache;
+
+        // Check for Background Sync API support
+        info.backgroundSyncSupported = 'sync' in registration;
+
+        // Check for Periodic Background Sync API support
+        info.periodicSyncSupported = 'periodicSync' in registration;
+
+        if (info.periodicSyncSupported && 'permissions' in navigator) {
+          try {
+            const permission = await navigator.permissions.query({
+              name: 'periodic-background-sync' as PermissionName
+            } as PermissionDescriptor);
+            info.permissionState = permission.state;
+          } catch {
+            // Permission query failed - periodic sync might not be supported
+            info.permissionState = 'unsupported';
+          }
+        }
+
+        // Get registered sync tags if available
+        if (info.backgroundSyncSupported) {
+          try {
+            const syncTags = await (registration as any).sync?.getTags();
+            info.syncTags = syncTags || [];
+          } catch {
+            // getTags not supported or failed
+          }
+        }
+
+        if (info.periodicSyncSupported) {
+          try {
+            const periodicTags = await (registration as any).periodicSync?.getTags();
+            info.periodicTags = periodicTags || [];
+          } catch {
+            // getTags not supported or failed
+          }
+        }
+      }
+    } catch (error) {
+      this.log('error', 'app', 'getServiceWorkerInfo', 'Failed to get service worker info', undefined, error instanceof Error ? error : new Error(String(error)));
+    }
+
+    return info;
+  }
+
+  // Sync specific logging methods with enhanced details
+  static logSyncPhaseStart(phase: SyncPhase, details?: any): void {
+    this.log('info', 'sync', 'phase-start', `Starting sync phase: ${phase}`, { phase, ...details });
+  }
+
+  static logSyncPhaseComplete(phase: SyncPhase, details?: any): void {
+    this.log('info', 'sync', 'phase-complete', `Completed sync phase: ${phase}`, { phase, ...details });
+  }
+
+  static logServiceWorkerMessage(message: SyncMessage): void {
+    this.log('info', 'sync', 'sw-message', `Service worker message: ${message.type}`, { message });
+  }
+
+  static logSyncRetry(retryCount: number, delay: number, reason?: string): void {
+    this.log('warn', 'sync', 'retry', `Sync retry scheduled (attempt ${retryCount})`, {
+      retryCount,
+      delay,
+      reason
+    });
+  }
+
+  static logPeriodicSyncEvent(details?: any): void {
+    this.log('info', 'sync', 'periodic-sync', 'Periodic sync event triggered', details);
+  }
+
+  static logBackgroundSyncEvent(details?: any): void {
+    this.log('info', 'sync', 'background-sync', 'Background sync event triggered', details);
   }
 }

@@ -195,8 +195,26 @@ export interface DebugAppState {
   sync: {
     isInProgress: boolean;
     lastSyncAt?: string;
+    lastSyncError?: string;
+    retryCount?: number;
+    unarchivedOffset?: number;
+    archivedOffset?: number;
+    bookmarksNeedingAssetSync?: number;
+    bookmarksNeedingReadSync?: number;
     currentProgress?: { current: number; total: number };
     nextScheduledAt?: string;
+    serviceWorker?: {
+      supported: boolean;
+      registered: boolean;
+      active: boolean;
+      periodicSyncSupported: boolean;
+      backgroundSyncSupported: boolean;
+      permissionState: string;
+      scope?: string;
+      updateViaCache?: string;
+      syncTags?: string[];
+      periodicTags?: string[];
+    };
   };
   api: {
     isConnected?: boolean;
@@ -218,6 +236,8 @@ export interface SyncState {
   syncedBookmarkIds: Set<number>;
   syncPhase?: SyncPhase | undefined;
   syncStatus?: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled';
+  lastError?: string;
+  retryCount?: number;
   getPercentage(): number;
 }
 

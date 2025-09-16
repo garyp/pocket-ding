@@ -1,5 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { SettingsService } from '../services/settings-service';
+import { DatabaseService } from '../services/database';
 import { ReactiveQueryController } from './reactive-query-controller';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
@@ -17,6 +18,8 @@ export class SyncController implements ReactiveController {
   #messageHandler: ((event: MessageEvent) => void) | null = null;
   #options: SyncControllerOptions;
   #settingsQuery: ReactiveQueryController<AppSettings | undefined>;
+  #syncErrorQuery: ReactiveQueryController<string | null>;
+  #syncRetryCountQuery: ReactiveQueryController<number>;
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -34,10 +37,20 @@ export class SyncController implements ReactiveController {
     this.#host = host;
     this.#options = options;
 
-    // Initialize reactive query for settings data
+    // Initialize reactive queries for settings and error data
     this.#settingsQuery = new ReactiveQueryController(
       host,
       () => SettingsService.getSettings()
+    );
+
+    this.#syncErrorQuery = new ReactiveQueryController(
+      host,
+      () => DatabaseService.getLastSyncError()
+    );
+
+    this.#syncRetryCountQuery = new ReactiveQueryController(
+      host,
+      () => DatabaseService.getSyncRetryCount()
     );
 
     host.addController(this);
@@ -216,10 +229,22 @@ export class SyncController implements ReactiveController {
   }
 
   /**
-   * Get the current sync state
+   * Get the current sync state including error information
    */
   getSyncState(): SyncState {
-    return { ...this._syncState };
+    const state: SyncState = { ...this._syncState };
+
+    const lastError = this.#syncErrorQuery.value;
+    if (lastError) {
+      state.lastError = lastError;
+    }
+
+    const retryCount = this.#syncRetryCountQuery.value;
+    if (retryCount && retryCount > 0) {
+      state.retryCount = retryCount;
+    }
+
+    return state;
   }
 
   /**
@@ -319,6 +344,26 @@ export class SyncController implements ReactiveController {
       syncedBookmarkIds: new Set<number>(),
     };
     this.#host.requestUpdate();
+  }
+
+  /**
+   * Dismiss the current sync error
+   */
+  async dismissSyncError(): Promise<void> {
+    try {
+      await DatabaseService.setLastSyncError(null);
+      await DatabaseService.resetSyncRetryCount();
+      this.#host.requestUpdate();
+    } catch (error) {
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to dismiss sync error');
+    }
+  }
+
+  /**
+   * Check if there's a current sync error to display
+   */
+  hasSyncError(): boolean {
+    return !!(this.#syncErrorQuery.value && !this.isSyncing());
   }
 
   /**

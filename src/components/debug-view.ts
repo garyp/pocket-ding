@@ -57,7 +57,7 @@ export class DebugView extends LitElement {
 
     .app-state-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 1rem;
       padding: 1rem;
     }
@@ -290,17 +290,42 @@ export class DebugView extends LitElement {
 
   private formatBytes(bytes?: number): string {
     if (!bytes) return 'Unknown';
-    
+
     const units = ['B', 'KB', 'MB', 'GB'];
     let size = bytes;
     let unitIndex = 0;
-    
+
     while (size >= 1024 && unitIndex < units.length - 1) {
       size /= 1024;
       unitIndex++;
     }
-    
+
     return `${size.toFixed(1)} ${units[unitIndex]}`;
+  }
+
+  private renderServiceWorkerInfo() {
+    if (!this.appState?.sync.serviceWorker) return html``;
+
+    const sw = this.appState.sync.serviceWorker;
+
+    return html`
+      <div class="state-item">
+        <h4>Service Worker</h4>
+        <div class="state-value">
+          ${sw.supported ? (sw.active ? 'Active' : (sw.registered ? 'Registered' : 'Inactive')) : 'Not Supported'}
+        </div>
+        <div class="state-details">
+          ${sw.supported ? html`
+            Background Sync: ${sw.backgroundSyncSupported ? 'Supported' : 'Not Supported'}<br>
+            Periodic Sync: ${sw.periodicSyncSupported ? 'Supported' : 'Not Supported'}
+            ${sw.periodicSyncSupported ? html`<br>Permission: ${sw.permissionState}` : ''}
+            ${sw.scope ? html`<br>Scope: ${sw.scope}` : ''}
+            ${sw.syncTags && sw.syncTags.length > 0 ? html`<br>Sync tags: ${sw.syncTags.join(', ')}` : ''}
+            ${sw.periodicTags && sw.periodicTags.length > 0 ? html`<br>Periodic tags: ${sw.periodicTags.join(', ')}` : ''}
+          ` : 'Service Workers not supported in this browser'}
+        </div>
+      </div>
+    `;
   }
 
   private renderAppState() {
@@ -317,46 +342,64 @@ export class DebugView extends LitElement {
             With Assets: ${this.appState.bookmarks.withAssets}
           </div>
         </div>
-        
+
         <div class="state-item">
           <h4>Sync Status</h4>
           <div class="state-value">
             ${this.appState.sync.isInProgress ? 'In Progress' : 'Idle'}
           </div>
           <div class="state-details">
-            ${this.appState.sync.lastSyncAt ? 
-              `Last: ${new Date(this.appState.sync.lastSyncAt).toLocaleString()}` : 
+            ${this.appState.sync.lastSyncAt ?
+              `Last: ${new Date(this.appState.sync.lastSyncAt).toLocaleString()}` :
               'Never synced'}
-            ${this.appState.sync.currentProgress ? 
-              html`<br>Progress: ${this.appState.sync.currentProgress.current}/${this.appState.sync.currentProgress.total}` : 
+            ${this.appState.sync.currentProgress ?
+              html`<br>Progress: ${this.appState.sync.currentProgress.current}/${this.appState.sync.currentProgress.total}` :
+              ''}
+            ${this.appState.sync.lastSyncError ?
+              html`<br><span style="color: var(--md-sys-color-error)">Error: ${this.appState.sync.lastSyncError}</span>` :
               ''}
           </div>
         </div>
-        
+
+        <div class="state-item">
+          <h4>Sync Progress</h4>
+          <div class="state-value">
+            ${this.appState.sync.retryCount || 0} retries
+          </div>
+          <div class="state-details">
+            Unarchived offset: ${this.appState.sync.unarchivedOffset || 0}<br>
+            Archived offset: ${this.appState.sync.archivedOffset || 0}<br>
+            Need asset sync: ${this.appState.sync.bookmarksNeedingAssetSync || 0}<br>
+            Need read sync: ${this.appState.sync.bookmarksNeedingReadSync || 0}
+          </div>
+        </div>
+
         <div class="state-item">
           <h4>API Connection</h4>
           <div class="state-value">
-            ${this.appState.api.baseUrl ? 'Configured' : 'Not configured'}
+            ${this.appState.api.isConnected ? 'Connected' : 'Disconnected'}
           </div>
           <div class="state-details">
             ${this.appState.api.baseUrl || 'No URL set'}
-            ${this.appState.api.lastTestAt ? 
-              html`<br>Last test: ${new Date(this.appState.api.lastTestAt).toLocaleString()}` : 
+            ${this.appState.api.lastTestAt ?
+              html`<br>Last test: ${new Date(this.appState.api.lastTestAt).toLocaleString()}` :
               ''}
           </div>
         </div>
-        
+
         <div class="state-item">
           <h4>Storage Usage</h4>
           <div class="state-value">
             ${this.formatBytes(this.appState.storage.sizeEstimate)}
           </div>
           <div class="state-details">
-            ${this.appState.storage.quotaAvailable ? 
-              `Available: ${this.formatBytes(this.appState.storage.quotaAvailable)}` : 
+            ${this.appState.storage.quotaAvailable ?
+              `Available: ${this.formatBytes(this.appState.storage.quotaAvailable)}` :
               'Quota info unavailable'}
           </div>
         </div>
+
+        ${this.renderServiceWorkerInfo()}
       </div>
     `;
   }

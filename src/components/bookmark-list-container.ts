@@ -16,6 +16,7 @@ import './bookmark-list';
 import './pagination-controls';
 import './paginated-list';
 import './sync-progress';
+import './sync-error-notification';
 
 @customElement('bookmark-list-container')
 export class BookmarkListContainer extends LitElement {
@@ -35,6 +36,10 @@ export class BookmarkListContainer extends LitElement {
     }
 
     sync-progress {
+      margin-bottom: 1rem;
+    }
+
+    sync-error-notification {
       margin-bottom: 1rem;
     }
 
@@ -238,6 +243,22 @@ export class BookmarkListContainer extends LitElement {
     }
   };
 
+  #handleSyncErrorDismiss = async () => {
+    try {
+      await this.#syncController.dismissSyncError();
+    } catch (error) {
+      console.error('Failed to dismiss sync error:', error);
+    }
+  };
+
+  #handleSyncErrorRetry = async () => {
+    try {
+      await this.#syncController.requestSync(true); // Force a full sync on retry
+    } catch (error) {
+      console.error('Failed to retry sync:', error);
+    }
+  };
+
   #handleFaviconLoadRequested = async (bookmarkId: number, faviconUrl: string) => {
     try {
       await this.#faviconController.loadFavicon(bookmarkId, faviconUrl);
@@ -309,7 +330,16 @@ export class BookmarkListContainer extends LitElement {
     const faviconState = this.#faviconController.getFaviconState();
 
     return html`
-      <sync-progress .syncState=${this.#syncController.getSyncState()}></sync-progress>
+      <sync-progress .syncState=${syncState}></sync-progress>
+
+      ${this.#syncController.hasSyncError() ? html`
+        <sync-error-notification
+          .error=${syncState.lastError || ''}
+          .retryCount=${syncState.retryCount || 0}
+          .onDismiss=${this.#handleSyncErrorDismiss}
+          .onRetry=${this.#handleSyncErrorRetry}
+        ></sync-error-notification>
+      ` : ''}
 
       <div class="filters">
         ${this.filter === 'all' ? html`

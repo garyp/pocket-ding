@@ -19,6 +19,7 @@ import '@material/web/select/select-option.js';
 import '@material/web/progress/circular-progress.js';
 import '@material/web/progress/linear-progress.js';
 import './sync-progress';
+import './sync-error-notification';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
@@ -137,6 +138,10 @@ export class SettingsPanel extends LitElement {
     }
 
     sync-progress {
+      margin-top: 1rem;
+    }
+
+    sync-error-notification {
       margin-top: 1rem;
     }
 
@@ -423,7 +428,15 @@ export class SettingsPanel extends LitElement {
       this.testMessage = `Full sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
-  
+
+  async #handleSyncRetry() {
+    try {
+      await this.#syncController.requestSync(true); // Force full sync on retry from settings
+    } catch (error) {
+      console.error('Failed to retry sync from settings:', error);
+    }
+  }
+
   async #handleExportData() {
     await this.#dataManagementController.exportData();
   }
@@ -515,6 +528,15 @@ export class SettingsPanel extends LitElement {
             </md-text-button>
 
             <sync-progress .syncState=${this.#syncController.getSyncState()} .showIcon=${false}></sync-progress>
+
+            ${this.#syncController.hasSyncError() ? html`
+              <sync-error-notification
+                .error=${this.#syncController.getSyncState().lastError || ''}
+                .retryCount=${this.#syncController.getSyncState().retryCount || 0}
+                .onDismiss=${() => this.#syncController.dismissSyncError()}
+                .onRetry=${() => this.#handleSyncRetry()}
+              ></sync-error-notification>
+            ` : ''}
           </div>
         </div>
         

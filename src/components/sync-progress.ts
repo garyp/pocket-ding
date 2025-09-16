@@ -69,7 +69,8 @@ export class SyncProgress extends LitElement {
   }
 
   override render() {
-    if (!this.syncState || !this.syncState.isSyncing) {
+    // Don't show sync progress if sync failed - let error notification handle it
+    if (!this.syncState || !this.syncState.isSyncing || this.syncState.syncStatus === 'failed') {
       return html``;
     }
 
