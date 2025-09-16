@@ -118,6 +118,7 @@ export class SyncService {
     const isArchived = bookmarkType === 'archived';
     let offset = isArchived ? await DatabaseService.getArchivedOffset() : await DatabaseService.getUnarchivedOffset();
     let processedCount = 0;
+    let totalBookmarksFound = 0;
     const limit = 100; // Page size for pagination
 
     logInfo('sync', `Starting ${bookmarkType} bookmarks sync`, {
@@ -144,7 +145,6 @@ export class SyncService {
           break; // No more bookmarks to process
         }
 
-        let pageProcessed = 0;
         for (const remoteBookmark of remoteBookmarks) {
           if (this.#abortController?.signal.aborted) {
             throw new Error('Sync cancelled');
@@ -156,7 +156,14 @@ export class SyncService {
             this.#processedCount++;
           }
 
-          pageProcessed++;
+          totalBookmarksFound++;
+
+          // Report progress after each bookmark for smoother progress updates
+          this.#reportProgress({
+            current: totalBookmarksFound,
+            total: response.count || totalBookmarksFound, // Use API's total count if available
+            phase
+          });
         }
 
         // Update offset after processing the page
@@ -166,13 +173,6 @@ export class SyncService {
         } else {
           await DatabaseService.setUnarchivedOffset(offset);
         }
-
-        // Report progress
-        this.#reportProgress({
-          current: pageProcessed,
-          total: remoteBookmarks.length,
-          phase
-        });
 
         // Yield control periodically
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -190,6 +190,7 @@ export class SyncService {
 
     logInfo('sync', `Completed ${bookmarkType} bookmarks sync`, {
       processedCount,
+      totalBookmarksFound,
       finalOffset: offset
     });
 
