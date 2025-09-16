@@ -29,7 +29,7 @@ export interface CancelSyncMessage {
 
 export interface SyncStatusMessage {
   type: 'SYNC_STATUS';
-  status: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled';
+  status: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   timestamp: number;
 }
 

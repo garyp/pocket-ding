@@ -235,7 +235,7 @@ export interface SyncState {
   syncTotal: number;
   syncedBookmarkIds: Set<number>;
   syncPhase?: SyncPhase | undefined;
-  syncStatus?: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled';
+  syncStatus?: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   lastError?: string;
   retryCount?: number;
   getPercentage(): number;

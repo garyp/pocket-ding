@@ -206,6 +206,20 @@ self.addEventListener('message', async (event) => {
           ));
         }
       } else {
+        // Check if there are bookmarks that still need syncing (interrupted sync recovery)
+        try {
+          const { DatabaseService } = await import('../services/database');
+          const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
+          const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
+
+          if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
+            logInfo('sync', `Detected interrupted sync: ${bookmarksNeedingAssetSync.length} bookmarks need asset sync, ${bookmarksNeedingReadSync.length} need read sync`);
+            // Don't auto-resume here, let the UI decide
+            await broadcastToClients(SyncMessages.syncStatus('interrupted'));
+          }
+        } catch (error) {
+          logError('sync', 'Failed to check for interrupted sync', error);
+        }
         // Check if periodic sync is available and permitted
         if ('periodicSync' in self.registration && 'permissions' in self) {
           try {

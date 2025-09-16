@@ -115,13 +115,36 @@ export class SyncController implements ReactiveController {
     this.postToServiceWorker(SyncMessages.checkSyncPermission());
 
     // Give the service worker a brief moment to respond with current state
-    // If no response comes within 100ms, we'll assume no sync is active
+    // If no response comes within 100ms, check if we need to resume sync
     setTimeout(() => {
       // Only update if we haven't received any sync status updates yet
       if (this._syncState.syncStatus === 'idle' && !this._syncState.isSyncing) {
-        DebugService.logInfo('sync', 'No sync status response from service worker - assuming idle');
+        DebugService.logInfo('sync', 'No sync status response from service worker - checking if sync needs to resume');
+        this.#checkAndResumeSync();
       }
     }, 100);
+  }
+
+  /**
+   * Check if there are bookmarks that still need syncing and resume if necessary
+   */
+  async #checkAndResumeSync() {
+    try {
+      // Check if there are bookmarks that still need asset sync
+      const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
+      const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
+
+      if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
+        DebugService.logInfo('sync', `Found ${bookmarksNeedingAssetSync.length} bookmarks needing asset sync and ${bookmarksNeedingReadSync.length} needing read sync - resuming sync`);
+
+        // Resume sync automatically
+        await this.requestSync(false);
+      } else {
+        DebugService.logInfo('sync', 'No bookmarks need syncing - sync is truly complete');
+      }
+    } catch (error) {
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to check for resume sync');
+    }
   }
 
   private handleServiceWorkerMessage(message: SyncMessage) {
@@ -151,6 +174,10 @@ export class SyncController implements ReactiveController {
         // Log status restoration for debugging
         if (message.status === 'syncing') {
           DebugService.logInfo('sync', 'Restored active sync status from service worker');
+        } else if (message.status === 'interrupted') {
+          DebugService.logInfo('sync', 'Detected interrupted sync from service worker - will attempt to resume');
+          // The #checkAndResumeSync method will handle the resumption
+          this.#checkAndResumeSync();
         }
 
         this.#host.requestUpdate();
