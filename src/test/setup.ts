@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, vi } from 'vitest';
+/// <reference path="./types.d.ts" />
 
 // Setup DOM environment
 import '@testing-library/jest-dom/vitest';
@@ -76,11 +77,43 @@ Object.defineProperty(globalThis, 'IDBKeyRange', {
   writable: true,
 });
 
-// Mock service worker registration
-Object.defineProperty(navigator, 'serviceWorker', {
-  value: {
-    register: vi.fn().mockResolvedValue({}),
+// Minimal PWA Mock Infrastructure
+// Only mock essential browser APIs that are actually used by production code
+const mockServiceWorkerRegistration = {
+  installing: null as any,
+  waiting: null as any,
+  active: null as any,
+  scope: '/',
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  update: vi.fn().mockResolvedValue(undefined),
+  unregister: vi.fn().mockResolvedValue(true),
+  sync: {
+    register: vi.fn().mockResolvedValue(undefined),
   },
+};
+
+const mockServiceWorkerContainer = {
+  register: vi.fn().mockResolvedValue(mockServiceWorkerRegistration),
+  ready: Promise.resolve(mockServiceWorkerRegistration),
+  controller: null as any,
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+};
+
+Object.defineProperty(navigator, 'serviceWorker', {
+  value: mockServiceWorkerContainer,
+  writable: true,
+});
+
+// Make essential mocks available globally for PWA tests that need them
+Object.defineProperty(global, 'mockServiceWorkerRegistration', {
+  value: mockServiceWorkerRegistration,
+  writable: true,
+});
+
+Object.defineProperty(global, 'mockServiceWorkerContainer', {
+  value: mockServiceWorkerContainer,
   writable: true,
 });
 
@@ -355,6 +388,47 @@ afterEach(() => {
   if (window.matchMedia && vi.isMockFunction(window.matchMedia)) {
     const matchMediaMock = vi.mocked(window.matchMedia);
     matchMediaMock.mockClear();
+  }
+
+  // Reset essential PWA mocks for test isolation
+  if (global.mockServiceWorkerContainer) {
+    const container = global.mockServiceWorkerContainer;
+    if (vi.isMockFunction(container.register)) {
+      container.register.mockClear();
+      container.register.mockResolvedValue(global.mockServiceWorkerRegistration);
+    }
+    if (vi.isMockFunction(container.addEventListener)) {
+      container.addEventListener.mockClear();
+    }
+    if (vi.isMockFunction(container.removeEventListener)) {
+      container.removeEventListener.mockClear();
+    }
+
+    // Reset controller state
+    container.controller = null;
+  }
+
+  if (global.mockServiceWorkerRegistration) {
+    const registration = global.mockServiceWorkerRegistration;
+    if (vi.isMockFunction(registration.addEventListener)) {
+      registration.addEventListener.mockClear();
+    }
+    if (vi.isMockFunction(registration.removeEventListener)) {
+      registration.removeEventListener.mockClear();
+    }
+    if (vi.isMockFunction(registration.update)) {
+      registration.update.mockClear();
+      registration.update.mockResolvedValue(undefined);
+    }
+    if (vi.isMockFunction(registration.unregister)) {
+      registration.unregister.mockClear();
+      registration.unregister.mockResolvedValue(true);
+    }
+
+    // Reset service worker states
+    registration.installing = null;
+    registration.waiting = null;
+    registration.active = null;
   }
   
   // Ensure no pending timers remain (this is also handled by vi.clearAllTimers but double-check)
