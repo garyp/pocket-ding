@@ -26,6 +26,8 @@ export class SyncService {
   #onProgress?: (progress: SyncProgress) => void;
   #abortController?: AbortController;
   #processedCount: number = 0;
+  #totalProgress: number = 0;
+  #totalToProcess: number = 0;
 
   constructor(onProgress?: (progress: SyncProgress) => void) {
     if (onProgress) {
@@ -39,6 +41,8 @@ export class SyncService {
   async performSync(settings: AppSettings): Promise<SyncResult> {
     this.#abortController = new AbortController();
     this.#processedCount = 0;
+    this.#totalProgress = 0;
+    this.#totalToProcess = 0;
 
     try {
       // Initialize API service
@@ -119,6 +123,7 @@ export class SyncService {
     let offset = isArchived ? await DatabaseService.getArchivedOffset() : await DatabaseService.getUnarchivedOffset();
     let processedCount = 0;
     const limit = 100; // Page size for pagination
+    let totalCount: number | null = null;
 
     logInfo('sync', `Starting ${bookmarkType} bookmarks sync`, {
       resumeOffset: offset,
@@ -140,6 +145,18 @@ export class SyncService {
           : await api.getBookmarks(limit, offset, lastSyncTimestamp);
         const remoteBookmarks = response.results;
 
+        // On first page, get total count
+        if (totalCount === null && response.count !== undefined) {
+          totalCount = response.count;
+          // Update total items to process (will be refined after archived sync)
+          if (this.#totalToProcess === 0) {
+            this.#totalToProcess = totalCount;
+          } else {
+            // Add archived count to total
+            this.#totalToProcess += totalCount;
+          }
+        }
+
         if (remoteBookmarks.length === 0) {
           break; // No more bookmarks to process
         }
@@ -157,6 +174,14 @@ export class SyncService {
           }
 
           pageProcessed++;
+          this.#totalProgress++;
+
+          // Report cumulative progress
+          this.#reportProgress({
+            current: this.#totalProgress,
+            total: this.#totalToProcess > 0 ? this.#totalToProcess : this.#totalProgress,
+            phase
+          });
         }
 
         // Update offset after processing the page
@@ -166,13 +191,6 @@ export class SyncService {
         } else {
           await DatabaseService.setUnarchivedOffset(offset);
         }
-
-        // Report progress
-        this.#reportProgress({
-          current: pageProcessed,
-          total: remoteBookmarks.length,
-          phase
-        });
 
         // Yield control periodically
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -255,6 +273,9 @@ export class SyncService {
         return; // No assets to sync
       }
 
+      // Add assets count to total
+      this.#totalToProcess += bookmarksNeedingAssetSync.length;
+
       let processed = 0;
       for (const bookmark of bookmarksNeedingAssetSync) {
         if (this.#abortController?.signal.aborted) {
@@ -285,11 +306,12 @@ export class SyncService {
         }
 
         processed++;
+        this.#totalProgress++;
 
-        // Report progress
+        // Report cumulative progress
         this.#reportProgress({
-          current: processed,
-          total: bookmarksNeedingAssetSync.length,
+          current: this.#totalProgress,
+          total: this.#totalToProcess,
           phase: 'assets'
         });
 
@@ -324,6 +346,9 @@ export class SyncService {
         return; // No read status to sync
       }
 
+      // Add read status count to total
+      this.#totalToProcess += bookmarksNeedingSync.length;
+
       let processed = 0;
       for (const bookmark of bookmarksNeedingSync) {
         if (this.#abortController?.signal.aborted) {
@@ -340,11 +365,12 @@ export class SyncService {
         }
 
         processed++;
+        this.#totalProgress++;
 
-        // Report progress
+        // Report cumulative progress
         this.#reportProgress({
-          current: processed,
-          total: bookmarksNeedingSync.length,
+          current: this.#totalProgress,
+          total: this.#totalToProcess,
           phase: 'read-status'
         });
       }
