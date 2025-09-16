@@ -67,6 +67,29 @@ export class PocketDingDatabase extends Dexie {
       syncMetadata: '++id, last_sync_timestamp, unarchived_offset, archived_offset, retry_count, last_error',
       assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
     });
+
+    // Version 8: Migrate boolean sync flags to numeric values for proper indexing
+    this.version(8).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync, needs_asset_sync',
+      readProgress: '++id, bookmark_id, last_read_at, dark_mode_override',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp, unarchived_offset, archived_offset, retry_count, last_error',
+      assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
+    }).upgrade(async (trans) => {
+      // Convert boolean sync flags to numeric values (0=false, 1=true)
+      // This enables proper indexing since IndexedDB doesn't support boolean indexes
+      await trans.table('bookmarks').toCollection().modify((bookmark: any) => {
+        // Convert needs_read_sync: boolean -> number
+        if (typeof bookmark.needs_read_sync === 'boolean') {
+          bookmark.needs_read_sync = bookmark.needs_read_sync ? 1 : 0;
+        }
+
+        // Convert needs_asset_sync: boolean -> number
+        if (typeof bookmark.needs_asset_sync === 'boolean') {
+          bookmark.needs_asset_sync = bookmark.needs_asset_sync ? 1 : 0;
+        }
+      });
+    });
   }
 }
 
@@ -248,7 +271,7 @@ export class DatabaseService {
     const bookmark = await db.bookmarks.get(bookmarkId);
     if (bookmark) {
       bookmark.unread = false;
-      bookmark.needs_read_sync = true;
+      bookmark.needs_read_sync = 1; // 1=true for indexing compatibility
       await db.bookmarks.put(bookmark);
     }
   }
@@ -260,7 +283,7 @@ export class DatabaseService {
   static async markBookmarkReadSynced(bookmarkId: number): Promise<void> {
     const bookmark = await db.bookmarks.get(bookmarkId);
     if (bookmark) {
-      bookmark.needs_read_sync = false;
+      bookmark.needs_read_sync = 0; // 0=false for indexing compatibility
       await db.bookmarks.put(bookmark);
     }
   }
@@ -272,7 +295,7 @@ export class DatabaseService {
   static async markBookmarkAssetSynced(bookmarkId: number): Promise<void> {
     const bookmark = await db.bookmarks.get(bookmarkId);
     if (bookmark) {
-      bookmark.needs_asset_sync = false;
+      bookmark.needs_asset_sync = 0; // 0=false for indexing compatibility
       await db.bookmarks.put(bookmark);
     }
   }

@@ -252,7 +252,7 @@ describe('Background Sync User Workflows', () => {
         date_modified: '2024-01-01',
         read_progress: 0.75,
         reading_mode: 'readability' as const,
-        needs_read_sync: true
+        needs_read_sync: 1 // 1=true for proper indexing
       };
       
       // Mock getBookmark to return the saved bookmark

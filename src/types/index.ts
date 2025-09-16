@@ -38,8 +38,8 @@ export interface LocalBookmark extends LinkdingBookmark {
   read_progress?: number;
   reading_mode?: 'original' | 'readability';
   is_synced?: boolean;
-  needs_read_sync?: boolean;
-  needs_asset_sync?: boolean;
+  needs_read_sync?: number; // 1=true, 0=false (for proper indexing in Dexie/IndexedDB)
+  needs_asset_sync?: number; // 1=true, 0=false (for proper indexing in Dexie/IndexedDB)
 }
 
 export interface ReadProgress {

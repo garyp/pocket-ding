@@ -217,7 +217,7 @@ export class SyncService {
         read_progress: localBookmark?.read_progress,
         reading_mode: localBookmark?.reading_mode,
         is_synced: true,
-        needs_asset_sync: true // Mark for asset sync in Phase 3
+        needs_asset_sync: 1 // Mark for asset sync in Phase 3 (1=true, 0=false for indexing)
       } as LocalBookmark;
 
       await DatabaseService.saveBookmark(bookmarkToSave);

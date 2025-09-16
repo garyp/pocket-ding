@@ -116,8 +116,8 @@ export class DebugService {
 
       // Get bookmarks with assets and sync-related counts
       const bookmarksWithAssets = new Set(assets.map((a: any) => a.bookmark_id));
-      const bookmarksNeedingAssetSync = bookmarks.filter(b => b.needs_asset_sync).length;
-      const bookmarksNeedingReadSync = bookmarks.filter(b => b.needs_read_sync).length;
+      const bookmarksNeedingAssetSync = bookmarks.filter(b => b.needs_asset_sync === 1).length;
+      const bookmarksNeedingReadSync = bookmarks.filter(b => b.needs_read_sync === 1).length;
 
       // Get service worker information
       const serviceWorkerInfo = await this.getServiceWorkerInfo();
