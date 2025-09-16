@@ -51,10 +51,10 @@ export class BookmarkReader extends LitElement {
   #contentTask = new Task(this, {
     task: async ([bookmark, source]: [LocalBookmark | undefined, ContentSourceOption | null]) => {
       if (!bookmark || !source) return null;
-      
+
       return await ContentFetcher.fetchBookmarkContent(
-        bookmark, 
-        source.type, 
+        bookmark,
+        source.type,
         source.assetId
       );
     },
@@ -671,10 +671,10 @@ export class BookmarkReader extends LitElement {
     // Update theme immediately after setting dark mode override
     this.updateReaderTheme();
     
-    // Set up read marking and load content when we have a selected content source
+    // Set up read marking and trigger content loading when we have a selected content source
     if (this.selectedContentSource) {
       this.setupReadMarking();
-      
+
       // Load content automatically on first initialization
       // Only if we don't already have content loaded (to avoid reloading)
       if (!this.contentResult) {
@@ -693,8 +693,14 @@ export class BookmarkReader extends LitElement {
       if (!content.readability_content && this.readingMode === 'readability') {
         this.readingMode = 'original';
       }
-      
+
       // Content successfully loaded
+    }
+
+    // Trigger content loading when selected content source becomes available
+    if (this.selectedContentSource && !this.isLoadingContent && !content) {
+      this.#contentTask.run();
+      this.setupReadMarking();
     }
   }
 
