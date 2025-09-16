@@ -26,19 +26,21 @@ export function swLog(level: LogLevel, operation: string, message: string, detai
   }
   
   // Forward to main thread if client is available
-  self.clients.matchAll({ type: 'window' }).then((clients) => {
-    clients.forEach((client) => {
-      client.postMessage({
-        type: 'SW_LOG',
-        level,
-        operation,
-        message,
-        details
+  if (typeof self !== 'undefined' && self.clients) {
+    self.clients.matchAll({ type: 'window' }).then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({
+          type: 'SW_LOG',
+          level,
+          operation,
+          message,
+          details
+        });
       });
+    }).catch((error: any) => {
+      console.error('[SW] Failed to forward log to clients:', error);
     });
-  }).catch((error: any) => {
-    console.error('[SW] Failed to forward log to clients:', error);
-  });
+  }
 }
 
 /**

@@ -15,6 +15,7 @@ import '@material/web/progress/linear-progress.js';
 import './bookmark-list';
 import './pagination-controls';
 import './paginated-list';
+import './sync-progress';
 
 @customElement('bookmark-list-container')
 export class BookmarkListContainer extends LitElement {
@@ -33,31 +34,8 @@ export class BookmarkListContainer extends LitElement {
       padding: 0 0.25rem;
     }
 
-    .sync-progress {
-      position: sticky;
-      top: 0;
-      z-index: 10;
+    sync-progress {
       margin-bottom: 1rem;
-      padding: 0.75rem;
-      border-radius: 12px;
-      background: var(--md-sys-color-primary-container);
-      border: 1px solid var(--md-sys-color-outline-variant);
-    }
-
-    .sync-progress-text {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.5rem;
-    }
-
-    .sync-badge {
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
     }
 
     @media (max-width: 48rem) { /* 768px breakpoint */
@@ -331,23 +309,7 @@ export class BookmarkListContainer extends LitElement {
     const faviconState = this.#faviconController.getFaviconState();
 
     return html`
-      ${syncState.isSyncing ? html`
-        <div class="sync-progress">
-          <div class="sync-progress-text">
-            <span>
-              ${syncState.syncTotal > 0
-                ? `Syncing bookmarks... ${syncState.syncProgress}/${syncState.syncTotal}`
-                : 'Starting sync...'
-              }
-            </span>
-            <md-icon class="sync-badge">sync</md-icon>
-          </div>
-          <md-linear-progress
-            .value=${syncState.syncTotal > 0 ? (syncState.syncProgress / syncState.syncTotal) : 0}
-            ?indeterminate=${syncState.syncTotal === 0}
-          ></md-linear-progress>
-        </div>
-      ` : ''}
+      <sync-progress .syncState=${this.#syncController.getSyncState()}></sync-progress>
 
       <div class="filters">
         ${this.filter === 'all' ? html`

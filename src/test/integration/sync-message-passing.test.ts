@@ -210,7 +210,7 @@ describe('Sync Message Passing Integration', () => {
       const state = component.syncController.getSyncState();
       expect(state.isSyncing).toBe(true);
       expect(state.syncStatus).toBe('starting');
-      expect(state.syncPhase).toBe('init');
+      expect(state.syncPhase).toBe(undefined); // No phase until first progress message
     });
     
     it('should maintain sync state across multiple progress updates', async () => {
@@ -263,7 +263,154 @@ describe('Sync Message Passing Integration', () => {
       vi.useRealTimers();
     });
   });
-  
+
+  describe('4-Phase Sync Progress Reporting', () => {
+    it('should handle all 4 sync phases with cycling progress', async () => {
+      // Simulate complete 4-phase sync cycle
+      const phaseMessages = [
+        // Phase 1: Bookmarks (0-100%)
+        SyncMessages.syncProgress(0, 100, 'bookmarks'),
+        SyncMessages.syncProgress(25, 100, 'bookmarks'),
+        SyncMessages.syncProgress(50, 100, 'bookmarks'),
+        SyncMessages.syncProgress(100, 100, 'bookmarks'),
+
+        // Phase 2: Archived Bookmarks (0-100%)
+        SyncMessages.syncProgress(0, 50, 'archived-bookmarks'),
+        SyncMessages.syncProgress(25, 50, 'archived-bookmarks'),
+        SyncMessages.syncProgress(50, 50, 'archived-bookmarks'),
+
+        // Phase 3: Assets (0-100%)
+        SyncMessages.syncProgress(0, 75, 'assets'),
+        SyncMessages.syncProgress(40, 75, 'assets'),
+        SyncMessages.syncProgress(75, 75, 'assets'),
+
+        // Phase 4: Read Status (0-100%)
+        SyncMessages.syncProgress(0, 20, 'read-status'),
+        SyncMessages.syncProgress(10, 20, 'read-status'),
+        SyncMessages.syncProgress(20, 20, 'read-status'),
+
+        // Complete
+        SyncMessages.syncComplete(true, 245, 5000)
+      ];
+
+      const phaseProgressHistory: Array<{ phase?: string | undefined; current: number; total: number; percentage: number }> = [];
+
+      for (const message of phaseMessages) {
+        if (messageHandler) {
+          messageHandler(new MessageEvent('message', { data: message }));
+        }
+        await component.updateComplete;
+
+        // Track phase progress for validation
+        if (message.type === 'SYNC_PROGRESS') {
+          const syncState = component.syncController.getSyncState();
+          const phaseProgress = {
+            phase: syncState.syncPhase,
+            current: syncState.syncProgress,
+            total: syncState.syncTotal,
+            percentage: syncState.getPercentage()
+          };
+          phaseProgressHistory.push(phaseProgress);
+        }
+      }
+
+      // Validate that we cycled through all 4 phases
+      const phases = [...new Set(phaseProgressHistory.map(p => p.phase))];
+      expect(phases).toEqual(['bookmarks', 'archived-bookmarks', 'assets', 'read-status']);
+
+      // Validate that progress resets for each new phase
+      const bookmarkPhases = phaseProgressHistory.filter(p => p.phase === 'bookmarks');
+      expect(bookmarkPhases.length).toBeGreaterThan(0);
+      expect(bookmarkPhases[0]!.current).toBe(0); // First bookmarks message starts at 0
+      expect(bookmarkPhases[bookmarkPhases.length - 1]!.current).toBe(100); // Last bookmarks message ends at 100
+
+      const archivedPhases = phaseProgressHistory.filter(p => p.phase === 'archived-bookmarks');
+      expect(archivedPhases.length).toBeGreaterThan(0);
+      expect(archivedPhases[0]!.current).toBe(0); // First archived message starts at 0
+      expect(archivedPhases[archivedPhases.length - 1]!.current).toBe(50); // Last archived message ends at total
+
+      const assetPhases = phaseProgressHistory.filter(p => p.phase === 'assets');
+      expect(assetPhases.length).toBeGreaterThan(0);
+      expect(assetPhases[0]!.current).toBe(0); // First assets message starts at 0
+      expect(assetPhases[assetPhases.length - 1]!.current).toBe(75); // Last assets message ends at total
+
+      const readStatusPhases = phaseProgressHistory.filter(p => p.phase === 'read-status');
+      expect(readStatusPhases.length).toBeGreaterThan(0);
+      expect(readStatusPhases[0]!.current).toBe(0); // First read-status message starts at 0
+      expect(readStatusPhases[readStatusPhases.length - 1]!.current).toBe(20); // Last read-status message ends at total
+
+      // Final state should be completed
+      const finalState = component.syncController.getSyncState();
+      expect(finalState.isSyncing).toBe(false);
+      expect(finalState.syncStatus).toBe('completed');
+      expect(finalState.syncPhase).toBe('complete');
+    });
+
+    it('should calculate correct percentage for phase progress', async () => {
+      // Test percentage calculation with different totals
+      const testCases = [
+        { current: 50, total: 100, expectedPercentage: 50 },
+        { current: 25, total: 50, expectedPercentage: 50 },
+        { current: 3, total: 7, expectedPercentage: 43 }, // Rounds to nearest integer
+        { current: 0, total: 0, expectedPercentage: 0 }, // Edge case: no division by zero
+      ];
+
+      for (const { current, total, expectedPercentage } of testCases) {
+        const progressMessage = SyncMessages.syncProgress(current, total, 'assets');
+
+        if (messageHandler) {
+          messageHandler(new MessageEvent('message', { data: progressMessage }));
+        }
+        await component.updateComplete;
+
+        const syncState = component.syncController.getSyncState();
+        expect(syncState.getPercentage()).toBe(expectedPercentage);
+        expect(syncState.syncProgress).toBe(current);
+        expect(syncState.syncTotal).toBe(total);
+        expect(syncState.syncPhase).toBe('assets');
+      }
+    });
+
+    it('should reset phase tracking on sync completion and errors', async () => {
+      // Start with a phase
+      const progressMessage = SyncMessages.syncProgress(50, 100, 'bookmarks');
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: progressMessage }));
+      }
+      await component.updateComplete;
+
+      let state = component.syncController.getSyncState();
+      expect(state.syncPhase).toBe('bookmarks');
+
+      // Complete sync - should reset to 'complete'
+      const completeMessage = SyncMessages.syncComplete(true, 100, 3000);
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: completeMessage }));
+      }
+      await component.updateComplete;
+
+      state = component.syncController.getSyncState();
+      expect(state.syncPhase).toBe('complete');
+      expect(state.isSyncing).toBe(false);
+
+      // Start new sync - phase should be undefined until first progress
+      await component.syncController.requestSync();
+      state = component.syncController.getSyncState();
+      expect(state.syncPhase).toBe(undefined);
+
+      // Simulate error - should reset phase tracking
+      const errorMessage = SyncMessages.syncError('Test error', false);
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: errorMessage }));
+      }
+      await component.updateComplete;
+
+      state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+      expect(state.syncStatus).toBe('failed');
+    });
+  });
+
   describe('Error Handling', () => {
     it('should handle service worker not available', async () => {
       // Remove service worker

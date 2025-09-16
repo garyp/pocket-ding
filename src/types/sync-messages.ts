@@ -2,6 +2,8 @@
  * Message types for communication between main app and service worker
  */
 
+import type { SyncPhase } from './index.js';
+
 export type SyncMessageType = 
   | 'REQUEST_SYNC'
   | 'CANCEL_SYNC'
@@ -35,7 +37,7 @@ export interface SyncProgressMessage {
   type: 'SYNC_PROGRESS';
   current: number;
   total: number;
-  phase: 'init' | 'bookmarks' | 'assets' | 'read-status' | 'complete';
+  phase: SyncPhase;
   timestamp: number;
 }
 

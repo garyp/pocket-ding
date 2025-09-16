@@ -3,22 +3,8 @@ import { SettingsService } from '../services/settings-service';
 import { ReactiveQueryController } from './reactive-query-controller';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
-import type { AppSettings } from '../types';
+import type { AppSettings, SyncState, SyncControllerOptions } from '../types';
 
-export interface SyncState {
-  isSyncing: boolean;
-  syncProgress: number;
-  syncTotal: number;
-  syncedBookmarkIds: Set<number>;
-  syncPhase?: 'init' | 'bookmarks' | 'assets' | 'read-status' | 'complete';
-  syncStatus?: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled';
-}
-
-export interface SyncControllerOptions {
-  onSyncCompleted?: () => void;
-  onSyncError?: (error: any) => void;
-  onBookmarkSynced?: (bookmarkId: number, bookmark: any) => void;
-}
 
 /**
  * Reactive controller that manages sync service integration and state.
@@ -38,7 +24,10 @@ export class SyncController implements ReactiveController {
     syncProgress: 0,
     syncTotal: 0,
     syncedBookmarkIds: new Set<number>(),
-    syncStatus: 'idle'
+    syncStatus: 'idle',
+    getPercentage(): number {
+      return this.syncTotal > 0 ? Math.round((this.syncProgress / this.syncTotal) * 100) : 0;
+    }
   };
 
   constructor(host: ReactiveControllerHost, options: SyncControllerOptions = {}) {
@@ -152,6 +141,7 @@ export class SyncController implements ReactiveController {
         break;
 
       case 'SYNC_COMPLETE':
+        // Reset phase tracking on completion
         this._syncState = {
           ...this._syncState,
           isSyncing: false,
@@ -175,12 +165,14 @@ export class SyncController implements ReactiveController {
       case 'SYNC_ERROR':
         DebugService.logSyncError(new Error(message.error || 'Unknown sync error'), { phase: this._syncState.syncPhase });
         this.#notifyError(`Sync failed: ${message.error || 'Unknown error'}`);
+        // Reset phase tracking on error
         this._syncState = {
           ...this._syncState,
           isSyncing: false,
           syncProgress: 0,
           syncTotal: 0,
-          syncStatus: 'failed'
+          syncStatus: 'failed',
+          syncPhase: undefined,
         };
         this.#host.requestUpdate();
 
@@ -254,15 +246,15 @@ export class SyncController implements ReactiveController {
       // Use reactive settings instead of direct DatabaseService call
       const settings = this.settings;
       if (settings) {
-        // Show immediate UI feedback
+        // Show immediate UI feedback and reset phase tracking
         this._syncState = {
           ...this._syncState,
           isSyncing: true,
           syncProgress: 0,
           syncTotal: 0,
           syncedBookmarkIds: new Set<number>(),
-          syncPhase: 'init',
-          syncStatus: 'starting'
+          syncStatus: 'starting',
+          syncPhase: undefined,
         };
         this.#host.requestUpdate();
 
@@ -310,15 +302,6 @@ export class SyncController implements ReactiveController {
     return this._syncState.isSyncing;
   }
 
-  /**
-   * Get current sync progress
-   */
-  getProgress(): { current: number; total: number } {
-    return {
-      current: this._syncState.syncProgress,
-      total: this._syncState.syncTotal,
-    };
-  }
 
   /**
    * Get IDs of recently synced bookmarks

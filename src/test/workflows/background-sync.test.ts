@@ -5,10 +5,6 @@ import type { AppSettings, LocalBookmark } from '../../types';
 vi.mock('../../services/database', () => ({
   DatabaseService: {
     clearDatabase: vi.fn().mockResolvedValue(undefined),
-    getSyncCheckpoint: vi.fn().mockResolvedValue(null),
-    setSyncCheckpoint: vi.fn().mockResolvedValue(undefined),
-    saveSyncCheckpoint: vi.fn().mockResolvedValue(undefined),
-    clearSyncCheckpoint: vi.fn().mockResolvedValue(undefined),
     getLastSyncTimestamp: vi.fn().mockResolvedValue('0'),
     setLastSyncTimestamp: vi.fn().mockResolvedValue(undefined),
     setLastSyncError: vi.fn().mockResolvedValue(undefined),
@@ -197,70 +193,6 @@ describe('Background Sync User Workflows', () => {
     });
   });
   
-  describe('Checkpoint-based resumable sync', () => {
-    it('should save checkpoint during long sync operation', async () => {
-      // Simulate sync in progress
-      const checkpoint = {
-        lastProcessedId: 50,
-        phase: 'bookmarks' as const,
-        timestamp: Date.now()
-      };
-      
-      await DatabaseService.setSyncCheckpoint(checkpoint);
-      
-      expect(DatabaseService.setSyncCheckpoint).toHaveBeenCalledWith(checkpoint);
-      expect(DatabaseService.setSyncCheckpoint).toHaveBeenCalledWith(
-        expect.objectContaining({
-          phase: 'bookmarks',
-          lastProcessedId: 50
-        })
-      );
-    });
-    
-    it('should resume sync from checkpoint after interruption', async () => {
-      // Previous sync was interrupted
-      const checkpoint = {
-        lastProcessedId: 75,
-        phase: 'assets' as const,
-        timestamp: Date.now() - 60000 // 1 minute ago
-      };
-      
-      await DatabaseService.setSyncCheckpoint(checkpoint);
-      
-      // Verify checkpoint was saved
-      expect(DatabaseService.setSyncCheckpoint).toHaveBeenCalledWith(checkpoint);
-      expect(DatabaseService.setSyncCheckpoint).toHaveBeenCalledWith(
-        expect.objectContaining({ 
-          lastProcessedId: 75,
-          phase: 'assets' 
-        })
-      );
-      
-      // After successful completion, checkpoint should be cleared
-      await DatabaseService.clearSyncCheckpoint();
-      expect(DatabaseService.clearSyncCheckpoint).toHaveBeenCalled();
-    });
-    
-    it('should clear checkpoint when user triggers full sync', async () => {
-      // Has existing checkpoint
-      await DatabaseService.setSyncCheckpoint({
-        lastProcessedId: 25,
-        phase: 'bookmarks',
-        timestamp: Date.now()
-      });
-      
-      // User triggers full sync
-      await DatabaseService.clearSyncCheckpoint();
-      await DatabaseService.setLastSyncTimestamp('0');
-      await DatabaseService.resetSyncRetryCount();
-      
-      // Verify checkpoint was cleared
-      expect(DatabaseService.clearSyncCheckpoint).toHaveBeenCalled();
-      expect(DatabaseService.setSyncCheckpoint).toHaveBeenCalledWith(
-        expect.objectContaining({ lastProcessedId: 25 })
-      );
-    });
-  });
   
   describe('Browser compatibility', () => {
     it('should gracefully handle browsers without Periodic Sync API', async () => {

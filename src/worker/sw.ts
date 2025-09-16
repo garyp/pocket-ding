@@ -3,11 +3,11 @@
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
-import { SyncService, type SyncCheckpoint } from './sync-service';
+import { SyncService } from './sync-service';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
 import type { AppSettings } from '../types';
-import { logInfo, logWarning, logError } from './sw-logger';
+import { logInfo, logError } from './sw-logger';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -27,17 +27,10 @@ registerRoute(
 // Sync state management
 let currentSyncService: SyncService | null = null;
 let syncInProgress = false;
-// let lastSyncTimestamp = 0; // Currently unused
 
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
 
-// Re-export logging functions with 'swLog' alias for backwards compatibility
-const swLog = {
-  info: logInfo,
-  warn: logWarning,
-  error: logError
-};
 
 /**
  * Broadcast message to all clients
@@ -56,7 +49,7 @@ async function getSettings(): Promise<AppSettings | null> {
   try {
     return await DatabaseService.getSettings() ?? null;
   } catch (error) {
-    swLog.error('getSettings', 'Failed to get settings', error);
+    logError('getSettings', 'Failed to get settings', error);
     return null;
   }
 }
@@ -66,7 +59,7 @@ async function getSettings(): Promise<AppSettings | null> {
  */
 async function performSync(fullSync = false): Promise<void> {
   if (syncInProgress) {
-    swLog.info('performSync', 'Sync already in progress');
+    logInfo('performSync', 'Sync already in progress');
     return;
   }
   
@@ -81,14 +74,8 @@ async function performSync(fullSync = false): Promise<void> {
       throw new Error('Linkding settings not configured');
     }
     
-    // Load checkpoint from database if not a full sync
-    let syncCheckpoint: SyncCheckpoint | undefined = undefined;
-    if (!fullSync) {
-      const checkpoint = await DatabaseService.getSyncCheckpoint();
-      syncCheckpoint = checkpoint as SyncCheckpoint | undefined;
-    } else {
-      // Clear checkpoint and sync timestamp for full sync
-      await DatabaseService.clearSyncCheckpoint();
+    if (fullSync) {
+      // Clear sync timestamp for full sync (also resets pagination offsets)
       await DatabaseService.setLastSyncTimestamp('0');
       await DatabaseService.resetSyncRetryCount();
     }
@@ -104,11 +91,9 @@ async function performSync(fullSync = false): Promise<void> {
     
     await broadcastToClients(SyncMessages.syncStatus('syncing'));
     
-    const result = await currentSyncService.performSync(settings, syncCheckpoint ?? undefined);
-    
+    const result = await currentSyncService.performSync(settings);
+
     if (result.success) {
-      // lastSyncTimestamp = result.timestamp; // Currently unused
-      await DatabaseService.clearSyncCheckpoint();
       await DatabaseService.resetSyncRetryCount();
       await DatabaseService.setLastSyncError(null);
       
@@ -122,21 +107,16 @@ async function performSync(fullSync = false): Promise<void> {
       throw result.error || new Error('Sync failed');
     }
   } catch (error) {
-    swLog.error('performSync', 'Sync error', error);
+    logError('performSync', 'Sync error', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') || 
+    const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') ||
                            errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError');
-    const isCancelled = errorMessage.includes('cancelled');
     
     // Save error to database
     await DatabaseService.setLastSyncError(errorMessage);
     
-    // Save checkpoint if sync was interrupted (not cancelled)
-    if (!isCancelled && currentSyncService) {
-      // The sync service should have saved its own checkpoint during progress
-      // We just need to ensure retry count is updated
-    }
+    // For network errors, we'll rely on automatic retry rather than checkpoints
     
     await broadcastToClients(SyncMessages.syncError(errorMessage, isNetworkError));
     await broadcastToClients(SyncMessages.syncStatus('failed'));
@@ -147,7 +127,7 @@ async function performSync(fullSync = false): Promise<void> {
       if (retryCount < SYNC_RETRY_DELAYS.length) {
         const delay = SYNC_RETRY_DELAYS[retryCount];
         await DatabaseService.incrementSyncRetryCount();
-        swLog.info('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
+        logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
         setTimeout(() => {
           (self.registration as any).sync?.register('sync-bookmarks');
         }, delay);
@@ -189,14 +169,14 @@ self.addEventListener('message', async (event) => {
           if (message.enabled) {
             // Register periodic sync (browser will decide actual frequency)
             await (self.registration as any).periodicSync.register('periodic-sync');
-            swLog.info('periodicSync', 'Periodic sync registered');
+            logInfo('periodicSync', 'Periodic sync registered');
           } else {
             // Unregister periodic sync
             await (self.registration as any).periodicSync.unregister('periodic-sync');
-            swLog.info('periodicSync', 'Periodic sync unregistered');
+            logInfo('periodicSync', 'Periodic sync unregistered');
           }
         } catch (error) {
-          swLog.error('periodicSync', 'Failed to register periodic sync', error);
+          logError('periodicSync', 'Failed to register periodic sync', error);
           await broadcastToClients(SyncMessages.syncError(
             'Periodic sync not available or permission denied',
             false
@@ -262,7 +242,7 @@ self.addEventListener('activate', (event) => {
         try {
           await (self.registration as any).periodicSync.register('periodic-sync');
         } catch (error) {
-          swLog.error('activate', 'Failed to register periodic sync on activation', error);
+          logError('activate', 'Failed to register periodic sync on activation', error);
         }
       }
     })()

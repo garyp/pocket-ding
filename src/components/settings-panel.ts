@@ -18,6 +18,7 @@ import '@material/web/select/outlined-select.js';
 import '@material/web/select/select-option.js';
 import '@material/web/progress/circular-progress.js';
 import '@material/web/progress/linear-progress.js';
+import './sync-progress';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
@@ -31,9 +32,6 @@ export class SettingsPanel extends LitElement {
   @state() private isLoading = false;
   @state() private testStatus: 'idle' | 'testing' | 'success' | 'error' = 'idle';
   @state() private testMessage = '';
-  @state() private isFullSyncing = false;
-  @state() private fullSyncProgress = 0;
-  @state() private fullSyncTotal = 0;
   @state() private periodicSyncSupported = false;
   @state() private periodicSyncPermission: 'prompt' | 'granted' | 'denied' = 'prompt';
 
@@ -138,17 +136,8 @@ export class SettingsPanel extends LitElement {
       gap: 1rem;
     }
 
-    .sync-progress {
+    sync-progress {
       margin-top: 1rem;
-      padding: 1rem;
-      background: var(--md-sys-color-primary-container);
-      border-radius: 12px;
-      border: 1px solid var(--md-sys-color-outline-variant);
-    }
-
-    .sync-progress-text {
-      color: var(--md-sys-color-on-primary-container);
-      margin-bottom: 0.5rem;
     }
 
     @media (max-width: 48rem) { /* 768px breakpoint */
@@ -295,12 +284,6 @@ export class SettingsPanel extends LitElement {
       this.#initializeForm();
     }
     
-    // Update sync progress when sync controller state changes
-    if (this.isFullSyncing) {
-      const syncState = this.#syncController.getSyncState();
-      this.fullSyncProgress = syncState.syncProgress;
-      this.fullSyncTotal = syncState.syncTotal;
-    }
   }
 
   #initializeForm() {
@@ -417,9 +400,6 @@ export class SettingsPanel extends LitElement {
       return;
     }
 
-    this.isFullSyncing = true;
-    this.fullSyncProgress = 0;
-    this.fullSyncTotal = 0;
     this.testStatus = 'idle';
 
     // Request the sync
@@ -427,24 +407,20 @@ export class SettingsPanel extends LitElement {
   }
 
   #handleSyncCompleted() {
-    if (this.isFullSyncing) {
+    const syncState = this.#syncController.getSyncState();
+    if (syncState.syncStatus === 'completed') {
       this.testStatus = 'success';
       this.testMessage = 'Full sync completed successfully!';
-      this.isFullSyncing = false;
-      this.fullSyncProgress = 0;
-      this.fullSyncTotal = 0;
       this.dispatchEvent(new CustomEvent('sync-completed'));
     }
   }
   
   #handleSyncError(error: any) {
-    if (this.isFullSyncing) {
+    const syncState = this.#syncController.getSyncState();
+    if (syncState.syncStatus === 'failed') {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Full sync failed');
       this.testStatus = 'error';
       this.testMessage = `Full sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      this.isFullSyncing = false;
-      this.fullSyncProgress = 0;
-      this.fullSyncTotal = 0;
     }
   }
   
@@ -533,21 +509,12 @@ export class SettingsPanel extends LitElement {
           <div class="sync-actions">
             <md-text-button
               @click=${this.#handleFullSync}
-              ?disabled=${this.isFullSyncing || !this.settings?.linkding_url || !this.settings?.linkding_token}
+              ?disabled=${this.#syncController.isSyncing() || !this.settings?.linkding_url || !this.settings?.linkding_token}
             >
-              ${this.isFullSyncing ? 'Syncing...' : 'Force Full Sync'}
+              ${this.#syncController.isSyncing() ? 'Syncing...' : 'Force Full Sync'}
             </md-text-button>
-            
-            ${this.isFullSyncing ? html`
-              <div class="sync-progress">
-                <div class="sync-progress-text md-typescale-body-medium">
-                  Syncing bookmarks... ${this.fullSyncProgress} / ${this.fullSyncTotal}
-                </div>
-                <md-linear-progress
-                  .value=${this.fullSyncTotal > 0 ? (this.fullSyncProgress / this.fullSyncTotal) : 0}
-                ></md-linear-progress>
-              </div>
-            ` : ''}
+
+            <sync-progress .syncState=${this.#syncController.getSyncState()} .showIcon=${false}></sync-progress>
           </div>
         </div>
         

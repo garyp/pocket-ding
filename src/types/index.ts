@@ -1,3 +1,5 @@
+export type SyncPhase = 'bookmarks' | 'archived-bookmarks' | 'assets' | 'read-status' | 'complete';
+
 export interface LinkdingBookmark {
   id: number;
   url: string;
@@ -37,6 +39,7 @@ export interface LocalBookmark extends LinkdingBookmark {
   reading_mode?: 'original' | 'readability';
   is_synced?: boolean;
   needs_read_sync?: boolean;
+  needs_asset_sync?: boolean;
 }
 
 export interface ReadProgress {
@@ -205,4 +208,21 @@ export interface DebugAppState {
     quotaUsed?: number;
     quotaAvailable?: number;
   };
+}
+
+// Sync State Types
+export interface SyncState {
+  isSyncing: boolean;
+  syncProgress: number;
+  syncTotal: number;
+  syncedBookmarkIds: Set<number>;
+  syncPhase?: SyncPhase | undefined;
+  syncStatus?: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled';
+  getPercentage(): number;
+}
+
+export interface SyncControllerOptions {
+  onSyncCompleted?: () => void;
+  onSyncError?: (error: any) => void;
+  onBookmarkSynced?: (bookmarkId: number, bookmark: any) => void;
 }
