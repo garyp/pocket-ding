@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, vi } from 'vitest';
+/// <reference path="./types.d.ts" />
 
 // Setup DOM environment
 import '@testing-library/jest-dom/vitest';
@@ -76,11 +77,116 @@ Object.defineProperty(globalThis, 'IDBKeyRange', {
   writable: true,
 });
 
-// Mock service worker registration
-Object.defineProperty(navigator, 'serviceWorker', {
-  value: {
-    register: vi.fn().mockResolvedValue({}),
+// Enhanced PWA Mock Infrastructure
+// Mock service worker registration with comprehensive functionality
+const mockServiceWorkerRegistration = {
+  installing: null as any,
+  waiting: null as any,
+  active: null as any,
+  scope: '/',
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  update: vi.fn().mockResolvedValue(undefined),
+  unregister: vi.fn().mockResolvedValue(true),
+  pushManager: {
+    subscribe: vi.fn(),
+    getSubscription: vi.fn().mockResolvedValue(null),
   },
+  sync: {
+    register: vi.fn().mockResolvedValue(undefined),
+  },
+  navigationPreload: {
+    enable: vi.fn().mockResolvedValue(undefined),
+    disable: vi.fn().mockResolvedValue(undefined),
+    getState: vi.fn().mockResolvedValue({ enabled: false }),
+    setHeaderValue: vi.fn().mockResolvedValue(undefined),
+  },
+};
+
+const mockServiceWorkerContainer = {
+  register: vi.fn().mockResolvedValue(mockServiceWorkerRegistration),
+  ready: Promise.resolve(mockServiceWorkerRegistration),
+  controller: null as any,
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  getRegistration: vi.fn().mockResolvedValue(mockServiceWorkerRegistration),
+  getRegistrations: vi.fn().mockResolvedValue([mockServiceWorkerRegistration]),
+  startMessages: vi.fn(),
+};
+
+Object.defineProperty(navigator, 'serviceWorker', {
+  value: mockServiceWorkerContainer,
+  writable: true,
+});
+
+// Mock Cache API globally
+const mockCache = {
+  match: vi.fn(),
+  matchAll: vi.fn(),
+  add: vi.fn().mockResolvedValue(undefined),
+  addAll: vi.fn().mockResolvedValue(undefined),
+  put: vi.fn().mockResolvedValue(undefined),
+  delete: vi.fn().mockResolvedValue(true),
+  keys: vi.fn().mockResolvedValue([]),
+};
+
+const mockCacheStorage = {
+  open: vi.fn().mockResolvedValue(mockCache),
+  delete: vi.fn().mockResolvedValue(true),
+  has: vi.fn().mockResolvedValue(true),
+  keys: vi.fn().mockResolvedValue(['v1', 'runtime']),
+  match: vi.fn(),
+};
+
+Object.defineProperty(global, 'caches', {
+  value: mockCacheStorage,
+  writable: true,
+});
+
+// Mock Storage API for quota testing
+const mockStorageManager = {
+  estimate: vi.fn().mockResolvedValue({
+    usage: 10 * 1024 * 1024, // 10MB used
+    quota: 100 * 1024 * 1024, // 100MB available
+    usageDetails: {
+      caches: 5 * 1024 * 1024,
+      indexedDB: 3 * 1024 * 1024,
+      serviceWorkerRegistrations: 1024,
+    },
+  }),
+  persist: vi.fn().mockResolvedValue(true),
+  persisted: vi.fn().mockResolvedValue(false),
+  getDirectory: vi.fn(),
+};
+
+Object.defineProperty(navigator, 'storage', {
+  value: mockStorageManager,
+  writable: true,
+});
+
+// Make PWA mocks available globally for tests
+Object.defineProperty(global, 'mockServiceWorkerRegistration', {
+  value: mockServiceWorkerRegistration,
+  writable: true,
+});
+
+Object.defineProperty(global, 'mockServiceWorkerContainer', {
+  value: mockServiceWorkerContainer,
+  writable: true,
+});
+
+Object.defineProperty(global, 'mockCache', {
+  value: mockCache,
+  writable: true,
+});
+
+Object.defineProperty(global, 'mockCacheStorage', {
+  value: mockCacheStorage,
+  writable: true,
+});
+
+Object.defineProperty(global, 'mockStorageManager', {
+  value: mockStorageManager,
   writable: true,
 });
 
@@ -355,6 +461,138 @@ afterEach(() => {
   if (window.matchMedia && vi.isMockFunction(window.matchMedia)) {
     const matchMediaMock = vi.mocked(window.matchMedia);
     matchMediaMock.mockClear();
+  }
+
+  // Reset PWA mocks for test isolation
+  if (global.mockServiceWorkerContainer) {
+    const container = global.mockServiceWorkerContainer;
+    if (vi.isMockFunction(container.register)) {
+      container.register.mockClear();
+      container.register.mockResolvedValue(global.mockServiceWorkerRegistration);
+    }
+    if (vi.isMockFunction(container.addEventListener)) {
+      container.addEventListener.mockClear();
+    }
+    if (vi.isMockFunction(container.removeEventListener)) {
+      container.removeEventListener.mockClear();
+    }
+    if (vi.isMockFunction(container.getRegistration)) {
+      container.getRegistration.mockClear();
+      container.getRegistration.mockResolvedValue(global.mockServiceWorkerRegistration);
+    }
+    if (vi.isMockFunction(container.getRegistrations)) {
+      container.getRegistrations.mockClear();
+      container.getRegistrations.mockResolvedValue([global.mockServiceWorkerRegistration]);
+    }
+    if (vi.isMockFunction(container.startMessages)) {
+      container.startMessages.mockClear();
+    }
+
+    // Reset controller state
+    container.controller = null;
+  }
+
+  if (global.mockServiceWorkerRegistration) {
+    const registration = global.mockServiceWorkerRegistration;
+    if (vi.isMockFunction(registration.addEventListener)) {
+      registration.addEventListener.mockClear();
+    }
+    if (vi.isMockFunction(registration.removeEventListener)) {
+      registration.removeEventListener.mockClear();
+    }
+    if (vi.isMockFunction(registration.update)) {
+      registration.update.mockClear();
+      registration.update.mockResolvedValue(undefined);
+    }
+    if (vi.isMockFunction(registration.unregister)) {
+      registration.unregister.mockClear();
+      registration.unregister.mockResolvedValue(true);
+    }
+
+    // Reset service worker states
+    registration.installing = null;
+    registration.waiting = null;
+    registration.active = null;
+  }
+
+  if (global.mockCacheStorage) {
+    const cacheStorage = global.mockCacheStorage;
+    if (vi.isMockFunction(cacheStorage.open)) {
+      cacheStorage.open.mockClear();
+      cacheStorage.open.mockResolvedValue(global.mockCache);
+    }
+    if (vi.isMockFunction(cacheStorage.delete)) {
+      cacheStorage.delete.mockClear();
+      cacheStorage.delete.mockResolvedValue(true);
+    }
+    if (vi.isMockFunction(cacheStorage.has)) {
+      cacheStorage.has.mockClear();
+      cacheStorage.has.mockResolvedValue(true);
+    }
+    if (vi.isMockFunction(cacheStorage.keys)) {
+      cacheStorage.keys.mockClear();
+      cacheStorage.keys.mockResolvedValue(['v1', 'runtime']);
+    }
+    if (vi.isMockFunction(cacheStorage.match)) {
+      cacheStorage.match.mockClear();
+    }
+  }
+
+  if (global.mockCache) {
+    const cache = global.mockCache;
+    if (vi.isMockFunction(cache.match)) {
+      cache.match.mockClear();
+    }
+    if (vi.isMockFunction(cache.matchAll)) {
+      cache.matchAll.mockClear();
+    }
+    if (vi.isMockFunction(cache.add)) {
+      cache.add.mockClear();
+      cache.add.mockResolvedValue(undefined);
+    }
+    if (vi.isMockFunction(cache.addAll)) {
+      cache.addAll.mockClear();
+      cache.addAll.mockResolvedValue(undefined);
+    }
+    if (vi.isMockFunction(cache.put)) {
+      cache.put.mockClear();
+      cache.put.mockResolvedValue(undefined);
+    }
+    if (vi.isMockFunction(cache.delete)) {
+      cache.delete.mockClear();
+      cache.delete.mockResolvedValue(true);
+    }
+    if (vi.isMockFunction(cache.keys)) {
+      cache.keys.mockClear();
+      cache.keys.mockResolvedValue([]);
+    }
+  }
+
+  if (global.mockStorageManager) {
+    const storage = global.mockStorageManager;
+    if (vi.isMockFunction(storage.estimate)) {
+      storage.estimate.mockClear();
+      storage.estimate.mockResolvedValue({
+        usage: 10 * 1024 * 1024, // 10MB used
+        quota: 100 * 1024 * 1024, // 100MB available
+        usageDetails: {
+          caches: 5 * 1024 * 1024,
+          indexedDB: 3 * 1024 * 1024,
+          serviceWorkerRegistrations: 1024,
+        },
+      });
+    }
+    if (vi.isMockFunction(storage.persist)) {
+      storage.persist.mockClear();
+      storage.persist.mockResolvedValue(true);
+    }
+    if (vi.isMockFunction(storage.persisted)) {
+      storage.persisted.mockClear();
+      storage.persisted.mockResolvedValue(false);
+    }
+    if (vi.isMockFunction(storage.getDirectory)) {
+      storage.getDirectory.mockClear();
+    }
   }
   
   // Ensure no pending timers remain (this is also handled by vi.clearAllTimers but double-check)

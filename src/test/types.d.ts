@@ -1,7 +1,8 @@
-/// <reference types="vite/client" />
+/// <reference types="vitest/globals" />
 
-// Global PWA test mock declarations
+// Test environment type extensions
 declare global {
+  // PWA Mock types for test environment
   var mockServiceWorkerRegistration: {
     installing: any;
     waiting: any;
@@ -51,15 +52,6 @@ declare global {
     persisted: any;
     getDirectory: any;
   };
-
-  // Extend NodeJS global to include PWA mock declarations for tests
-  namespace NodeJS {
-    interface Global {
-      mockServiceWorkerRegistration: typeof mockServiceWorkerRegistration;
-      mockServiceWorkerContainer: typeof mockServiceWorkerContainer;
-      mockCache: typeof mockCache;
-      mockCacheStorage: typeof mockCacheStorage;
-      mockStorageManager: typeof mockStorageManager;
-    }
-  }
 }
+
+export {};
