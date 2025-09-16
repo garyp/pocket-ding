@@ -76,13 +76,12 @@ export class SyncProgress extends LitElement {
 
     const phaseText = this.#getPhaseDisplayText(this.syncState.syncPhase);
     const hasProgress = this.syncState.syncTotal > 0;
-    const percentage = this.syncState.getPercentage();
 
     return html`
       <div class="sync-progress-container">
         <div class="sync-progress-text">
           <span class="sync-phase-text">
-            ${phaseText}${hasProgress ? `: ${percentage}%` : '...'}
+            ${phaseText}${hasProgress ? `: ${this.syncState.syncProgress}/${this.syncState.syncTotal}` : '...'}
           </span>
           ${this.showIcon ? html`<md-icon class="sync-badge">sync</md-icon>` : ''}
         </div>
