@@ -6,7 +6,7 @@ import { NetworkFirst } from 'workbox-strategies';
 import { SyncService } from './sync-service';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
-import type { AppSettings } from '../types';
+import type { AppSettings, SyncPhase } from '../types';
 import { logInfo, logError } from './sw-logger';
 
 declare const self: ServiceWorkerGlobalScope;
@@ -27,6 +27,7 @@ registerRoute(
 // Sync state management
 let currentSyncService: SyncService | null = null;
 let syncInProgress = false;
+let currentSyncProgress: { current: number; total: number; phase: SyncPhase } | null = null;
 
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
@@ -82,6 +83,7 @@ async function performSync(fullSync = false): Promise<void> {
     
     // Create sync service with progress callback
     currentSyncService = new SyncService(async (progress) => {
+      currentSyncProgress = progress;
       await broadcastToClients(SyncMessages.syncProgress(
         progress.current,
         progress.total,
@@ -136,6 +138,7 @@ async function performSync(fullSync = false): Promise<void> {
   } finally {
     syncInProgress = false;
     currentSyncService = null;
+    currentSyncProgress = null;
   }
 }
 
@@ -191,17 +194,32 @@ self.addEventListener('message', async (event) => {
       break;
       
     case 'CHECK_SYNC_PERMISSION':
-      // Check if periodic sync is available and permitted
-      if ('periodicSync' in self.registration && 'permissions' in self) {
-        try {
-          const permission = await (self as any).permissions.query({ name: 'periodic-background-sync' });
-          await broadcastToClients({
-            type: 'SYNC_STATUS',
-            status: permission.state === 'granted' ? 'idle' : 'failed',
-            timestamp: Date.now()
-          });
-        } catch {
-          // Permission API not available for periodic-background-sync
+      // Report current sync status first
+      if (syncInProgress) {
+        await broadcastToClients(SyncMessages.syncStatus('syncing'));
+        // Also report current progress if available
+        if (currentSyncProgress) {
+          await broadcastToClients(SyncMessages.syncProgress(
+            currentSyncProgress.current,
+            currentSyncProgress.total,
+            currentSyncProgress.phase
+          ));
+        }
+      } else {
+        // Check if periodic sync is available and permitted
+        if ('periodicSync' in self.registration && 'permissions' in self) {
+          try {
+            const permission = await (self as any).permissions.query({ name: 'periodic-background-sync' });
+            await broadcastToClients({
+              type: 'SYNC_STATUS',
+              status: permission.state === 'granted' ? 'idle' : 'failed',
+              timestamp: Date.now()
+            });
+          } catch {
+            // Permission API not available for periodic-background-sync
+            await broadcastToClients(SyncMessages.syncStatus('idle'));
+          }
+        } else {
           await broadcastToClients(SyncMessages.syncStatus('idle'));
         }
       }
