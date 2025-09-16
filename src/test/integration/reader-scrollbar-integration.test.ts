@@ -49,7 +49,6 @@ const mockBookmark: LocalBookmark = {
 const mockSettings: AppSettings = {
   linkding_url: 'https://example.com',
   linkding_token: 'test-token',
-  sync_interval: 60,
   auto_sync: true,
   reading_mode: 'readability',
   theme_mode: 'light'

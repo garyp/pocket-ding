@@ -3,10 +3,11 @@ import { customElement, state } from 'lit/decorators.js';
 import { createLinkdingAPI } from '../services/linkding-api';
 import { DatabaseService } from '../services/database';
 import { SettingsService } from '../services/settings-service';
-import { SyncService } from '../services/sync-service';
 import { ThemeService } from '../services/theme-service';
+import { DebugService } from '../services/debug-service';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DataManagementController } from '../controllers/data-management-controller';
+import { SyncController } from '../controllers/sync-controller';
 import type { AppSettings } from '../types';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/button/filled-button.js';
@@ -17,6 +18,7 @@ import '@material/web/select/outlined-select.js';
 import '@material/web/select/select-option.js';
 import '@material/web/progress/circular-progress.js';
 import '@material/web/progress/linear-progress.js';
+import './sync-progress';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
@@ -30,11 +32,14 @@ export class SettingsPanel extends LitElement {
   @state() private isLoading = false;
   @state() private testStatus: 'idle' | 'testing' | 'success' | 'error' = 'idle';
   @state() private testMessage = '';
-  @state() private isFullSyncing = false;
-  @state() private fullSyncProgress = 0;
-  @state() private fullSyncTotal = 0;
+  @state() private periodicSyncSupported = false;
+  @state() private periodicSyncPermission: 'prompt' | 'granted' | 'denied' = 'prompt';
 
   #dataManagementController = new DataManagementController(this);
+  #syncController = new SyncController(this, {
+    onSyncCompleted: () => this.#handleSyncCompleted(),
+    onSyncError: (error: any) => this.#handleSyncError(error)
+  });
 
   // Getter methods for reactive data
   get settings() { 
@@ -131,17 +136,8 @@ export class SettingsPanel extends LitElement {
       gap: 1rem;
     }
 
-    .sync-progress {
+    sync-progress {
       margin-top: 1rem;
-      padding: 1rem;
-      background: var(--md-sys-color-primary-container);
-      border-radius: 12px;
-      border: 1px solid var(--md-sys-color-outline-variant);
-    }
-
-    .sync-progress-text {
-      color: var(--md-sys-color-on-primary-container);
-      margin-bottom: 0.5rem;
     }
 
     @media (max-width: 48rem) { /* 768px breakpoint */
@@ -254,9 +250,30 @@ export class SettingsPanel extends LitElement {
     }
   `;
 
-  override connectedCallback() {
+  override async connectedCallback() {
     super.connectedCallback();
     // Reactive controller will handle initial data loading
+    
+    // Check periodic sync support
+    if ('serviceWorker' in navigator && 'periodicSync' in ServiceWorkerRegistration.prototype) {
+      this.periodicSyncSupported = true;
+      await this.#checkPeriodicSyncPermission();
+    }
+  }
+  
+  async #checkPeriodicSyncPermission() {
+    if ('permissions' in navigator) {
+      try {
+        const permission = await (navigator as any).permissions.query({ name: 'periodic-background-sync' });
+        this.periodicSyncPermission = permission.state;
+        permission.addEventListener('change', () => {
+          this.periodicSyncPermission = permission.state;
+        });
+      } catch (error) {
+        // Permission API not available for periodic-background-sync
+        DebugService.logInfo('sync', 'Periodic sync permission check not available');
+      }
+    }
   }
 
   override updated(changedProperties: Map<string | number | symbol, unknown>) {
@@ -266,13 +283,13 @@ export class SettingsPanel extends LitElement {
     if (!this.#settingsQuery.loading && this.settings && Object.keys(this.formData).length === 0) {
       this.#initializeForm();
     }
+    
   }
 
   #initializeForm() {
     this.formData = {
       linkding_url: this.settings?.linkding_url || '',
       linkding_token: this.settings?.linkding_token || '',
-      sync_interval: this.settings?.sync_interval || 60,
       auto_sync: this.settings?.auto_sync ?? true,
       reading_mode: this.settings?.reading_mode || 'readability',
       theme_mode: this.settings?.theme_mode || 'system',
@@ -328,7 +345,6 @@ export class SettingsPanel extends LitElement {
       const settings: AppSettings = {
         linkding_url: this.formData.linkding_url!,
         linkding_token: this.formData.linkding_token!,
-        sync_interval: this.formData.sync_interval || 60,
         auto_sync: this.formData.auto_sync ?? true,
         reading_mode: this.formData.reading_mode || 'readability',
         theme_mode: this.formData.theme_mode || 'system',
@@ -340,6 +356,11 @@ export class SettingsPanel extends LitElement {
       // Apply theme setting immediately
       if (settings.theme_mode) {
         ThemeService.setThemeFromSettings(settings.theme_mode);
+      }
+      
+      // Enable/disable periodic sync based on auto_sync setting
+      if (this.#syncController) {
+        await this.#syncController.setPeriodicSync(settings.auto_sync);
       }
       
       this.dispatchEvent(new CustomEvent('settings-saved', {
@@ -379,32 +400,30 @@ export class SettingsPanel extends LitElement {
       return;
     }
 
-    this.isFullSyncing = true;
-    this.fullSyncProgress = 0;
-    this.fullSyncTotal = 0;
     this.testStatus = 'idle';
 
-    try {
-      await SyncService.fullSync(this.settings, (current, total) => {
-        this.fullSyncProgress = current;
-        this.fullSyncTotal = total;
-      });
-
-      this.testStatus = 'success';
-      this.testMessage = 'Full sync completed successfully!';
-      
-      this.dispatchEvent(new CustomEvent('sync-completed'));
-    } catch (error) {
-      console.error('Full sync failed:', error);
-      this.testStatus = 'error';
-      this.testMessage = `Full sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    } finally {
-      this.isFullSyncing = false;
-      this.fullSyncProgress = 0;
-      this.fullSyncTotal = 0;
-    }
+    // Request the sync
+    await this.#syncController.requestSync(true);
   }
 
+  #handleSyncCompleted() {
+    const syncState = this.#syncController.getSyncState();
+    if (syncState.syncStatus === 'completed') {
+      this.testStatus = 'success';
+      this.testMessage = 'Full sync completed successfully!';
+      this.dispatchEvent(new CustomEvent('sync-completed'));
+    }
+  }
+  
+  #handleSyncError(error: any) {
+    const syncState = this.#syncController.getSyncState();
+    if (syncState.syncStatus === 'failed') {
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Full sync failed');
+      this.testStatus = 'error';
+      this.testMessage = `Full sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
+  
   async #handleExportData() {
     await this.#dataManagementController.exportData();
   }
@@ -473,40 +492,29 @@ export class SettingsPanel extends LitElement {
               ?selected=${this.formData.auto_sync}
               @change=${(e: any) => this.#handleInputChange('auto_sync', e.target.selected)}
             >
-              Automatically sync bookmarks
+              ${this.periodicSyncSupported ? 'Enable background sync' : 'Automatically sync bookmarks'}
             </md-switch>
-          </div>
-          
-          <div class="form-group">
-            <label for="sync-interval">Sync Interval (minutes)</label>
-            <md-outlined-text-field
-              id="sync-interval"
-              type="number"
-              min="5"
-              max="1440"
-              .value=${this.formData.sync_interval?.toString() || '60'}
-              @input=${(e: any) => this.#handleInputChange('sync_interval', parseInt(e.target.value))}
-            ></md-outlined-text-field>
+            ${this.periodicSyncSupported && this.formData.auto_sync ? html`
+              <div style="margin-top: 0.5rem; padding-left: 1rem; font-size: 0.875rem; color: var(--md-sys-color-on-surface-variant);">
+                ${this.periodicSyncPermission === 'granted' 
+                  ? html`✓ Background sync enabled - syncs 1-2 times daily when app is closed`
+                  : this.periodicSyncPermission === 'denied'
+                  ? html`⚠️ Background sync permission denied - syncs only when app is open`
+                  : html`Background sync will be enabled when permission is granted`
+                }
+              </div>
+            ` : ''}
           </div>
 
           <div class="sync-actions">
             <md-text-button
               @click=${this.#handleFullSync}
-              ?disabled=${this.isFullSyncing || !this.settings?.linkding_url || !this.settings?.linkding_token}
+              ?disabled=${this.#syncController.isSyncing() || !this.settings?.linkding_url || !this.settings?.linkding_token}
             >
-              ${this.isFullSyncing ? 'Syncing...' : 'Force Full Sync'}
+              ${this.#syncController.isSyncing() ? 'Syncing...' : 'Force Full Sync'}
             </md-text-button>
-            
-            ${this.isFullSyncing ? html`
-              <div class="sync-progress">
-                <div class="sync-progress-text md-typescale-body-medium">
-                  Syncing bookmarks... ${this.fullSyncProgress} / ${this.fullSyncTotal}
-                </div>
-                <md-linear-progress
-                  .value=${this.fullSyncTotal > 0 ? (this.fullSyncProgress / this.fullSyncTotal) : 0}
-                ></md-linear-progress>
-              </div>
-            ` : ''}
+
+            <sync-progress .syncState=${this.#syncController.getSyncState()} .showIcon=${false}></sync-progress>
           </div>
         </div>
         

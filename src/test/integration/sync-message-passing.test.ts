@@ -1,0 +1,451 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SyncController } from '../../controllers/sync-controller';
+import { SyncMessages, type SyncMessage } from '../../types/sync-messages';
+import { SettingsService } from '../../services/settings-service';
+import type { AppSettings } from '../../types';
+import { LitElement, html } from 'lit';
+import { customElement } from 'lit/decorators.js';
+import { waitForComponentReady } from '../utils/component-aware-wait-for';
+
+// Mock navigator.serviceWorker
+const mockPostMessage = vi.fn();
+const mockAddEventListener = vi.fn();
+const mockRemoveEventListener = vi.fn();
+
+const mockServiceWorkerRegistration = {
+  active: {
+    postMessage: mockPostMessage
+  }
+};
+
+const mockServiceWorker = {
+  ready: Promise.resolve(mockServiceWorkerRegistration),
+  addEventListener: mockAddEventListener,
+  removeEventListener: mockRemoveEventListener
+};
+
+// Test component that uses SyncController
+@customElement('test-sync-component')
+class TestSyncComponent extends LitElement {
+  syncController = new SyncController(this);
+  
+  override render() {
+    return html`<div>Test Component</div>`;
+  }
+}
+
+describe('Sync Message Passing Integration', () => {
+  let component: TestSyncComponent;
+  let messageHandler: ((event: MessageEvent) => void) | null = null;
+  
+  beforeEach(async () => {
+    // Setup service worker mock
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: mockServiceWorker,
+      writable: true
+    });
+    
+    // Capture message handler
+    mockAddEventListener.mockImplementation((event, handler) => {
+      if (event === 'message') {
+        messageHandler = handler;
+      }
+    });
+    
+    // Mock settings
+    vi.spyOn(SettingsService, 'getSettings').mockResolvedValue({
+      linkding_url: 'https://test.com',
+      linkding_token: 'test-key',
+      auto_sync: true,
+      reading_mode: 'original' as const
+    } as AppSettings);
+    
+    // Create test component
+    component = document.createElement('test-sync-component') as TestSyncComponent;
+    document.body.appendChild(component);
+    await waitForComponentReady(component);
+  });
+  
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+  
+  describe('Service Worker Communication', () => {
+    it('should post sync request message to service worker', async () => {
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+      
+      // Now request sync
+      const syncPromise = component.syncController.requestSync();
+      
+      // Advance timers and wait for promise
+      await vi.runAllTimersAsync();
+      await syncPromise;
+      
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'REQUEST_SYNC',
+          immediate: true,
+          priority: 'high'
+        })
+      );
+    });
+    
+    it('should handle sync progress messages from service worker', async () => {
+      const progressMessage: SyncMessage = SyncMessages.syncProgress(5, 10, 'bookmarks');
+      
+      // Simulate message from service worker
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: progressMessage }));
+      }
+      
+      await component.updateComplete;
+      
+      const state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(true);
+      expect(state.syncProgress).toBe(5);
+      expect(state.syncTotal).toBe(10);
+      expect(state.syncPhase).toBe('bookmarks');
+    });
+    
+    it('should handle sync complete messages', async () => {
+      const completeMessage: SyncMessage = SyncMessages.syncComplete(true, 25, 5000);
+      
+      // Start sync first
+      await component.syncController.requestSync();
+      await component.updateComplete;
+      
+      // Simulate completion message
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: completeMessage }));
+      }
+      
+      await component.updateComplete;
+      
+      const state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+      expect(state.syncStatus).toBe('completed');
+    });
+    
+    it('should handle sync error messages', async () => {
+      const errorMessage: SyncMessage = SyncMessages.syncError('Network error', true);
+      
+      // Simulate error message
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: errorMessage }));
+      }
+      
+      await component.updateComplete;
+      
+      const state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+      expect(state.syncStatus).toBe('failed');
+    });
+    
+    it('should enable periodic sync when auto_sync is enabled', async () => {
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+      
+      const periodicSyncPromise = component.syncController.setPeriodicSync(true);
+      
+      // Advance timers and wait for promise
+      await vi.runAllTimersAsync();
+      await periodicSyncPromise;
+      
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'REGISTER_PERIODIC_SYNC',
+          enabled: true
+        })
+      );
+    });
+    
+    it('should handle sync status messages', async () => {
+      const statusMessage: SyncMessage = SyncMessages.syncStatus('syncing');
+      
+      // Simulate status message
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: statusMessage }));
+      }
+      
+      await component.updateComplete;
+      
+      const state = component.syncController.getSyncState();
+      expect(state.syncStatus).toBe('syncing');
+      expect(state.isSyncing).toBe(true);
+    });
+    
+    it('should cancel sync by posting cancel message', async () => {
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+      
+      // Start sync first - don't await to avoid timeout
+      component.syncController.requestSync();
+      await component.updateComplete;
+      
+      // Cancel sync
+      const cancelPromise = component.syncController.cancelSync();
+      
+      // Advance timers and wait for promise
+      await vi.runAllTimersAsync();
+      await cancelPromise;
+      
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'CANCEL_SYNC',
+          reason: 'User requested cancellation'
+        })
+      );
+    });
+  });
+  
+  describe('UI State Management', () => {
+    it('should show immediate UI feedback when requesting sync', async () => {
+      const initialState = component.syncController.getSyncState();
+      expect(initialState.isSyncing).toBe(false);
+      
+      await component.syncController.requestSync();
+      
+      // Should immediately show syncing state
+      const state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(true);
+      expect(state.syncStatus).toBe('starting');
+      expect(state.syncPhase).toBe(undefined); // No phase until first progress message
+    });
+    
+    it('should maintain sync state across multiple progress updates', async () => {
+      // Simulate multiple progress updates
+      const messages = [
+        SyncMessages.syncStatus('starting'),
+        SyncMessages.syncProgress(0, 10, 'bookmarks'),
+        SyncMessages.syncProgress(5, 10, 'bookmarks'),
+        SyncMessages.syncProgress(10, 10, 'bookmarks'),
+        SyncMessages.syncProgress(0, 5, 'assets'),
+        SyncMessages.syncProgress(5, 5, 'assets'),
+        SyncMessages.syncComplete(true, 15, 3000)
+      ];
+      
+      for (const message of messages) {
+        if (messageHandler) {
+          messageHandler(new MessageEvent('message', { data: message }));
+        }
+        await component.updateComplete;
+      }
+      
+      const finalState = component.syncController.getSyncState();
+      expect(finalState.isSyncing).toBe(false);
+      expect(finalState.syncStatus).toBe('completed');
+    });
+    
+    it('should clear synced highlights after delay', async () => {
+      vi.useFakeTimers();
+      
+      // Track some synced bookmarks
+      const state1 = component.syncController.getSyncState();
+      state1.syncedBookmarkIds.add(1);
+      state1.syncedBookmarkIds.add(2);
+      
+      // Simulate sync complete
+      const completeMessage = SyncMessages.syncComplete(true, 2, 1000);
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: completeMessage }));
+      }
+      
+      await component.updateComplete;
+      
+      // Fast-forward time
+      vi.advanceTimersByTime(3000);
+      await component.updateComplete;
+      
+      const finalState = component.syncController.getSyncState();
+      expect(finalState.syncedBookmarkIds.size).toBe(0);
+      
+      vi.useRealTimers();
+    });
+  });
+
+  describe('4-Phase Sync Progress Reporting', () => {
+    it('should handle all 4 sync phases with cycling progress', async () => {
+      // Simulate complete 4-phase sync cycle
+      const phaseMessages = [
+        // Phase 1: Bookmarks (0-100%)
+        SyncMessages.syncProgress(0, 100, 'bookmarks'),
+        SyncMessages.syncProgress(25, 100, 'bookmarks'),
+        SyncMessages.syncProgress(50, 100, 'bookmarks'),
+        SyncMessages.syncProgress(100, 100, 'bookmarks'),
+
+        // Phase 2: Archived Bookmarks (0-100%)
+        SyncMessages.syncProgress(0, 50, 'archived-bookmarks'),
+        SyncMessages.syncProgress(25, 50, 'archived-bookmarks'),
+        SyncMessages.syncProgress(50, 50, 'archived-bookmarks'),
+
+        // Phase 3: Assets (0-100%)
+        SyncMessages.syncProgress(0, 75, 'assets'),
+        SyncMessages.syncProgress(40, 75, 'assets'),
+        SyncMessages.syncProgress(75, 75, 'assets'),
+
+        // Phase 4: Read Status (0-100%)
+        SyncMessages.syncProgress(0, 20, 'read-status'),
+        SyncMessages.syncProgress(10, 20, 'read-status'),
+        SyncMessages.syncProgress(20, 20, 'read-status'),
+
+        // Complete
+        SyncMessages.syncComplete(true, 245, 5000)
+      ];
+
+      const phaseProgressHistory: Array<{ phase?: string | undefined; current: number; total: number; percentage: number }> = [];
+
+      for (const message of phaseMessages) {
+        if (messageHandler) {
+          messageHandler(new MessageEvent('message', { data: message }));
+        }
+        await component.updateComplete;
+
+        // Track phase progress for validation
+        if (message.type === 'SYNC_PROGRESS') {
+          const syncState = component.syncController.getSyncState();
+          const phaseProgress = {
+            phase: syncState.syncPhase,
+            current: syncState.syncProgress,
+            total: syncState.syncTotal,
+            percentage: syncState.getPercentage()
+          };
+          phaseProgressHistory.push(phaseProgress);
+        }
+      }
+
+      // Validate that we cycled through all 4 phases
+      const phases = [...new Set(phaseProgressHistory.map(p => p.phase))];
+      expect(phases).toEqual(['bookmarks', 'archived-bookmarks', 'assets', 'read-status']);
+
+      // Validate that progress resets for each new phase
+      const bookmarkPhases = phaseProgressHistory.filter(p => p.phase === 'bookmarks');
+      expect(bookmarkPhases.length).toBeGreaterThan(0);
+      expect(bookmarkPhases[0]!.current).toBe(0); // First bookmarks message starts at 0
+      expect(bookmarkPhases[bookmarkPhases.length - 1]!.current).toBe(100); // Last bookmarks message ends at 100
+
+      const archivedPhases = phaseProgressHistory.filter(p => p.phase === 'archived-bookmarks');
+      expect(archivedPhases.length).toBeGreaterThan(0);
+      expect(archivedPhases[0]!.current).toBe(0); // First archived message starts at 0
+      expect(archivedPhases[archivedPhases.length - 1]!.current).toBe(50); // Last archived message ends at total
+
+      const assetPhases = phaseProgressHistory.filter(p => p.phase === 'assets');
+      expect(assetPhases.length).toBeGreaterThan(0);
+      expect(assetPhases[0]!.current).toBe(0); // First assets message starts at 0
+      expect(assetPhases[assetPhases.length - 1]!.current).toBe(75); // Last assets message ends at total
+
+      const readStatusPhases = phaseProgressHistory.filter(p => p.phase === 'read-status');
+      expect(readStatusPhases.length).toBeGreaterThan(0);
+      expect(readStatusPhases[0]!.current).toBe(0); // First read-status message starts at 0
+      expect(readStatusPhases[readStatusPhases.length - 1]!.current).toBe(20); // Last read-status message ends at total
+
+      // Final state should be completed
+      const finalState = component.syncController.getSyncState();
+      expect(finalState.isSyncing).toBe(false);
+      expect(finalState.syncStatus).toBe('completed');
+      expect(finalState.syncPhase).toBe('complete');
+    });
+
+    it('should calculate correct percentage for phase progress', async () => {
+      // Test percentage calculation with different totals
+      const testCases = [
+        { current: 50, total: 100, expectedPercentage: 50 },
+        { current: 25, total: 50, expectedPercentage: 50 },
+        { current: 3, total: 7, expectedPercentage: 43 }, // Rounds to nearest integer
+        { current: 0, total: 0, expectedPercentage: 0 }, // Edge case: no division by zero
+      ];
+
+      for (const { current, total, expectedPercentage } of testCases) {
+        const progressMessage = SyncMessages.syncProgress(current, total, 'assets');
+
+        if (messageHandler) {
+          messageHandler(new MessageEvent('message', { data: progressMessage }));
+        }
+        await component.updateComplete;
+
+        const syncState = component.syncController.getSyncState();
+        expect(syncState.getPercentage()).toBe(expectedPercentage);
+        expect(syncState.syncProgress).toBe(current);
+        expect(syncState.syncTotal).toBe(total);
+        expect(syncState.syncPhase).toBe('assets');
+      }
+    });
+
+    it('should reset phase tracking on sync completion and errors', async () => {
+      // Start with a phase
+      const progressMessage = SyncMessages.syncProgress(50, 100, 'bookmarks');
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: progressMessage }));
+      }
+      await component.updateComplete;
+
+      let state = component.syncController.getSyncState();
+      expect(state.syncPhase).toBe('bookmarks');
+
+      // Complete sync - should reset to 'complete'
+      const completeMessage = SyncMessages.syncComplete(true, 100, 3000);
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: completeMessage }));
+      }
+      await component.updateComplete;
+
+      state = component.syncController.getSyncState();
+      expect(state.syncPhase).toBe('complete');
+      expect(state.isSyncing).toBe(false);
+
+      // Start new sync - phase should be undefined until first progress
+      await component.syncController.requestSync();
+      state = component.syncController.getSyncState();
+      expect(state.syncPhase).toBe(undefined);
+
+      // Simulate error - should reset phase tracking
+      const errorMessage = SyncMessages.syncError('Test error', false);
+      if (messageHandler) {
+        messageHandler(new MessageEvent('message', { data: errorMessage }));
+      }
+      await component.updateComplete;
+
+      state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+      expect(state.syncStatus).toBe('failed');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle service worker not available', async () => {
+      // Remove service worker
+      Object.defineProperty(navigator, 'serviceWorker', {
+        value: undefined,
+        writable: true
+      });
+      
+      const component2 = document.createElement('test-sync-component') as TestSyncComponent;
+      document.body.appendChild(component2);
+      await waitForComponentReady(component2);
+      
+      // Should not throw when trying to sync
+      await expect(component2.syncController.requestSync()).resolves.not.toThrow();
+    });
+    
+    it('should handle settings not configured', async () => {
+      vi.spyOn(SettingsService, 'getSettings').mockResolvedValue(undefined);
+      
+      const component2 = document.createElement('test-sync-component') as TestSyncComponent;
+      document.body.appendChild(component2);
+      await waitForComponentReady(component2);
+      
+      await component2.syncController.requestSync();
+      
+      // Should not start sync without settings
+      const state = component2.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+    });
+  });
+});
+
+// Type augmentation for the test
+declare global {
+  interface HTMLElementTagNameMap {
+    'test-sync-component': TestSyncComponent;
+  }
+}

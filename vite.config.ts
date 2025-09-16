@@ -16,10 +16,11 @@ export default defineConfig(({ command }) => {
     plugins: [
       VitePWA({
         registerType: 'autoUpdate',
-        workbox: {
+        strategies: 'injectManifest',
+        srcDir: 'src/worker',
+        filename: 'sw.ts',
+        injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-          // Material Icons font is now bundled via @fontsource/material-icons
-          // No external font caching needed
         },
         manifest: {
           name: 'Pocket Ding',

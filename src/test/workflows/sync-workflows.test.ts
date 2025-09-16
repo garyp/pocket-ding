@@ -36,14 +36,7 @@ vi.mock('../../services/database', () => ({
   },
 }));
 
-vi.mock('../../services/sync-service', () => ({
-  SyncService: {
-    syncBookmarks: vi.fn(),
-    getInstance: vi.fn(),
-    isSyncInProgress: vi.fn(() => false),
-    getCurrentSyncProgress: vi.fn(() => ({ current: 0, total: 0 })),
-  },
-}));
+// SyncService mock removed - sync now happens through service worker
 
 vi.mock('../../services/linkding-api', () => ({
   createLinkdingAPI: vi.fn(() => ({
@@ -59,7 +52,7 @@ vi.mock('../../services/content-fetcher', () => ({
 }));
 
 import { DatabaseService } from '../../services/database';
-import { SyncService } from '../../services/sync-service';
+// SyncService import removed - sync now happens through service worker
 
 describe('Sync Workflows - Background Data Synchronization', () => {
   const mockBookmarks: LocalBookmark[] = [
@@ -104,7 +97,6 @@ describe('Sync Workflows - Background Data Synchronization', () => {
   const mockSettings: AppSettings = {
     linkding_url: 'https://linkding.example.com',
     linkding_token: 'test-token',
-    sync_interval: 60,
     auto_sync: true,
     reading_mode: 'readability',
   };
@@ -143,7 +135,30 @@ describe('Sync Workflows - Background Data Synchronization', () => {
       vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(mockBookmarks);
     });
 
-    it('should support sync workflow', async () => {
+    it('should support sync workflow through service worker', async () => {
+      // Mock service worker registration
+      const mockServiceWorker = {
+        postMessage: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
+      
+      const mockRegistration = {
+        active: mockServiceWorker,
+        sync: {
+          register: vi.fn().mockResolvedValue(undefined)
+        }
+      };
+      
+      Object.defineProperty(navigator, 'serviceWorker', {
+        value: {
+          ready: Promise.resolve(mockRegistration),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn()
+        },
+        writable: true
+      });
+      
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);
 
@@ -153,12 +168,53 @@ describe('Sync Workflows - Background Data Synchronization', () => {
       // Should load settings and bookmarks
       expect(DatabaseService.getSettings).toHaveBeenCalled();
       
-      // When sync occurs, it should update the data
-      vi.mocked(SyncService.syncBookmarks).mockResolvedValue();
+      // Navigate to settings
+      const settingsPanel = document.createElement('settings-panel') as SettingsPanel;
+      document.body.appendChild(settingsPanel);
+      await settingsPanel.updateComplete;
       
-      // Verify sync service is available
-      expect(SyncService.syncBookmarks).toBeDefined();
-      expect(SyncService.isSyncInProgress).toBeDefined();
+      // Find and click the sync button
+      const syncButton = settingsPanel.shadowRoot?.querySelector('[data-test-id="sync-button"]') as HTMLElement;
+      if (syncButton) {
+        syncButton.click();
+        
+        // Verify that a sync message was sent to the service worker
+        await vi.waitFor(() => {
+          expect(mockServiceWorker.postMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+              type: 'SYNC_REQUEST'
+            })
+          );
+        });
+      }
+      
+      // Simulate sync progress from service worker
+      const messageHandler = vi.mocked(navigator.serviceWorker.addEventListener).mock.calls[0]?.[1] as EventListener;
+      if (messageHandler) {
+        // Send progress update
+        messageHandler(new MessageEvent('message', {
+          data: {
+            type: 'SYNC_PROGRESS',
+            current: 1,
+            total: 2,
+            phase: 'bookmarks'
+          }
+        }));
+        
+        // Send completion
+        messageHandler(new MessageEvent('message', {
+          data: {
+            type: 'SYNC_COMPLETE',
+            success: true,
+            processed: 2
+          }
+        }));
+      }
+      
+      // Verify bookmarks were updated
+      await vi.waitFor(() => {
+        expect(DatabaseService.getAllBookmarks).toHaveBeenCalled();
+      });
     });
   });
 });

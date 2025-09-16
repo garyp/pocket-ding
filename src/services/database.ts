@@ -5,7 +5,12 @@ import type { LocalBookmark, ReadProgress, AppSettings, LocalAsset } from '../ty
 interface SyncMetadata {
   id?: number;
   last_sync_timestamp: string;
+  unarchived_offset?: number;
+  archived_offset?: number;
+  retry_count?: number;
+  last_error?: string;
 }
+
 
 export class PocketDingDatabase extends Dexie {
   bookmarks!: Table<LocalBookmark>;
@@ -47,6 +52,21 @@ export class PocketDingDatabase extends Dexie {
       syncMetadata: '++id, last_sync_timestamp',
       assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
     });
+    this.version(6).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync',
+      readProgress: '++id, bookmark_id, last_read_at, dark_mode_override',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp',
+      assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at',
+      syncState: '++id'
+    });
+    this.version(7).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync, needs_asset_sync',
+      readProgress: '++id, bookmark_id, last_read_at, dark_mode_override',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp, unarchived_offset, archived_offset, retry_count, last_error',
+      assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
+    });
   }
 }
 
@@ -67,6 +87,14 @@ export class DatabaseService {
 
   static async getUnreadBookmarks(): Promise<LocalBookmark[]> {
     return await db.bookmarks.where('unread').equals(1).toArray();
+  }
+
+  static async getUnarchivedBookmarks(): Promise<LocalBookmark[]> {
+    return await db.bookmarks.where('is_archived').equals(0).toArray();
+  }
+
+  static async deleteBookmark(id: number): Promise<void> {
+    await db.bookmarks.delete(id);
   }
 
   static async getBookmarksPaginated(filter: 'all' | 'unread' | 'archived', page: number, pageSize: number): Promise<LocalBookmark[]> {
@@ -209,7 +237,11 @@ export class DatabaseService {
 
   static async setLastSyncTimestamp(timestamp: string): Promise<void> {
     await db.syncMetadata.clear();
-    await db.syncMetadata.add({ last_sync_timestamp: timestamp });
+    await db.syncMetadata.add({
+      last_sync_timestamp: timestamp,
+      unarchived_offset: 0,
+      archived_offset: 0
+    });
   }
 
   static async markBookmarkAsRead(bookmarkId: number): Promise<void> {
@@ -229,6 +261,18 @@ export class DatabaseService {
     const bookmark = await db.bookmarks.get(bookmarkId);
     if (bookmark) {
       bookmark.needs_read_sync = false;
+      await db.bookmarks.put(bookmark);
+    }
+  }
+
+  static async getBookmarksNeedingAssetSync(): Promise<LocalBookmark[]> {
+    return await db.bookmarks.where('needs_asset_sync').equals(1).toArray();
+  }
+
+  static async markBookmarkAssetSynced(bookmarkId: number): Promise<void> {
+    const bookmark = await db.bookmarks.get(bookmarkId);
+    if (bookmark) {
+      bookmark.needs_asset_sync = false;
       await db.bookmarks.put(bookmark);
     }
   }
@@ -260,14 +304,100 @@ export class DatabaseService {
     await db.assets.where('bookmark_id').equals(bookmarkId).delete();
   }
 
-  static async clearAssetContent(bookmarkId: number): Promise<void> {
-    const assets = await this.getAssetsByBookmarkId(bookmarkId);
-    for (const asset of assets) {
+  static async clearAssetContent(assetId: string): Promise<void> {
+    const asset = await db.assets.get(assetId);
+    if (asset) {
       // Clear content but keep metadata
       delete asset.content;
-      delete asset.cached_at;
-      await this.saveAsset(asset);
+      await db.assets.put(asset);
     }
   }
+
+  static async deleteAsset(id: string): Promise<void> {
+    await db.assets.delete(id);
+  }
+
+  // Sync State Management (using SyncMetadata)
+
+  static async getSyncRetryCount(): Promise<number> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    return metadata?.retry_count || 0;
+  }
+
+  static async incrementSyncRetryCount(): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    const currentCount = metadata?.retry_count || 0;
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { retry_count: currentCount + 1 });
+    } else {
+      await db.syncMetadata.add({
+        last_sync_timestamp: '',
+        retry_count: 1
+      });
+    }
+  }
+
+  static async resetSyncRetryCount(): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { retry_count: 0 });
+    }
+  }
+
+  static async setLastSyncError(error: string | null): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      if (error) {
+        await db.syncMetadata.update(metadata.id!, { last_error: error });
+      } else {
+        await db.syncMetadata.update(metadata.id!, { last_error: undefined } as any);
+      }
+    } else {
+      if (error) {
+        await db.syncMetadata.add({
+          last_sync_timestamp: '',
+          last_error: error
+        });
+      } else {
+        await db.syncMetadata.add({ last_sync_timestamp: '' });
+      }
+    }
+  }
+
+  // New pagination offset methods
+  static async getUnarchivedOffset(): Promise<number> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    return metadata?.unarchived_offset || 0;
+  }
+
+  static async setUnarchivedOffset(offset: number): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { unarchived_offset: offset });
+    } else {
+      await db.syncMetadata.add({
+        last_sync_timestamp: '',
+        unarchived_offset: offset
+      });
+    }
+  }
+
+  static async getArchivedOffset(): Promise<number> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    return metadata?.archived_offset || 0;
+  }
+
+  static async setArchivedOffset(offset: number): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { archived_offset: offset });
+    } else {
+      await db.syncMetadata.add({
+        last_sync_timestamp: '',
+        archived_offset: offset
+      });
+    }
+  }
+
 
 }

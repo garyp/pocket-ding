@@ -46,7 +46,6 @@ describe('Favicon Integration Tests', () => {
     vi.mocked(SettingsService.getCurrentSettings).mockReturnValue({
       linkding_url: 'https://linkding.example.com',
       linkding_token: 'test-token',
-      sync_interval: 5,
       auto_sync: true,
       reading_mode: 'original'
     });

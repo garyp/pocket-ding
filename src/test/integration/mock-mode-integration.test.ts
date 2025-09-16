@@ -27,7 +27,6 @@ describe('Mock Mode Integration', () => {
   const mockSettings: AppSettings = {
     linkding_url: MOCK_URL,
     linkding_token: 'any-token-value',
-    sync_interval: 60,
     auto_sync: true,
     reading_mode: 'readability',
   };

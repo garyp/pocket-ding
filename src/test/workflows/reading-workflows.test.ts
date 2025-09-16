@@ -36,14 +36,7 @@ vi.mock('../../services/database', () => ({
   },
 }));
 
-vi.mock('../../services/sync-service', () => ({
-  SyncService: {
-    syncBookmarks: vi.fn(),
-    getInstance: vi.fn(),
-    isSyncInProgress: vi.fn(() => false),
-    getCurrentSyncProgress: vi.fn(() => ({ current: 0, total: 0 })),
-  },
-}));
+// SyncService mock removed - sync now happens through service worker
 
 vi.mock('../../services/linkding-api', () => ({
   createLinkdingAPI: vi.fn(() => ({
@@ -59,7 +52,7 @@ vi.mock('../../services/content-fetcher', () => ({
 }));
 
 import { DatabaseService } from '../../services/database';
-import { SyncService } from '../../services/sync-service';
+// SyncService import removed - sync now happens through service worker
 import { ContentFetcher } from '../../services/content-fetcher';
 
 describe('Reading Workflows - Content Consumption and Offline Access', () => {
@@ -105,7 +98,6 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
   const mockSettings: AppSettings = {
     linkding_url: 'https://linkding.example.com',
     linkding_token: 'test-token',
-    sync_interval: 60,
     auto_sync: true,
     reading_mode: 'readability',
   };
@@ -196,7 +188,7 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
     it('should function with cached content when network is unavailable', async () => {
       // Mock network failure
       vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
-      vi.mocked(SyncService.syncBookmarks).mockRejectedValue(new Error('Network error'));
+      // Sync now happens through service worker, no need to mock SyncService
 
       const appRoot = document.createElement('app-root') as AppRoot;
       document.body.appendChild(appRoot);
