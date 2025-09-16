@@ -259,8 +259,16 @@ export class SyncService {
       let processed = 0;
       for (const bookmark of bookmarksNeedingAssetSync) {
         if (this.#abortController?.signal.aborted) {
+          logInfo('sync', 'Asset sync cancelled by abort signal');
           throw new Error('Sync cancelled');
         }
+
+        logInfo('sync', `Starting asset sync for bookmark ${bookmark.id}`, {
+          bookmark_id: bookmark.id,
+          is_archived: bookmark.is_archived,
+          processed: processed + 1,
+          total: bookmarksNeedingAssetSync.length
+        });
 
         try {
           if (bookmark.is_archived) {
@@ -279,6 +287,10 @@ export class SyncService {
 
           // Mark asset sync as completed for this bookmark
           await DatabaseService.markBookmarkAssetSynced(bookmark.id);
+
+          logInfo('sync', `Successfully completed asset sync for bookmark ${bookmark.id}`, {
+            bookmark_id: bookmark.id
+          });
 
         } catch (error) {
           logError('sync', `Failed to sync assets for bookmark ${bookmark.id}`, error);
@@ -306,6 +318,14 @@ export class SyncService {
 
     } catch (error) {
       logError('sync', 'Failed to sync assets', error);
+
+      // Log additional details about the error
+      if (error instanceof Error && error.message === 'Sync cancelled') {
+        logInfo('sync', 'Asset sync phase was cancelled by user or abort signal');
+      } else {
+        logError('sync', 'Unexpected error during asset sync phase', error);
+      }
+
       // Don't throw here - we don't want asset sync failures to break the main sync
     }
   }

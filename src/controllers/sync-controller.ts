@@ -113,6 +113,15 @@ export class SyncController implements ReactiveController {
   private async checkSyncStatus() {
     // Request current sync status from service worker
     this.postToServiceWorker(SyncMessages.checkSyncPermission());
+
+    // Give the service worker a brief moment to respond with current state
+    // If no response comes within 100ms, we'll assume no sync is active
+    setTimeout(() => {
+      // Only update if we haven't received any sync status updates yet
+      if (this._syncState.syncStatus === 'idle' && !this._syncState.isSyncing) {
+        DebugService.logInfo('sync', 'No sync status response from service worker - assuming idle');
+      }
+    }, 100);
   }
 
   private handleServiceWorkerMessage(message: SyncMessage) {
@@ -138,6 +147,12 @@ export class SyncController implements ReactiveController {
           syncStatus: message.status,
           isSyncing: message.status === 'starting' || message.status === 'syncing'
         };
+
+        // Log status restoration for debugging
+        if (message.status === 'syncing') {
+          DebugService.logInfo('sync', 'Restored active sync status from service worker');
+        }
+
         this.#host.requestUpdate();
         break;
 
@@ -150,6 +165,10 @@ export class SyncController implements ReactiveController {
           syncPhase: message.phase,
           syncStatus: 'syncing'
         };
+
+        // Log progress restoration for debugging
+        DebugService.logInfo('sync', `Restored sync progress from service worker: ${message.current}/${message.total} (${message.phase})`);
+
         this.#host.requestUpdate();
         break;
 
