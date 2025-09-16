@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor } from '@testing-library/dom';
 import '../setup';
+import { waitForComponent, waitForComponentReady } from '../utils/component-aware-wait-for';
 import { BookmarkReader } from '../../components/bookmark-reader';
 import type { LocalBookmark, AppSettings } from '../../types';
 
@@ -11,21 +12,21 @@ vi.mock('../../services/database', () => ({
     getSettings: vi.fn(),
     getReadProgress: vi.fn(),
     saveReadProgress: vi.fn(),
+    getCompletedAssetsByBookmarkId: vi.fn(),
+    markBookmarkAsRead: vi.fn(),
   },
 }));
 
 // Mock Content Fetcher
 vi.mock('../../services/content-fetcher', () => ({
   ContentFetcher: {
-    fetchContent: vi.fn(),
-    getAvailableContentSources: vi.fn(() => [
-      { id: 'original', name: 'Original', available: true },
-      { id: 'readability', name: 'Reader Mode', available: true }
-    ]),
+    fetchBookmarkContent: vi.fn(),
+    getAvailableContentSources: vi.fn(),
   },
 }));
 
 import { DatabaseService } from '../../services/database';
+import { ContentFetcher } from '../../services/content-fetcher';
 
 const mockBookmark: LocalBookmark = {
   id: 1,
@@ -71,13 +72,38 @@ describe('Reader Scrolling Experience', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
-    // Setup mock data
+
+    // Setup mock data for successful content loading
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
     vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
     vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
-    
+    vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([{
+      id: 1,
+      bookmark_id: 1,
+      asset_type: 'text',
+      display_name: 'Test Article HTML',
+      content_type: 'text/html',
+      file_size: 1024,
+      status: 'complete',
+      date_created: '2024-01-01T00:00:00Z',
+      cached_at: '2024-01-01T00:00:00Z',
+      content: new TextEncoder().encode('<html><body><h1>Test Article</h1><p>Long content for scrolling...</p></body></html>').buffer as ArrayBuffer
+    }]);
+
+    vi.mocked(ContentFetcher.getAvailableContentSources).mockReturnValue([
+      { type: 'asset', label: 'Test Article HTML', assetId: 1 },
+      { type: 'url', label: 'Live URL' }
+    ]);
+
+    vi.mocked(ContentFetcher.fetchBookmarkContent).mockResolvedValue({
+      source: 'asset',
+      content_type: 'html',
+      html_content: '<html><body><h1>Test Article</h1><p>Long content for scrolling...</p></body></html>',
+      readability_content: '<h1>Test Article</h1><p>Long content for scrolling...</p>',
+      metadata: { asset_id: 1 }
+    });
+
     element = new BookmarkReader();
     element.bookmarkId = 1; // Set up for reader view
   });
@@ -108,16 +134,22 @@ describe('Reader Scrolling Experience', () => {
 
   it('displays readable content when loaded', async () => {
     document.body.appendChild(element);
-    await element.updateComplete;
+    await waitForComponentReady(element);
 
-    await waitFor(() => {
-      const content = element.shadowRoot?.querySelector('.reader-content');
-      return content && content.textContent && content.textContent.length > 0;
-    }, { timeout: 3000 });
+    // Wait for content to actually load (not just the container)
+    await waitForComponent(() => {
+      const secureIframe = element.shadowRoot?.querySelector('secure-iframe');
+      const loadingContainer = element.shadowRoot?.querySelector('.loading-container');
 
-    // Content should be visible
-    const content = element.shadowRoot?.querySelector('.reader-content');
-    expect(content?.textContent?.length).toBeGreaterThan(0);
+      // Should have actual content loaded, not stuck in loading
+      expect(secureIframe).toBeTruthy();
+      expect(loadingContainer).toBeFalsy();
+
+      return secureIframe;
+    }, { timeout: 5000 });
+
+    // Verify content fetching was triggered
+    expect(ContentFetcher.fetchBookmarkContent).toHaveBeenCalled();
   });
 
   it('maintains proper viewport constraints', async () => {

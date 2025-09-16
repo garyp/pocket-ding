@@ -621,20 +621,25 @@ export class BookmarkReader extends LitElement {
     if (!this.secureIframe) {
       this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
     }
-    
+
     // Reset manual selection if bookmark changed
     if (changedProperties.has('bookmarkId')) {
       this.manuallySelectedSource = null;
     }
-    
+
     // Initialize state from reactive read progress data when available
     this.#initializeFromProgress();
-    
+
     // Handle content-dependent logic
     this.#handleContentChanges(changedProperties);
-    
+
     // Ensure select value is set after rendering
     this.updateSelectValue();
+
+    // Manual Task trigger: if data is ready but Task hasn't run, trigger it
+    if (!this.isDataLoading && this.selectedContentSource && !this.contentResult && !this.isLoadingContent) {
+      this.#contentTask.run();
+    }
   }
 
   /**
