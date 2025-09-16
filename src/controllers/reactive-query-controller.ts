@@ -114,10 +114,11 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
       // Get current dependencies and create query function with them
       const dependencies = this.#dependencyFn ? this.#dependencyFn() : ([] as unknown as Args);
       
-      // Don't run query if any dependency is null or undefined
+      // Don't run query if any dependency is null or undefined, but keep loading state
       const hasValidDependencies = dependencies.every(dep => dep != null);
       if (!hasValidDependencies) {
-        this.#loading = false;
+        // Keep loading = true when dependencies aren't ready yet
+        // This prevents components from thinking data loading is complete
         this.#value = undefined;
         this.#host.requestUpdate();
         return;

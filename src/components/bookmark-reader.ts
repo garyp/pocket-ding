@@ -671,15 +671,9 @@ export class BookmarkReader extends LitElement {
     // Update theme immediately after setting dark mode override
     this.updateReaderTheme();
     
-    // Set up read marking and trigger content loading when we have a selected content source
+    // Set up read marking when we have a selected content source
     if (this.selectedContentSource) {
       this.setupReadMarking();
-
-      // Load content automatically on first initialization
-      // Only if we don't already have content loaded (to avoid reloading)
-      if (!this.contentResult) {
-        this.#contentTask.run();
-      }
     }
   }
 
@@ -697,9 +691,8 @@ export class BookmarkReader extends LitElement {
       // Content successfully loaded
     }
 
-    // Trigger content loading when selected content source becomes available
-    if (this.selectedContentSource && !this.isLoadingContent && !content) {
-      this.#contentTask.run();
+    // Set up read marking when content source is available
+    if (this.selectedContentSource && !content) {
       this.setupReadMarking();
     }
   }
