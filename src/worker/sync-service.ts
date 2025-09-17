@@ -34,6 +34,13 @@ export class SyncService {
   }
 
   /**
+   * Get the current processed count
+   */
+  getProcessedCount(): number {
+    return this.#processedCount;
+  }
+
+  /**
    * Perform a complete sync operation using 4 idempotent phases
    */
   async performSync(settings: AppSettings): Promise<SyncResult> {

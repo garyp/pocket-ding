@@ -3,7 +3,6 @@
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
-import { SyncService } from './sync-service';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
 import type { AppSettings, SyncPhase } from '../types';
@@ -25,9 +24,14 @@ registerRoute(
 );
 
 // Sync state management
-let currentSyncService: SyncService | null = null;
+let syncWorker: Worker | null = null;
 let syncInProgress = false;
 let currentSyncProgress: { current: number; total: number; phase: SyncPhase } | null = null;
+let currentSyncId: string | null = null;
+
+// Worker lifecycle management
+const WORKER_IDLE_TIMEOUT = 300000; // 5 minutes
+let workerIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Service worker keepalive mechanisms
 let keepalivePort: MessagePort | null = null;
@@ -105,6 +109,153 @@ function stopKeepalive() {
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
 
+/**
+ * Schedule cleanup of idle sync worker to conserve resources
+ */
+function scheduleWorkerCleanup(): void {
+  if (workerIdleTimer) {
+    clearTimeout(workerIdleTimer);
+  }
+
+  workerIdleTimer = setTimeout(() => {
+    if (syncWorker && !syncInProgress) {
+      logInfo('syncWorker', 'Terminating idle sync worker after 5 minutes of inactivity');
+      syncWorker.terminate();
+      syncWorker = null;
+      workerIdleTimer = null;
+    }
+  }, WORKER_IDLE_TIMEOUT);
+}
+
+/**
+ * Cancel any pending worker cleanup
+ */
+function cancelWorkerCleanup(): void {
+  if (workerIdleTimer) {
+    clearTimeout(workerIdleTimer);
+    workerIdleTimer = null;
+  }
+}
+
+/**
+ * Create and configure the dedicated sync worker
+ */
+function createSyncWorker(): Worker {
+  // Import the sync worker using Vite's worker import syntax
+  const worker = new Worker(
+    new URL('./sync-worker.ts', import.meta.url),
+    { type: 'module' }
+  );
+
+  worker.addEventListener('message', async (event) => {
+    const { type, payload, id } = event.data;
+
+    logInfo('serviceWorker', `Received message from sync worker: ${type}`, { id });
+
+    switch (type) {
+      case 'SYNC_PROGRESS':
+        currentSyncProgress = payload;
+        await broadcastToClients(SyncMessages.syncProgress(
+          payload.current,
+          payload.total,
+          payload.phase
+        ));
+        break;
+
+      case 'SYNC_COMPLETE':
+        syncInProgress = false;
+        currentSyncId = null;
+        currentSyncProgress = null;
+        stopKeepalive();
+
+        await DatabaseService.resetSyncRetryCount();
+        await DatabaseService.setLastSyncError(null);
+
+        await broadcastToClients(SyncMessages.syncComplete(
+          true,
+          payload.processed,
+          Date.now() - payload.timestamp
+        ));
+        await broadcastToClients(SyncMessages.syncStatus('completed'));
+
+        // Schedule worker cleanup after successful completion
+        scheduleWorkerCleanup();
+        break;
+
+      case 'SYNC_ERROR':
+        syncInProgress = false;
+        currentSyncId = null;
+        currentSyncProgress = null;
+        stopKeepalive();
+
+        const errorMessage = payload.error || 'Unknown sync error';
+        const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') ||
+                               errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError');
+        const isRecoverable = payload.recoverable !== false; // Default to true if not specified
+
+        // Save error to database
+        await DatabaseService.setLastSyncError(errorMessage);
+
+        await broadcastToClients(SyncMessages.syncError(errorMessage, isNetworkError));
+        await broadcastToClients(SyncMessages.syncStatus('failed'));
+
+        // Terminate worker for unrecoverable errors
+        if (!isRecoverable && syncWorker) {
+          logInfo('syncWorker', 'Terminating sync worker due to unrecoverable error');
+          syncWorker.terminate();
+          syncWorker = null;
+        }
+
+        // Schedule retry for recoverable errors
+        if (isRecoverable && (isNetworkError || payload.recoverable === true)) {
+          const retryCount = await DatabaseService.getSyncRetryCount();
+          if (retryCount < SYNC_RETRY_DELAYS.length) {
+            const delay = SYNC_RETRY_DELAYS[retryCount];
+            await DatabaseService.incrementSyncRetryCount();
+            logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
+            setTimeout(() => {
+              (self.registration as any).sync?.register('sync-bookmarks');
+            }, delay);
+          }
+        }
+
+        // Schedule worker cleanup after error (unless it was already terminated)
+        if (syncWorker) {
+          scheduleWorkerCleanup();
+        }
+        break;
+
+      case 'SYNC_CANCELLED':
+        syncInProgress = false;
+        currentSyncId = null;
+        currentSyncProgress = null;
+        stopKeepalive();
+
+        await broadcastToClients(SyncMessages.syncStatus('cancelled'));
+
+        // Schedule worker cleanup after cancellation
+        scheduleWorkerCleanup();
+        break;
+    }
+  });
+
+  worker.addEventListener('error', (error) => {
+    logError('syncWorker', 'Sync worker error', error);
+    syncInProgress = false;
+    currentSyncId = null;
+    stopKeepalive();
+
+    // Terminate and recreate worker on next sync to prevent stuck states
+    if (syncWorker) {
+      syncWorker.terminate();
+      syncWorker = null;
+      logInfo('syncWorker', 'Terminated sync worker due to error, will recreate on next sync');
+    }
+  });
+
+  return worker;
+}
+
 
 /**
  * Broadcast message to all clients
@@ -129,95 +280,72 @@ async function getSettings(): Promise<AppSettings | null> {
 }
 
 /**
- * Perform sync operation with progress reporting
+ * Perform sync operation using dedicated worker
  */
 async function performSync(fullSync = false): Promise<void> {
   if (syncInProgress) {
     logInfo('performSync', 'Sync already in progress');
     return;
   }
-  
+
   syncInProgress = true;
-  const startTime = Date.now();
-  
+
   try {
     await broadcastToClients(SyncMessages.syncStatus('starting'));
-    
+
     const settings = await getSettings();
     if (!settings?.linkding_url || !settings?.linkding_token) {
       throw new Error('Linkding settings not configured');
     }
-    
+
     if (fullSync) {
       // Clear sync timestamp for full sync (also resets pagination offsets)
       await DatabaseService.setLastSyncTimestamp('0');
       await DatabaseService.resetSyncRetryCount();
     }
-    
-    // Start keepalive to prevent service worker termination during sync
+
+    // Cancel any pending worker cleanup since we're about to use it
+    cancelWorkerCleanup();
+
+    // Start keepalive to prevent service worker termination during sync coordination
     startKeepalive();
 
-    // Create sync service with progress callback
-    currentSyncService = new SyncService(async (progress) => {
-      currentSyncProgress = progress;
-      await broadcastToClients(SyncMessages.syncProgress(
-        progress.current,
-        progress.total,
-        progress.phase
-      ));
-    });
+    // Create sync worker if it doesn't exist
+    if (!syncWorker) {
+      syncWorker = createSyncWorker();
+    }
+
+    // Generate unique sync ID for this operation
+    currentSyncId = crypto.randomUUID();
 
     await broadcastToClients(SyncMessages.syncStatus('syncing'));
-    
-    const result = await currentSyncService.performSync(settings);
 
-    if (result.success) {
-      await DatabaseService.resetSyncRetryCount();
-      await DatabaseService.setLastSyncError(null);
-      
-      await broadcastToClients(SyncMessages.syncComplete(
-        true,
-        result.processed,
-        Date.now() - startTime
-      ));
-      await broadcastToClients(SyncMessages.syncStatus('completed'));
-    } else {
-      throw result.error || new Error('Sync failed');
-    }
+    // Start sync operation in dedicated worker
+    syncWorker.postMessage({
+      type: 'START_SYNC',
+      payload: {
+        settings,
+        fullSync
+      },
+      id: currentSyncId
+    });
+
+    logInfo('performSync', `Sync operation delegated to worker with ID: ${currentSyncId}`);
+
+    // The worker will handle the sync and report back via message events
+    // Error handling, progress updates, and completion are handled in createSyncWorker()
+
   } catch (error) {
-    logError('performSync', 'Sync error', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') ||
-                           errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError');
-    
-    // Save error to database
-    await DatabaseService.setLastSyncError(errorMessage);
-    
-    // For network errors, we'll rely on automatic retry rather than checkpoints
-    
-    await broadcastToClients(SyncMessages.syncError(errorMessage, isNetworkError));
-    await broadcastToClients(SyncMessages.syncStatus('failed'));
-    
-    // Schedule retry for recoverable errors
-    if (isNetworkError) {
-      const retryCount = await DatabaseService.getSyncRetryCount();
-      if (retryCount < SYNC_RETRY_DELAYS.length) {
-        const delay = SYNC_RETRY_DELAYS[retryCount];
-        await DatabaseService.incrementSyncRetryCount();
-        logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
-        setTimeout(() => {
-          (self.registration as any).sync?.register('sync-bookmarks');
-        }, delay);
-      }
-    }
-  } finally {
-    // Stop keepalive mechanism
-    stopKeepalive();
+    logError('performSync', 'Failed to start sync', error);
 
     syncInProgress = false;
-    currentSyncService = null;
-    currentSyncProgress = null;
+    currentSyncId = null;
+    stopKeepalive();
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    await DatabaseService.setLastSyncError(errorMessage);
+    await broadcastToClients(SyncMessages.syncError(errorMessage, false));
+    await broadcastToClients(SyncMessages.syncStatus('failed'));
   }
 }
 
@@ -247,14 +375,14 @@ self.addEventListener('message', async (event) => {
       break;
       
     case 'CANCEL_SYNC':
-      if (currentSyncService) {
+      if (syncWorker && currentSyncId) {
         logInfo('sync', `Received CANCEL_SYNC message: ${message.reason}`);
-        currentSyncService.cancelSync();
 
-        // Stop keepalive when sync is cancelled
-        stopKeepalive();
-
-        await broadcastToClients(SyncMessages.syncStatus('cancelled'));
+        syncWorker.postMessage({
+          type: 'CANCEL_SYNC',
+          payload: { reason: message.reason },
+          id: currentSyncId
+        });
       } else {
         logInfo('sync', 'Received CANCEL_SYNC but no sync is currently active');
       }
