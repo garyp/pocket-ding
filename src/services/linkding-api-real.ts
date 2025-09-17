@@ -113,24 +113,44 @@ export class RealLinkdingAPI implements LinkdingAPI {
 
   async downloadAsset(bookmarkId: number, assetId: number): Promise<ArrayBuffer> {
     const url = `${this.baseUrl}/api/bookmarks/${bookmarkId}/assets/${assetId}/download/`;
-    
+
     DebugService.logApiRequest(url, 'GET');
-    
-    const response = await appFetch(url, {
-      headers: {
-        'Authorization': `Token ${this.token}`,
-      },
-    });
 
-    DebugService.logApiResponse(url, response.status, response.statusText);
+    // Create timeout controller for asset downloads (30 second timeout)
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      DebugService.logApiError(new Error(`Asset download timeout after 30s`), {
+        url, method: 'GET', bookmarkId, assetId, timeout: 30000
+      });
+      timeoutController.abort();
+    }, 30000);
 
-    if (!response.ok) {
-      const error = new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
-      DebugService.logApiError(error, { url, method: 'GET', bookmarkId, assetId, status: response.status, statusText: response.statusText });
-      throw error;
+    try {
+      const response = await appFetch(url, {
+        headers: {
+          'Authorization': `Token ${this.token}`,
+        },
+        signal: timeoutController.signal
+      });
+
+      DebugService.logApiResponse(url, response.status, response.statusText);
+
+      if (!response.ok) {
+        const error = new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
+        DebugService.logApiError(error, { url, method: 'GET', bookmarkId, assetId, status: response.status, statusText: response.statusText });
+        throw error;
+      }
+
+      const startTime = Date.now();
+      const arrayBuffer = await response.arrayBuffer();
+      const downloadTime = Date.now() - startTime;
+
+      DebugService.logApiSuccess(`Downloaded asset ${assetId} for bookmark ${bookmarkId} (${arrayBuffer.byteLength} bytes in ${downloadTime}ms)`);
+
+      return arrayBuffer;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return await response.arrayBuffer();
   }
 
   async testConnection(): Promise<boolean> {

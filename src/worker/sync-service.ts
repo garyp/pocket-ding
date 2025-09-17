@@ -40,6 +40,15 @@ export class SyncService {
     this.#abortController = new AbortController();
     this.#processedCount = 0;
 
+    // Add abort signal listener for debugging
+    this.#abortController.signal.addEventListener('abort', () => {
+      logInfo('sync', 'AbortController signal fired - sync will be cancelled');
+
+      // Log stack trace to see what triggered the abort
+      const stack = new Error('Sync abort triggered').stack;
+      logInfo('sync', `Abort stack trace: ${stack}`);
+    });
+
     try {
       // Initialize API service
       const api = createLinkdingAPI(settings.linkding_url, settings.linkding_token);
@@ -103,6 +112,7 @@ export class SyncService {
    * Cancel the current sync operation
    */
   cancelSync(): void {
+    logInfo('sync', 'cancelSync() called - aborting sync operation');
     this.#abortController?.abort();
   }
 

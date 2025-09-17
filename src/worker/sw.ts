@@ -29,6 +29,20 @@ let currentSyncService: SyncService | null = null;
 let syncInProgress = false;
 let currentSyncProgress: { current: number; total: number; phase: SyncPhase } | null = null;
 
+// Track service worker lifecycle for debugging sync issues
+logInfo('serviceWorker', 'Service worker script loaded/reloaded');
+
+// Listen for service worker lifecycle events
+self.addEventListener('install', () => {
+  logInfo('serviceWorker', 'Service worker installing');
+});
+
+self.addEventListener('activate', () => {
+  logInfo('serviceWorker', 'Service worker activated');
+});
+
+// Service worker will automatically handle fetch events via Workbox
+
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
 
@@ -161,8 +175,11 @@ self.addEventListener('message', async (event) => {
       
     case 'CANCEL_SYNC':
       if (currentSyncService) {
+        logInfo('sync', `Received CANCEL_SYNC message: ${message.reason}`);
         currentSyncService.cancelSync();
         await broadcastToClients(SyncMessages.syncStatus('cancelled'));
+      } else {
+        logInfo('sync', 'Received CANCEL_SYNC but no sync is currently active');
       }
       break;
       
