@@ -58,6 +58,10 @@ export default defineConfig(({ command }) => {
     build: {
       target: 'es2024',
       rollupOptions: {
+        input: {
+          main: './index.html',
+          'sync-worker': './src/worker/sync-worker.ts'
+        },
         output: {
           manualChunks(id) {
             // Automatically chunk node_modules into vendor bundle
