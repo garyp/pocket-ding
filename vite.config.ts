@@ -4,15 +4,29 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig(({ command }) => {
   // Determine base path based on environment
   // For GitHub Pages, use the repository name as base path
-  const isGitHubPages = process.env.GITHUB_PAGES === 'true' || 
+  const isGitHubPages = process.env.GITHUB_PAGES === 'true' ||
                         process.env.GITHUB_ACTIONS === 'true' ||
                         process.env.CI === 'true'
-  
+
   const base = isGitHubPages ? '/pocket-ding/' : '/'
+
+  // Generate version information
+  const buildTimestamp = new Date().toISOString()
+  const githubRunId = process.env.GITHUB_RUN_ID || null
+  const versionInfo = {
+    buildTimestamp,
+    githubRunId,
+    // Create a short version string for display
+    shortVersion: buildTimestamp.replace(/[T:]/g, '-').substring(0, 16) + (githubRunId ? `-${githubRunId}` : '')
+  }
 
   return {
     base,
     root: '.',
+    define: {
+      // Inject version info into the build
+      __APP_VERSION__: JSON.stringify(versionInfo),
+    },
     plugins: [
       VitePWA({
         registerType: 'autoUpdate',

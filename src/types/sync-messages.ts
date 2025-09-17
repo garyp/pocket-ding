@@ -4,7 +4,7 @@
 
 import type { SyncPhase } from './index.js';
 
-export type SyncMessageType = 
+export type SyncMessageType =
   | 'REQUEST_SYNC'
   | 'CANCEL_SYNC'
   | 'SYNC_STATUS'
@@ -13,6 +13,8 @@ export type SyncMessageType =
   | 'SYNC_ERROR'
   | 'REGISTER_PERIODIC_SYNC'
   | 'CHECK_SYNC_PERMISSION'
+  | 'REQUEST_VERSION'
+  | 'VERSION_INFO'
   | 'SW_LOG';
 
 export interface SyncRequestMessage {
@@ -75,7 +77,16 @@ export interface ServiceWorkerLogMessage {
   error?: string;
 }
 
-export type SyncMessage = 
+export interface RequestVersionMessage {
+  type: 'REQUEST_VERSION';
+}
+
+export interface VersionInfoMessage {
+  type: 'VERSION_INFO';
+  version: import('./version').VersionInfo;
+}
+
+export type SyncMessage =
   | SyncRequestMessage
   | CancelSyncMessage
   | SyncStatusMessage
@@ -84,6 +95,8 @@ export type SyncMessage =
   | SyncErrorMessage
   | RegisterPeriodicSyncMessage
   | CheckSyncPermissionMessage
+  | RequestVersionMessage
+  | VersionInfoMessage
   | ServiceWorkerLogMessage;
 
 /**

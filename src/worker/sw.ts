@@ -354,6 +354,18 @@ async function performSync(fullSync = false): Promise<void> {
  */
 self.addEventListener('message', async (event) => {
   const message = event.data as SyncMessage;
+
+  // Handle version requests
+  if (message.type === 'REQUEST_VERSION') {
+    const port = event.ports[0];
+    if (port) {
+      port.postMessage({
+        type: 'VERSION_INFO',
+        version: __APP_VERSION__
+      });
+    }
+    return;
+  }
   
   switch (message.type) {
     case 'REQUEST_SYNC':

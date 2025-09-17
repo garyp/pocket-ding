@@ -5,10 +5,12 @@ import { DatabaseService } from '../services/database';
 import { SettingsService } from '../services/settings-service';
 import { ThemeService } from '../services/theme-service';
 import { DebugService } from '../services/debug-service';
+import { VersionService } from '../services/version-service';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import { DataManagementController } from '../controllers/data-management-controller';
 import { SyncController } from '../controllers/sync-controller';
 import type { AppSettings } from '../types';
+import type { VersionInfo } from '../types/version';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
@@ -35,6 +37,8 @@ export class SettingsPanel extends LitElement {
   @state() private testMessage = '';
   @state() private periodicSyncSupported = false;
   @state() private periodicSyncPermission: 'prompt' | 'granted' | 'denied' = 'prompt';
+  @state() private appVersion: VersionInfo | null = null;
+  @state() private serviceWorkerVersion: VersionInfo | null = null;
 
   #dataManagementController = new DataManagementController(this);
   #syncController = new SyncController(this, {
@@ -253,19 +257,87 @@ export class SettingsPanel extends LitElement {
     .hidden-file-input {
       display: none;
     }
+
+    .version-info {
+      background: var(--md-sys-color-surface-container-low);
+      border: 1px solid var(--md-sys-color-outline-variant);
+      padding: 1rem;
+      border-radius: 12px;
+      margin-top: 2rem;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.875rem;
+    }
+
+    .version-info h3 {
+      color: var(--md-sys-color-on-surface);
+      margin-bottom: 1rem;
+      font-family: inherit;
+    }
+
+    .version-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      padding: 0.5rem;
+      background: var(--md-sys-color-surface-container);
+      border-radius: 8px;
+    }
+
+    .version-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .version-label {
+      font-weight: 500;
+      color: var(--md-sys-color-on-surface-variant);
+      margin-right: 1rem;
+    }
+
+    .version-value {
+      font-family: 'Roboto Mono', monospace;
+      color: var(--md-sys-color-on-surface);
+      text-align: right;
+      flex: 1;
+      overflow-wrap: break-word;
+      word-break: break-all;
+    }
+
+    .version-mismatch {
+      background: var(--md-sys-color-error-container);
+      color: var(--md-sys-color-on-error-container);
+      border: 1px solid var(--md-sys-color-error);
+    }
+
+    .version-timestamp {
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
   `;
 
   override async connectedCallback() {
     super.connectedCallback();
     // Reactive controller will handle initial data loading
-    
+
     // Check periodic sync support
     if ('serviceWorker' in navigator && 'periodicSync' in ServiceWorkerRegistration.prototype) {
       this.periodicSyncSupported = true;
       await this.#checkPeriodicSyncPermission();
     }
+
+    // Load version information
+    await this.#loadVersionInfo();
   }
   
+  async #loadVersionInfo() {
+    try {
+      this.appVersion = VersionService.getAppVersion();
+      this.serviceWorkerVersion = await VersionService.getServiceWorkerVersion();
+    } catch (error) {
+      console.error('Failed to load version info:', error);
+    }
+  }
+
   async #checkPeriodicSyncPermission() {
     if ('permissions' in navigator) {
       try {
@@ -643,6 +715,50 @@ export class SettingsPanel extends LitElement {
         >
           Clear All Data
         </md-filled-button>
+      </div>
+
+      <div class="version-info">
+        <h3>Version Information</h3>
+
+        ${this.appVersion ? html`
+          <div class="version-row">
+            <span class="version-label">App Version:</span>
+            <span class="version-value">${this.appVersion.shortVersion}</span>
+          </div>
+          <div class="version-row">
+            <span class="version-label">Build Time:</span>
+            <span class="version-value version-timestamp">${new Date(this.appVersion.buildTimestamp).toLocaleString()}</span>
+          </div>
+          ${this.appVersion.githubRunId ? html`
+            <div class="version-row">
+              <span class="version-label">CI Run:</span>
+              <span class="version-value">${this.appVersion.githubRunId}</span>
+            </div>
+          ` : ''}
+        ` : html`
+          <div class="version-row">
+            <span class="version-label">App Version:</span>
+            <span class="version-value">Loading...</span>
+          </div>
+        `}
+
+        ${this.serviceWorkerVersion ? html`
+          <div class="version-row ${this.appVersion && this.serviceWorkerVersion.buildTimestamp !== this.appVersion.buildTimestamp ? 'version-mismatch' : ''}">
+            <span class="version-label">Service Worker:</span>
+            <span class="version-value">${this.serviceWorkerVersion.shortVersion}</span>
+          </div>
+          ${this.appVersion && this.serviceWorkerVersion.buildTimestamp !== this.appVersion.buildTimestamp ? html`
+            <div class="version-row version-mismatch">
+              <span class="version-label">⚠️ Status:</span>
+              <span class="version-value">Service worker is outdated - try refreshing</span>
+            </div>
+          ` : ''}
+        ` : html`
+          <div class="version-row">
+            <span class="version-label">Service Worker:</span>
+            <span class="version-value">${navigator.serviceWorker ? 'Loading...' : 'Not available'}</span>
+          </div>
+        `}
       </div>
     `;
   }
