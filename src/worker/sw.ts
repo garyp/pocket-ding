@@ -39,10 +39,14 @@ logInfo('serviceWorker', 'Service worker script loaded/reloaded');
 // Listen for service worker lifecycle events
 self.addEventListener('install', () => {
   logInfo('serviceWorker', 'Service worker installing');
+  // Skip waiting to activate immediately
+  self.skipWaiting();
 });
 
-self.addEventListener('activate', () => {
+self.addEventListener('activate', (event) => {
   logInfo('serviceWorker', 'Service worker activated');
+  // Take control of all clients immediately
+  event.waitUntil(self.clients.claim());
 });
 
 // Service worker will automatically handle fetch events via Workbox

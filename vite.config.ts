@@ -22,6 +22,10 @@ export default defineConfig(({ command }) => {
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         },
+        workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
+        },
         manifest: {
           name: 'Pocket Ding',
           short_name: 'Pocket Ding',
