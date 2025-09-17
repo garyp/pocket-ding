@@ -42,11 +42,7 @@ export class SyncService {
 
     // Add abort signal listener for debugging
     this.#abortController.signal.addEventListener('abort', () => {
-      logInfo('sync', 'AbortController signal fired - sync will be cancelled');
-
-      // Log stack trace to see what triggered the abort
-      const stack = new Error('Sync abort triggered').stack;
-      logInfo('sync', `Abort stack trace: ${stack}`);
+      logInfo('sync', 'Sync operation cancelled');
     });
 
     try {
@@ -112,7 +108,7 @@ export class SyncService {
    * Cancel the current sync operation
    */
   cancelSync(): void {
-    logInfo('sync', 'cancelSync() called - aborting sync operation');
+    logInfo('sync', 'Sync cancellation requested');
     this.#abortController?.abort();
   }
 
@@ -273,12 +269,7 @@ export class SyncService {
           throw new Error('Sync cancelled');
         }
 
-        logInfo('sync', `Starting asset sync for bookmark ${bookmark.id}`, {
-          bookmark_id: bookmark.id,
-          is_archived: bookmark.is_archived,
-          processed: processed + 1,
-          total: bookmarksNeedingAssetSync.length
-        });
+        // Asset sync logging reduced to avoid console spam
 
         try {
           if (bookmark.is_archived) {
@@ -297,10 +288,6 @@ export class SyncService {
 
           // Mark asset sync as completed for this bookmark
           await DatabaseService.markBookmarkAssetSynced(bookmark.id);
-
-          logInfo('sync', `Successfully completed asset sync for bookmark ${bookmark.id}`, {
-            bookmark_id: bookmark.id
-          });
 
         } catch (error) {
           logError('sync', `Failed to sync assets for bookmark ${bookmark.id}`, error);

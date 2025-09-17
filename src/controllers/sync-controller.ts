@@ -135,12 +135,8 @@ export class SyncController implements ReactiveController {
       const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
 
       if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
-        DebugService.logInfo('sync', `Found ${bookmarksNeedingAssetSync.length} bookmarks needing asset sync and ${bookmarksNeedingReadSync.length} needing read sync - resuming sync`);
-
-        // Resume sync automatically
+        DebugService.logInfo('sync', `Resuming sync: ${bookmarksNeedingAssetSync.length} assets, ${bookmarksNeedingReadSync.length} read status`);
         await this.requestSync(false);
-      } else {
-        DebugService.logInfo('sync', 'No bookmarks need syncing - sync is truly complete');
       }
     } catch (error) {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to check for resume sync');
@@ -171,12 +167,9 @@ export class SyncController implements ReactiveController {
           isSyncing: message.status === 'starting' || message.status === 'syncing'
         };
 
-        // Log status restoration for debugging
-        if (message.status === 'syncing') {
-          DebugService.logInfo('sync', 'Restored active sync status from service worker');
-        } else if (message.status === 'interrupted') {
-          DebugService.logInfo('sync', 'Detected interrupted sync from service worker - will attempt to resume');
-          // The #checkAndResumeSync method will handle the resumption
+        // Handle special sync statuses
+        if (message.status === 'interrupted') {
+          DebugService.logInfo('sync', 'Interrupted sync detected - resuming');
           this.#checkAndResumeSync();
         }
 
@@ -194,7 +187,7 @@ export class SyncController implements ReactiveController {
         };
 
         // Log progress restoration for debugging
-        DebugService.logInfo('sync', `Restored sync progress from service worker: ${message.current}/${message.total} (${message.phase})`);
+        DebugService.logInfo('sync', `Sync progress restored: ${message.current}/${message.total} (${message.phase})`);
 
         this.#host.requestUpdate();
         break;
