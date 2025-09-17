@@ -131,10 +131,11 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
       // Set up timeout to prevent infinite loading state
       this.#loadingTimeout = setTimeout(() => {
         if (this.#loading) {
+          // Don't log complex objects that might have circular references
           DebugService.logWarning(
             'app',
             `ReactiveQueryController: Query timed out after 5 seconds in ${this.#host.constructor.name}`,
-            { dependencies, queryFn: this.#queryFn.toString().substring(0, 100) }
+            { dependencyCount: dependencies.length, queryFn: this.#queryFn.toString().substring(0, 100) }
           );
           this.#error = new Error('Query timed out - database query did not respond within 5 seconds');
           this.#loading = false;
@@ -180,11 +181,13 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
       // Additional safety check: if liveQuery subscription never starts, we have a deeper issue
       setTimeout(() => {
         if (this.#loading && !subscriptionStarted) {
+          // Don't log complex objects that might have circular references
+          // Just log the number of dependencies for debugging
           DebugService.logError(
             new Error('liveQuery subscription never started - this may indicate a database connection issue'),
             'app',
             `Subscription failed in ${this.#host.constructor.name}`,
-            { dependencies }
+            { dependencyCount: dependencies.length }
           );
           this.#clearLoadingTimeout();
           this.#error = new Error('Database subscription failed to initialize - this may indicate a database connection issue');
