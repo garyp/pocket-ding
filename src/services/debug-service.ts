@@ -7,6 +7,7 @@ export class DebugService {
   private static logs: DebugLogEntry[] = [];
   private static maxLogEntries = 1000;
   private static isDebugEnabled = false;
+  private static logUpdateCallbacks = new Set<() => void>();
 
   static getInstance(): DebugService {
     if (!this.instance) {
@@ -60,6 +61,9 @@ export class DebugService {
       this.logs = this.logs.slice(-this.maxLogEntries);
     }
 
+    // Notify reactive subscribers of log updates
+    this.logUpdateCallbacks.forEach(callback => callback());
+
     // Also log to console with appropriate level
     const consoleMessage = `[DEBUG] ${category.toUpperCase()} ${operation}: ${message}`;
     switch (level) {
@@ -86,7 +90,16 @@ export class DebugService {
 
   static clearLogs(): void {
     this.logs = [];
+    // Notify reactive subscribers of log updates
+    this.logUpdateCallbacks.forEach(callback => callback());
   }
+
+
+  static subscribeToLogUpdates(callback: () => void): () => void {
+    this.logUpdateCallbacks.add(callback);
+    return () => this.logUpdateCallbacks.delete(callback);
+  }
+
 
   static async getAppState(): Promise<DebugAppState> {
     try {

@@ -1,7 +1,8 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement } from 'lit/decorators.js';
 import { DebugService } from '../services/debug-service';
 import type { DebugLogEntry, DebugAppState } from '../types';
+import { ReactiveQueryController } from '../controllers/reactive-query-controller';
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
 import '@material/web/labs/card/outlined-card.js';
@@ -10,11 +11,27 @@ import '@material/web/progress/circular-progress.js';
 
 @customElement('debug-view')
 export class DebugView extends LitElement {
-  @state() private logs: DebugLogEntry[] = [];
-  @state() private appState: DebugAppState | null = null;
-  @state() private isLoading = false;
-  @state() private isAutoRefresh = false;
-  private refreshInterval?: number;
+  // Reactive query for app state
+  #appStateQuery = new ReactiveQueryController(
+    this,
+    () => DebugService.getAppState()
+  );
+
+  // Direct subscription to log updates
+  #logSubscription: (() => void) | undefined = undefined;
+
+  // Getter methods for reactive data
+  get logs(): DebugLogEntry[] {
+    return DebugService.getLogs();
+  }
+
+  get appState(): DebugAppState | null {
+    return this.#appStateQuery.value || null;
+  }
+
+  get isLoading(): boolean {
+    return this.#appStateQuery.loading;
+  }
 
   static override styles = css`
     :host {
@@ -224,47 +241,33 @@ export class DebugView extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.refreshData();
+    // Subscribe to log updates
+    this.#logSubscription = DebugService.subscribeToLogUpdates(() => {
+      this.requestUpdate();
+    });
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
+    // Unsubscribe from log updates
+    if (this.#logSubscription) {
+      this.#logSubscription();
+      this.#logSubscription = undefined;
     }
   }
 
-  private async refreshData() {
-    this.isLoading = true;
-    try {
-      this.logs = DebugService.getLogs();
-      this.appState = await DebugService.getAppState();
-    } catch (error) {
-      console.error('Failed to refresh debug data:', error);
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
-  private handleClearLogs() {
+  #handleClearLogs() {
     DebugService.clearLogs();
-    this.logs = [];
+    // No need to manually update this.logs - the reactive controller handles it
   }
 
-  private toggleAutoRefresh() {
-    this.isAutoRefresh = !this.isAutoRefresh;
-    
-    if (this.isAutoRefresh) {
-      this.refreshInterval = window.setInterval(() => {
-        this.refreshData();
-      }, 2000) as unknown as number; // Refresh every 2 seconds
-    } else if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = undefined as any;
-    }
+  #handleRefresh() {
+    // Refresh app state query manually (logs are always fresh)
+    this.#appStateQuery.refresh();
+    this.requestUpdate(); // Trigger re-render for logs
   }
 
-  private formatTimestamp(timestamp: string): string {
+  #formatTimestamp(timestamp: string): string {
     const date = new Date(timestamp);
     return date.toLocaleTimeString(undefined, { 
       hour12: false,
@@ -274,7 +277,7 @@ export class DebugView extends LitElement {
     });
   }
 
-  private formatDetails(details: any): string {
+  #formatDetails(details: any): string {
     if (!details) return '';
     
     try {
@@ -284,11 +287,11 @@ export class DebugView extends LitElement {
     }
   }
 
-  private formatError(error: Error): string {
+  #formatError(error: Error): string {
     return `${error.name}: ${error.message}\n\n${error.stack || 'No stack trace available'}`;
   }
 
-  private formatBytes(bytes?: number): string {
+  #formatBytes(bytes?: number): string {
     if (!bytes) return 'Unknown';
 
     const units = ['B', 'KB', 'MB', 'GB'];
@@ -303,7 +306,7 @@ export class DebugView extends LitElement {
     return `${size.toFixed(1)} ${units[unitIndex]}`;
   }
 
-  private renderServiceWorkerInfo() {
+  #renderServiceWorkerInfo() {
     if (!this.appState?.sync.serviceWorker) return html``;
 
     const sw = this.appState.sync.serviceWorker;
@@ -328,7 +331,7 @@ export class DebugView extends LitElement {
     `;
   }
 
-  private renderAppState() {
+  #renderAppState() {
     if (!this.appState) return html``;
 
     return html`
@@ -390,21 +393,21 @@ export class DebugView extends LitElement {
         <div class="state-item">
           <h4>Storage Usage</h4>
           <div class="state-value">
-            ${this.formatBytes(this.appState.storage.sizeEstimate)}
+            ${this.#formatBytes(this.appState.storage.sizeEstimate)}
           </div>
           <div class="state-details">
             ${this.appState.storage.quotaAvailable ?
-              `Available: ${this.formatBytes(this.appState.storage.quotaAvailable)}` :
+              `Available: ${this.#formatBytes(this.appState.storage.quotaAvailable)}` :
               'Quota info unavailable'}
           </div>
         </div>
 
-        ${this.renderServiceWorkerInfo()}
+        ${this.#renderServiceWorkerInfo()}
       </div>
     `;
   }
 
-  private renderLogs() {
+  #renderLogs() {
     if (this.logs.length === 0) {
       return html`
         <div class="no-logs">
@@ -418,17 +421,17 @@ export class DebugView extends LitElement {
         ${this.logs.map(log => html`
           <div class="log-entry">
             <div class="log-header">
-              <span class="log-timestamp">${this.formatTimestamp(log.timestamp)}</span>
+              <span class="log-timestamp">${this.#formatTimestamp(log.timestamp)}</span>
               <span class="log-level ${log.level}">${log.level}</span>
               <span class="log-category">${log.category}</span>
               <span class="log-operation">${log.operation}</span>
             </div>
             <div class="log-message">${log.message}</div>
             ${log.details ? html`
-              <div class="log-details">${this.formatDetails(log.details)}</div>
+              <div class="log-details">${this.#formatDetails(log.details)}</div>
             ` : ''}
             ${log.error ? html`
-              <div class="log-error">${this.formatError(log.error)}</div>
+              <div class="log-error">${this.#formatError(log.error)}</div>
             ` : ''}
           </div>
         `)}
@@ -444,18 +447,11 @@ export class DebugView extends LitElement {
             <h3>App State</h3>
             <div class="section-controls">
               <md-text-button
-                @click=${this.refreshData}
+                @click=${this.#handleRefresh}
                 ?disabled=${this.isLoading}
               >
                 <md-icon slot="icon">refresh</md-icon>
                 Refresh
-              </md-text-button>
-              <md-text-button
-                @click=${this.toggleAutoRefresh}
-                ?disabled=${this.isLoading}
-              >
-                <md-icon slot="icon">${this.isAutoRefresh ? 'pause' : 'play_arrow'}</md-icon>
-                ${this.isAutoRefresh ? 'Pause' : 'Auto'}
               </md-text-button>
             </div>
           </div>
@@ -465,7 +461,7 @@ export class DebugView extends LitElement {
               <md-circular-progress indeterminate></md-circular-progress>
               <span>Loading debug data...</span>
             </div>
-          ` : this.renderAppState()}
+          ` : this.#renderAppState()}
         </md-outlined-card>
       </div>
       
@@ -474,14 +470,14 @@ export class DebugView extends LitElement {
           <div class="section-header">
             <h3>Debug Logs</h3>
             <div class="section-controls">
-              <md-text-button @click=${this.handleClearLogs}>
+              <md-text-button @click=${this.#handleClearLogs}>
                 <md-icon slot="icon">clear_all</md-icon>
                 Clear Logs
               </md-text-button>
             </div>
           </div>
           
-          ${this.renderLogs()}
+          ${this.#renderLogs()}
         </md-outlined-card>
       </div>
     `;
