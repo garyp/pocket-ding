@@ -13,7 +13,9 @@
     "test": "vitest run",
     "test:unit": "vitest run src/test/unit",
     "test:integration": "vitest run src/test/integration",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:playwright": "playwright test",
+    "test:playwright:debug": "playwright test --debug"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.2",

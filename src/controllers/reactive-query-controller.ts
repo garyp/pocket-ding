@@ -1,5 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { liveQuery } from 'dexie';
+import { DebugService } from '../services/debug-service';
 
 /**
  * Reactive controller that wraps Dexie liveQuery to automatically update Lit components
@@ -21,6 +22,7 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
   #value: T | undefined = undefined;
   #loading = true;
   #error: Error | undefined = undefined;
+  #loadingTimeout: ReturnType<typeof setTimeout> | undefined = undefined;
 
   constructor(
     host: ReactiveControllerHost, 
@@ -109,11 +111,12 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
     try {
       this.#loading = true;
       this.#error = undefined;
+      this.#clearLoadingTimeout();
       this.#host.requestUpdate();
 
       // Get current dependencies and create query function with them
       const dependencies = this.#dependencyFn ? this.#dependencyFn() : ([] as unknown as Args);
-      
+
       // Don't run query if any dependency is null or undefined
       const hasValidDependencies = dependencies.every(dep => dep != null);
       if (!hasValidDependencies) {
@@ -124,29 +127,77 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
         this.#host.requestUpdate();
         return;
       }
-      
-      const queryWithDeps = () => this.#queryFn(...(dependencies as Args));
+
+      // Set up timeout to prevent infinite loading state
+      this.#loadingTimeout = setTimeout(() => {
+        if (this.#loading) {
+          DebugService.logWarning(
+            'app',
+            `ReactiveQueryController: Query timed out after 5 seconds in ${this.#host.constructor.name}`,
+            { dependencies, queryFn: this.#queryFn.toString().substring(0, 100) }
+          );
+          this.#error = new Error('Query timed out - database query did not respond within 5 seconds');
+          this.#loading = false;
+          this.#host.requestUpdate();
+        }
+      }, 5000); // 5 second timeout
+
+      const queryWithDeps = () => {
+        try {
+          return this.#queryFn(...(dependencies as Args));
+        } catch (error) {
+          DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Query function threw error');
+          throw error;
+        }
+      };
 
       // Wrap the raw query function with liveQuery to make it reactive
       const observable = liveQuery(queryWithDeps);
+
+      // Add additional safety check - if subscription doesn't call next() within a reasonable time,
+      // we might have a stalled liveQuery subscription
+      let subscriptionStarted = false;
+
       this.#subscription = observable.subscribe({
         next: (value: T) => {
+          subscriptionStarted = true;
+          this.#clearLoadingTimeout();
           this.#value = value;
           this.#loading = false;
           this.#error = undefined;
           this.#host.requestUpdate();
         },
         error: (error: Error) => {
+          subscriptionStarted = true;
+          this.#clearLoadingTimeout();
           this.#error = error;
           this.#loading = false;
-          console.error('ReactiveQueryController error:', error);
+          DebugService.logError(error, 'app', 'liveQuery subscription error');
           this.#host.requestUpdate();
         }
       });
+
+      // Additional safety check: if liveQuery subscription never starts, we have a deeper issue
+      setTimeout(() => {
+        if (this.#loading && !subscriptionStarted) {
+          DebugService.logError(
+            new Error('liveQuery subscription never started - this may indicate a database connection issue'),
+            'app',
+            `Subscription failed in ${this.#host.constructor.name}`,
+            { dependencies }
+          );
+          this.#clearLoadingTimeout();
+          this.#error = new Error('Database subscription failed to initialize - this may indicate a database connection issue');
+          this.#loading = false;
+          this.#host.requestUpdate();
+        }
+      }, 2000); // Check after 2 seconds if subscription has started
+
     } catch (error) {
+      this.#clearLoadingTimeout();
       this.#error = error instanceof Error ? error : new Error(String(error));
       this.#loading = false;
-      console.error('ReactiveQueryController subscribe error:', error);
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Subscribe method error');
       this.#host.requestUpdate();
     }
   }
@@ -162,7 +213,15 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
     return true;
   }
 
+  #clearLoadingTimeout(): void {
+    if (this.#loadingTimeout) {
+      clearTimeout(this.#loadingTimeout);
+      this.#loadingTimeout = undefined;
+    }
+  }
+
   #unsubscribe(): void {
+    this.#clearLoadingTimeout();
     if (this.#subscription) {
       this.#subscription.unsubscribe();
       this.#subscription = undefined;

@@ -83,6 +83,14 @@ export class BookmarkReader extends LitElement {
     return this.#bookmarkQuery.loading || this.#readProgressQuery.loading || this.#assetsQuery.loading;
   }
 
+  get hasDataError(): boolean {
+    return !!(this.#bookmarkQuery.error || this.#readProgressQuery.error || this.#assetsQuery.error);
+  }
+
+  get dataError(): Error | undefined {
+    return this.#bookmarkQuery.error || this.#readProgressQuery.error || this.#assetsQuery.error;
+  }
+
   get defaultContentSource(): ContentSourceOption | null {
     if (!this.availableContentSources.length) return null;
     
@@ -1373,6 +1381,21 @@ export class BookmarkReader extends LitElement {
         <div class="loading-container">
           <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
           <p>Loading article...</p>
+        </div>
+        ${this.renderInfoModal()}
+      `;
+    }
+
+    // Show error message if data queries failed
+    if (this.hasDataError) {
+      return html`
+        <div class="error-message">
+          <h3>Failed to load bookmark data</h3>
+          <p>There was an error loading the bookmark information.</p>
+          <details>
+            <summary>Error details</summary>
+            <p>${this.dataError?.message || 'Unknown error'}</p>
+          </details>
         </div>
         ${this.renderInfoModal()}
       `;

@@ -95,13 +95,57 @@ export class PocketDingDatabase extends Dexie {
 
 export const db = new PocketDingDatabase();
 
+// Add error handling for database initialization
+db.on('close', () => {
+  DebugService.logInfo('database', 'Database connection closed');
+});
+
+// Test database connectivity on module load
+db.open().catch(error => {
+  DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'database', 'Failed to open database on initialization');
+});
+
 export class DatabaseService {
+  /**
+   * Check if the database is healthy and accessible
+   */
+  static async checkDatabaseHealth(): Promise<{ healthy: boolean; error?: string; version?: number }> {
+    try {
+      // Try to open the database and do a simple operation
+      const isOpen = db.isOpen();
+      if (!isOpen) {
+        await db.open();
+      }
+
+      // Test a simple read operation
+      await db.bookmarks.count();
+
+      return {
+        healthy: true,
+        version: db.verno
+      };
+    } catch (error) {
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'database', 'Database health check failed');
+      return {
+        healthy: false,
+        error: error instanceof Error ? error.message : 'Unknown database error'
+      };
+    }
+  }
+
   static async saveBookmark(bookmark: LocalBookmark): Promise<void> {
     await db.bookmarks.put(bookmark);
   }
 
   static async getBookmark(id: number): Promise<LocalBookmark | undefined> {
-    return await db.bookmarks.get(id);
+    try {
+      const bookmark = await db.bookmarks.get(id);
+      DebugService.logInfo('database', `getBookmark(${id}): found=${!!bookmark}, title="${bookmark?.title || 'N/A'}"`);
+      return bookmark;
+    } catch (error) {
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'database', `Failed to retrieve bookmark ${id}`);
+      throw new Error(`Failed to retrieve bookmark ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   static async getAllBookmarks(): Promise<LocalBookmark[]> {
