@@ -29,6 +29,10 @@ let currentSyncService: SyncService | null = null;
 let syncInProgress = false;
 let currentSyncProgress: { current: number; total: number; phase: SyncPhase } | null = null;
 
+// Service worker keepalive mechanisms
+let keepalivePort: MessagePort | null = null;
+let keepaliveInterval: number | null = null;
+
 // Track service worker lifecycle for debugging sync issues
 logInfo('serviceWorker', 'Service worker script loaded/reloaded');
 
@@ -42,6 +46,57 @@ self.addEventListener('activate', () => {
 });
 
 // Service worker will automatically handle fetch events via Workbox
+
+/**
+ * Start keepalive mechanism to prevent service worker termination during sync
+ */
+function startKeepalive() {
+  if (keepaliveInterval) return; // Already active
+
+  logInfo('serviceWorker', 'Starting keepalive mechanism during sync');
+
+  // Use multiple keepalive strategies:
+
+  // Strategy 1: Periodic self-messaging
+  keepaliveInterval = setInterval(() => {
+    logInfo('serviceWorker', 'Keepalive heartbeat');
+  }, 10000) as unknown as number; // 10 second heartbeat
+
+  // Strategy 2: Create message channel to keep SW active
+  const channel = new MessageChannel();
+  keepalivePort = channel.port1;
+
+  // Send periodic messages through the channel
+  const channelInterval = setInterval(() => {
+    if (keepalivePort) {
+      keepalivePort.postMessage({ type: 'keepalive' });
+    }
+  }, 15000); // 15 second channel keepalive
+
+  // Store channel interval for cleanup
+  (keepalivePort as any).intervalId = channelInterval;
+}
+
+/**
+ * Stop keepalive mechanism when sync completes
+ */
+function stopKeepalive() {
+  if (keepaliveInterval) {
+    clearInterval(keepaliveInterval);
+    keepaliveInterval = null;
+    logInfo('serviceWorker', 'Stopped keepalive heartbeat');
+  }
+
+  if (keepalivePort) {
+    const intervalId = (keepalivePort as any).intervalId;
+    if (intervalId) {
+      clearInterval(intervalId);
+    }
+    keepalivePort.close();
+    keepalivePort = null;
+    logInfo('serviceWorker', 'Closed keepalive message port');
+  }
+}
 
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
@@ -95,6 +150,9 @@ async function performSync(fullSync = false): Promise<void> {
       await DatabaseService.resetSyncRetryCount();
     }
     
+    // Start keepalive to prevent service worker termination during sync
+    startKeepalive();
+
     // Create sync service with progress callback
     currentSyncService = new SyncService(async (progress) => {
       currentSyncProgress = progress;
@@ -104,7 +162,7 @@ async function performSync(fullSync = false): Promise<void> {
         progress.phase
       ));
     });
-    
+
     await broadcastToClients(SyncMessages.syncStatus('syncing'));
     
     const result = await currentSyncService.performSync(settings);
@@ -150,6 +208,9 @@ async function performSync(fullSync = false): Promise<void> {
       }
     }
   } finally {
+    // Stop keepalive mechanism
+    stopKeepalive();
+
     syncInProgress = false;
     currentSyncService = null;
     currentSyncProgress = null;
@@ -165,8 +226,16 @@ self.addEventListener('message', async (event) => {
   switch (message.type) {
     case 'REQUEST_SYNC':
       if (message.immediate) {
-        // For immediate sync, try to perform directly
-        await performSync(message.fullSync);
+        // For immediate sync, try to perform directly and prevent SW termination
+        const syncPromise = performSync(message.fullSync);
+
+        // Use waitUntil to prevent service worker termination
+        if ('waitUntil' in event && typeof (event as any).waitUntil === 'function') {
+          (event as any).waitUntil(syncPromise);
+          logInfo('serviceWorker', 'Using waitUntil to prevent SW termination during sync');
+        }
+
+        await syncPromise;
       } else {
         // For background sync, register sync event
         await (self.registration as any).sync?.register('sync-bookmarks');
@@ -177,6 +246,10 @@ self.addEventListener('message', async (event) => {
       if (currentSyncService) {
         logInfo('sync', `Received CANCEL_SYNC message: ${message.reason}`);
         currentSyncService.cancelSync();
+
+        // Stop keepalive when sync is cancelled
+        stopKeepalive();
+
         await broadcastToClients(SyncMessages.syncStatus('cancelled'));
       } else {
         logInfo('sync', 'Received CANCEL_SYNC but no sync is currently active');
