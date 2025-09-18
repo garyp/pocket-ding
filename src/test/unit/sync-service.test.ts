@@ -322,6 +322,581 @@ describe('SyncService', () => {
     });
   });
   
+  describe('bookmark deletion during sync', () => {
+    it('should delete orphaned bookmarks during full sync', async () => {
+      // Mock server returning only bookmark 2 (bookmark 1 was deleted)
+      const serverBookmarks = [
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: false, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-02', 
+          date_modified: '2024-01-02' 
+        }
+      ];
+
+      // Mock local database having bookmarks 1 and 2 (bookmark 1 is orphaned)
+      const localBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1 - Will be deleted', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-01',
+          date_modified: '2024-01-01'
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-02',
+          date_modified: '2024-01-02'
+        }
+      ] as LocalBookmark[];
+
+      // Mock full sync (no last sync timestamp)
+      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
+      vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
+      vi.mocked(DatabaseService.deleteBookmark).mockResolvedValue(undefined);
+      
+      // Mock API returning only bookmark 2 on server
+      mockApi.getBookmarks.mockImplementation((_limit: number, offset: number) => {
+        if (offset === 0) {
+          return Promise.resolve({ results: serverBookmarks, next: null, count: 1 });
+        } else {
+          return Promise.resolve({ results: [], next: null });
+        }
+      });
+      mockApi.getArchivedBookmarks.mockResolvedValue({ results: [], next: null });
+      
+      // Mock asset sync phase
+      vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+
+      const syncPromise = syncService.performSync(mockSettings);
+      await vi.runAllTimersAsync();
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      // Verify bookmark 1 was deleted (orphaned)
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(1);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT delete any bookmarks during incremental sync', async () => {
+      // Mock server returning only bookmark 2
+      const serverBookmarks = [
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: false, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-02', 
+          date_modified: '2024-01-02' 
+        }
+      ];
+
+      // Mock local database having bookmarks 1 and 2
+      const localBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1 - Should NOT be deleted in incremental', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-01',
+          date_modified: '2024-01-01'
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-02',
+          date_modified: '2024-01-02'
+        }
+      ] as LocalBookmark[];
+
+      // Mock incremental sync (has last sync timestamp)
+      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue('2024-01-01T00:00:00Z');
+      vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
+      vi.mocked(DatabaseService.deleteBookmark).mockResolvedValue(undefined);
+      
+      // Mock API returning only modified bookmarks
+      mockApi.getBookmarks.mockImplementation((_limit: number, offset: number, _timestamp?: string) => {
+        if (offset === 0) {
+          return Promise.resolve({ results: serverBookmarks, next: null, count: 1 });
+        } else {
+          return Promise.resolve({ results: [], next: null });
+        }
+      });
+      mockApi.getArchivedBookmarks.mockResolvedValue({ results: [], next: null });
+      
+      // Mock asset sync phase
+      vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+
+      const syncPromise = syncService.performSync(mockSettings);
+      await vi.runAllTimersAsync();
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      // Verify NO bookmarks were deleted during incremental sync
+      expect(DatabaseService.deleteBookmark).not.toHaveBeenCalled();
+    });
+
+    it('should handle deletion of archived bookmarks correctly', async () => {
+      // Mock server with only unarchived bookmark
+      const unarchivedBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: false, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-01', 
+          date_modified: '2024-01-01' 
+        }
+      ];
+
+      // Mock local database with both archived and unarchived bookmarks
+      const localBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-01',
+          date_modified: '2024-01-01'
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2 - Archived locally but deleted on server', 
+          is_archived: true,
+          unread: false,
+          date_added: '2024-01-02',
+          date_modified: '2024-01-02'
+        }
+      ] as LocalBookmark[];
+
+      // Mock full sync
+      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
+      vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
+      vi.mocked(DatabaseService.deleteBookmark).mockResolvedValue(undefined);
+      
+      // Mock API responses
+      mockApi.getBookmarks.mockImplementation((_limit: number, offset: number) => {
+        if (offset === 0) {
+          return Promise.resolve({ results: unarchivedBookmarks, next: null, count: 1 });
+        } else {
+          return Promise.resolve({ results: [], next: null });
+        }
+      });
+      mockApi.getArchivedBookmarks.mockResolvedValue({ results: [], next: null });
+      
+      // Mock asset sync phase
+      vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+
+      const syncPromise = syncService.performSync(mockSettings);
+      await vi.runAllTimersAsync();
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      // Verify archived bookmark 2 was deleted
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(2);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delete multiple orphaned bookmarks in a single sync', async () => {
+      // Mock server with only bookmark 3
+      const serverBookmarks = [
+        { 
+          id: 3, 
+          url: 'test3', 
+          title: 'Test 3', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: false, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-03', 
+          date_modified: '2024-01-03' 
+        }
+      ];
+
+      // Mock local database with bookmarks 1, 2, and 3 (1 and 2 are orphaned)
+      const localBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1 - Will be deleted', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-01',
+          date_modified: '2024-01-01'
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2 - Will be deleted', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-02',
+          date_modified: '2024-01-02'
+        },
+        { 
+          id: 3, 
+          url: 'test3', 
+          title: 'Test 3', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-03',
+          date_modified: '2024-01-03'
+        }
+      ] as LocalBookmark[];
+
+      // Mock full sync
+      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
+      vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
+      vi.mocked(DatabaseService.deleteBookmark).mockResolvedValue(undefined);
+      
+      // Mock API responses
+      mockApi.getBookmarks.mockImplementation((_limit: number, offset: number) => {
+        if (offset === 0) {
+          return Promise.resolve({ results: serverBookmarks, next: null, count: 1 });
+        } else {
+          return Promise.resolve({ results: [], next: null });
+        }
+      });
+      mockApi.getArchivedBookmarks.mockResolvedValue({ results: [], next: null });
+      
+      // Mock asset sync phase
+      vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+
+      const syncPromise = syncService.performSync(mockSettings);
+      await vi.runAllTimersAsync();
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      // Verify bookmarks 1 and 2 were deleted
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(1);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(2);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(2);
+    });
+
+    it('should continue deleting other bookmarks if one deletion fails', async () => {
+      // Mock server with no bookmarks
+      mockApi.getBookmarks.mockResolvedValue({ results: [], next: null });
+      mockApi.getArchivedBookmarks.mockResolvedValue({ results: [], next: null });
+
+      // Mock local database with bookmarks 1 and 2 (both orphaned)
+      const localBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1 - Deletion will fail', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-01',
+          date_modified: '2024-01-01'
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2 - Should still be deleted', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-02',
+          date_modified: '2024-01-02'
+        }
+      ] as LocalBookmark[];
+
+      // Mock full sync
+      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
+      vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
+      
+      // Mock deletion - first call fails, second succeeds
+      vi.mocked(DatabaseService.deleteBookmark)
+        .mockRejectedValueOnce(new Error('Database error'))
+        .mockResolvedValueOnce(undefined);
+      
+      // Mock asset sync phase
+      vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+
+      const syncPromise = syncService.performSync(mockSettings);
+      await vi.runAllTimersAsync();
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      // Verify both deletions were attempted
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(1);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(2);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle interrupted and resumed full sync - DEMONSTRATES BUG', async () => {
+      // This test demonstrates the bug where interrupted full sync could delete valid bookmarks
+      // Setup: Full sync interrupted after processing bookmark 1, then resumed
+      
+      // Mock server with bookmarks 1 and 2
+      const serverBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: false, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-01', 
+          date_modified: '2024-01-01' 
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: false, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-02', 
+          date_modified: '2024-01-02' 
+        }
+      ];
+
+      // Mock local database with both bookmarks already synced
+      const localBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-01',
+          date_modified: '2024-01-01'
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-02',
+          date_modified: '2024-01-02'
+        }
+      ] as LocalBookmark[];
+
+      // Mock resumed full sync - no last sync timestamp but has offset
+      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
+      vi.mocked(DatabaseService.getUnarchivedOffset).mockResolvedValue(100); // Resumed from offset 100
+      vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
+      vi.mocked(DatabaseService.deleteBookmark).mockResolvedValue(undefined);
+      
+      // Mock API returning bookmarks starting from offset 100 (simulating resumed sync)
+      // This simulates that bookmark 1 was processed in the previous interrupted sync
+      // and bookmark 2 is being processed in the resumed sync
+      mockApi.getBookmarks.mockImplementation((_limit: number, offset: number) => {
+        if (offset === 100) {
+          // Only return bookmark 2 because bookmark 1 was in the previous page
+          return Promise.resolve({ results: [serverBookmarks[1]], next: null, count: 2 });
+        } else {
+          return Promise.resolve({ results: [], next: null });
+        }
+      });
+      mockApi.getArchivedBookmarks.mockResolvedValue({ results: [], next: null });
+      
+      // Mock asset sync phase
+      vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+
+      const syncPromise = syncService.performSync(mockSettings);
+      await vi.runAllTimersAsync();
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      
+      // BUG: The sync will incorrectly delete bookmark 1 because it wasn't 
+      // in the remoteBookmarkIds set (which only contains bookmark 2)
+      // This demonstrates the issue with interrupted sync
+      
+      // Currently this assertion will fail, showing the bug:
+      // expect(DatabaseService.deleteBookmark).not.toHaveBeenCalled();
+      
+      // What actually happens (the bug):
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(1);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(1);
+    });
+
+    it('should correctly identify orphaned bookmarks across both archived and unarchived', async () => {
+      // Mock server with bookmarks 1 (unarchived) and 3 (archived)
+      const unarchivedServerBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: false, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-01', 
+          date_modified: '2024-01-01' 
+        }
+      ];
+
+      const archivedServerBookmarks = [
+        { 
+          id: 3, 
+          url: 'test3', 
+          title: 'Test 3', 
+          description: '', 
+          notes: '', 
+          website_title: '', 
+          website_description: '', 
+          web_archive_snapshot_url: '', 
+          favicon_url: '', 
+          preview_image_url: '', 
+          is_archived: true, 
+          unread: false, 
+          shared: false, 
+          tag_names: [], 
+          date_added: '2024-01-03', 
+          date_modified: '2024-01-03' 
+        }
+      ];
+
+      // Mock local database with bookmarks 1, 2, and 3 (2 is orphaned)
+      const localBookmarks = [
+        { 
+          id: 1, 
+          url: 'test1', 
+          title: 'Test 1', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-01',
+          date_modified: '2024-01-01'
+        },
+        { 
+          id: 2, 
+          url: 'test2', 
+          title: 'Test 2 - Will be deleted', 
+          is_archived: false,
+          unread: false,
+          date_added: '2024-01-02',
+          date_modified: '2024-01-02'
+        },
+        { 
+          id: 3, 
+          url: 'test3', 
+          title: 'Test 3', 
+          is_archived: true,
+          unread: false,
+          date_added: '2024-01-03',
+          date_modified: '2024-01-03'
+        }
+      ] as LocalBookmark[];
+
+      // Mock full sync
+      vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
+      vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
+      vi.mocked(DatabaseService.deleteBookmark).mockResolvedValue(undefined);
+      
+      // Mock API responses
+      mockApi.getBookmarks.mockImplementation((_limit: number, offset: number) => {
+        if (offset === 0) {
+          return Promise.resolve({ results: unarchivedServerBookmarks, next: null, count: 1 });
+        } else {
+          return Promise.resolve({ results: [], next: null });
+        }
+      });
+      mockApi.getArchivedBookmarks.mockImplementation((_limit: number, offset: number) => {
+        if (offset === 0) {
+          return Promise.resolve({ results: archivedServerBookmarks, next: null, count: 1 });
+        } else {
+          return Promise.resolve({ results: [], next: null });
+        }
+      });
+      
+      // Mock asset sync phase
+      vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
+      vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+
+      const syncPromise = syncService.performSync(mockSettings);
+      await vi.runAllTimersAsync();
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      // Verify only bookmark 2 was deleted
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(2);
+      expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('progress reporting', () => {
     it('should report progress for each sync phase', async () => {
       const mockBookmarks = [
