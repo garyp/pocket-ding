@@ -59,11 +59,30 @@ export class SyncService {
       // Get last sync timestamp for incremental sync
       const lastSyncTimestamp = await DatabaseService.getLastSyncTimestamp();
       const syncStartTime = new Date().toISOString();
+      const isFullSync = !lastSyncTimestamp;
 
-      logInfo('sync', lastSyncTimestamp ? 'Starting incremental sync' : 'Starting full sync', {
+      logInfo('sync', isFullSync ? 'Starting full sync' : 'Starting incremental sync', {
         lastSyncTimestamp,
         syncStartTime
       });
+
+      // For a fresh full sync (not resumed), clear any previously tracked IDs
+      if (isFullSync) {
+        const unarchivedOffset = await DatabaseService.getUnarchivedOffset();
+        const archivedOffset = await DatabaseService.getArchivedOffset();
+        const isResumedFullSync = unarchivedOffset > 0 || archivedOffset > 0;
+        
+        if (!isResumedFullSync) {
+          // Fresh full sync - clear any old tracked IDs
+          await DatabaseService.clearSyncedIds();
+          logInfo('sync', 'Starting fresh full sync - cleared previously tracked IDs');
+        } else {
+          logInfo('sync', 'Resuming interrupted full sync', {
+            unarchivedOffset,
+            archivedOffset
+          });
+        }
+      }
 
       // Sync will start with first phase (bookmarks) - no initial progress report needed
 
@@ -74,12 +93,18 @@ export class SyncService {
       const archivedResult = await this.#syncArchivedBookmarks(api, lastSyncTimestamp || undefined);
 
       // After syncing both unarchived and archived bookmarks, handle deletions (only for full sync)
-      if (!lastSyncTimestamp) {
+      if (isFullSync) {
         await this.#deleteOrphanedBookmarks(unarchivedResult.remoteBookmarkIds, archivedResult.remoteBookmarkIds);
       }
 
       // End of bookmark phases: Update timestamp (also resets offsets)
       await DatabaseService.setLastSyncTimestamp(syncStartTime);
+      
+      // Clear synced IDs after successful full sync completion
+      if (isFullSync) {
+        await DatabaseService.clearSyncedIds();
+        logInfo('sync', 'Full sync completed - cleared tracked IDs');
+      }
 
       // Phase 3: Sync assets for bookmarks needing asset sync
       await this.#syncBookmarkAssets(api);
@@ -138,7 +163,25 @@ export class SyncService {
     let processedCount = 0;
     let totalBookmarksFound = 0;
     const limit = 100; // Page size for pagination
-    const remoteBookmarkIds = new Set<number>();
+    
+    // Load previously synced IDs if resuming a full sync
+    let remoteBookmarkIds: Set<number>;
+    if (!lastSyncTimestamp) {
+      // Full sync - load any previously tracked IDs (for resumed sync)
+      remoteBookmarkIds = isArchived 
+        ? await DatabaseService.getSyncedArchivedIds()
+        : await DatabaseService.getSyncedUnarchivedIds();
+      
+      if (remoteBookmarkIds.size > 0) {
+        logInfo('sync', `Loaded ${remoteBookmarkIds.size} previously synced ${bookmarkType} bookmark IDs`, {
+          bookmarkType,
+          previouslySyncedCount: remoteBookmarkIds.size
+        });
+      }
+    } else {
+      // Incremental sync - we don't track IDs
+      remoteBookmarkIds = new Set<number>();
+    }
 
     logInfo('sync', `Starting ${bookmarkType} bookmarks sync`, {
       resumeOffset: offset,
@@ -196,6 +239,19 @@ export class SyncService {
           await DatabaseService.setArchivedOffset(offset);
         } else {
           await DatabaseService.setUnarchivedOffset(offset);
+        }
+        
+        // Persist the tracked IDs after each page during full sync
+        if (!lastSyncTimestamp && remoteBookmarkIds.size > 0) {
+          if (isArchived) {
+            await DatabaseService.updateSyncedArchivedIds(remoteBookmarkIds);
+          } else {
+            await DatabaseService.updateSyncedUnarchivedIds(remoteBookmarkIds);
+          }
+          logInfo('sync', `Persisted ${remoteBookmarkIds.size} ${bookmarkType} bookmark IDs`, {
+            bookmarkType,
+            totalSyncedIds: remoteBookmarkIds.size
+          });
         }
 
         // Yield control periodically
