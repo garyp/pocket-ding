@@ -65,6 +65,12 @@ describe('SyncService', () => {
     vi.mocked(DatabaseService.saveAsset).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.clearAssetContent).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.getBookmark).mockResolvedValue(undefined);
+    // New persistent ID tracking mocks
+    vi.mocked(DatabaseService.getSyncedUnarchivedIds).mockResolvedValue(new Set());
+    vi.mocked(DatabaseService.getSyncedArchivedIds).mockResolvedValue(new Set());
+    vi.mocked(DatabaseService.updateSyncedUnarchivedIds).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.updateSyncedArchivedIds).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.clearSyncedIds).mockResolvedValue(undefined);
 
     // Reset all database mocks
     vi.clearAllMocks();
@@ -679,8 +685,8 @@ describe('SyncService', () => {
       expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle interrupted and resumed full sync - DEMONSTRATES BUG', async () => {
-      // This test demonstrates the bug where interrupted full sync could delete valid bookmarks
+    it('should handle interrupted and resumed full sync correctly with persistent ID tracking', async () => {
+      // This test verifies the fix for interrupted sync using persistent ID tracking
       // Setup: Full sync interrupted after processing bookmark 1, then resumed
       
       // Mock server with bookmarks 1 and 2
@@ -748,8 +754,16 @@ describe('SyncService', () => {
       // Mock resumed full sync - no last sync timestamp but has offset
       vi.mocked(DatabaseService.getLastSyncTimestamp).mockResolvedValue(null);
       vi.mocked(DatabaseService.getUnarchivedOffset).mockResolvedValue(100); // Resumed from offset 100
+      vi.mocked(DatabaseService.getArchivedOffset).mockResolvedValue(0);
       vi.mocked(DatabaseService.getAllBookmarks).mockResolvedValue(localBookmarks);
       vi.mocked(DatabaseService.deleteBookmark).mockResolvedValue(undefined);
+      
+      // Mock persistent ID tracking - bookmark 1 was tracked from previous interrupted sync
+      vi.mocked(DatabaseService.getSyncedUnarchivedIds).mockResolvedValue(new Set([1]));
+      vi.mocked(DatabaseService.getSyncedArchivedIds).mockResolvedValue(new Set());
+      vi.mocked(DatabaseService.updateSyncedUnarchivedIds).mockResolvedValue(undefined);
+      vi.mocked(DatabaseService.updateSyncedArchivedIds).mockResolvedValue(undefined);
+      vi.mocked(DatabaseService.clearSyncedIds).mockResolvedValue(undefined);
       
       // Mock API returning bookmarks starting from offset 100 (simulating resumed sync)
       // This simulates that bookmark 1 was processed in the previous interrupted sync
@@ -774,16 +788,14 @@ describe('SyncService', () => {
 
       expect(result.success).toBe(true);
       
-      // BUG: The sync will incorrectly delete bookmark 1 because it wasn't 
-      // in the remoteBookmarkIds set (which only contains bookmark 2)
-      // This demonstrates the issue with interrupted sync
+      // FIX VERIFIED: With persistent ID tracking, bookmark 1 should NOT be deleted
+      // because it was tracked from the previous interrupted sync
+      expect(DatabaseService.deleteBookmark).not.toHaveBeenCalled();
       
-      // Currently this assertion will fail, showing the bug:
-      // expect(DatabaseService.deleteBookmark).not.toHaveBeenCalled();
-      
-      // What actually happens (the bug):
-      expect(DatabaseService.deleteBookmark).toHaveBeenCalledWith(1);
-      expect(DatabaseService.deleteBookmark).toHaveBeenCalledTimes(1);
+      // Verify that synced IDs were properly managed
+      expect(DatabaseService.getSyncedUnarchivedIds).toHaveBeenCalled();
+      expect(DatabaseService.updateSyncedUnarchivedIds).toHaveBeenCalled();
+      expect(DatabaseService.clearSyncedIds).toHaveBeenCalled();
     });
 
     it('should correctly identify orphaned bookmarks across both archived and unarchived', async () => {
