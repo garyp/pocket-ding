@@ -11,14 +11,19 @@ import { logInfo, logError } from './sw-logger';
 declare const self: ServiceWorkerGlobalScope;
 
 // Workbox precaching
+logInfo('serviceWorker', 'Starting Workbox precaching...');
 precacheAndRoute(self.__WB_MANIFEST);
+logInfo('serviceWorker', 'Workbox precaching configured');
+
+logInfo('serviceWorker', 'Cleaning up outdated caches...');
 cleanupOutdatedCaches();
 
-// Handle navigation requests
+// Handle navigation requests with network first strategy
 registerRoute(
   new NavigationRoute(
     new NetworkFirst({
-      cacheName: 'navigations'
+      cacheName: 'navigations',
+      networkTimeoutSeconds: 3
     })
   )
 );
@@ -40,17 +45,46 @@ let keepaliveInterval: number | null = null;
 // Track service worker lifecycle for debugging sync issues
 logInfo('serviceWorker', 'Service worker script loaded/reloaded');
 
+// Force service worker update by changing content on each build
+const SW_BUILD_VERSION = __APP_VERSION__.buildTimestamp;
+logInfo('serviceWorker', `Service worker build version: ${SW_BUILD_VERSION}`);
+logInfo('serviceWorker', 'Full version info:', __APP_VERSION__);
+
 // Listen for service worker lifecycle events
 self.addEventListener('install', () => {
-  logInfo('serviceWorker', 'Service worker installing');
+  logInfo('serviceWorker', `Installing new service worker version: ${SW_BUILD_VERSION}`);
+  logInfo('serviceWorker', 'Install event triggered - new service worker installing');
+
   // Skip waiting to activate immediately
+  logInfo('serviceWorker', 'Calling skipWaiting() for immediate activation');
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  logInfo('serviceWorker', 'Service worker activated');
+  logInfo('serviceWorker', `Activating service worker version: ${SW_BUILD_VERSION}`);
+
   // Take control of all clients immediately
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      logInfo('serviceWorker', 'Claiming all clients...');
+      await self.clients.claim();
+
+      // Log all controlled clients
+      const clients = await self.clients.matchAll({ type: 'window' });
+      logInfo('serviceWorker', `Now controlling ${clients.length} client(s)`);
+
+      // Notify clients about the new version
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'SW_ACTIVATED',
+          version: __APP_VERSION__,
+          timestamp: Date.now()
+        });
+      });
+
+      logInfo('serviceWorker', 'Service worker activation complete');
+    })()
+  );
 });
 
 // Service worker will automatically handle fetch events via Workbox
@@ -516,9 +550,18 @@ self.addEventListener('activate', (event) => {
 });
 
 /**
- * Track user engagement for periodic sync
+ * Track user engagement for periodic sync and log important fetch events
  */
-self.addEventListener('fetch', (_event) => {
-  // Browser automatically tracks engagement, but we can add custom logic here if needed
-  // For now, just let Workbox handle the fetch
+self.addEventListener('fetch', (event) => {
+  // Log main app file requests to track cache behavior
+  const url = event.request.url;
+  const isMainApp = url.includes('/main-') && url.endsWith('.js');
+  const isServiceWorker = url.endsWith('/sw.js');
+  const isManifest = url.endsWith('/manifest.webmanifest');
+
+  if (isMainApp || isServiceWorker || isManifest) {
+    logInfo('serviceWorker', `Fetch request for: ${url.split('/').pop()}`);
+  }
+
+  // Let Workbox handle the actual fetch
 });
