@@ -162,6 +162,13 @@ export class DatabaseService {
   }
 
   static async deleteBookmark(id: number): Promise<void> {
+    // Delete all associated assets first
+    await db.assets.where('bookmark_id').equals(id).delete();
+    
+    // Delete read progress
+    await db.readProgress.where('bookmark_id').equals(id).delete();
+    
+    // Finally delete the bookmark itself
     await db.bookmarks.delete(id);
   }
 
