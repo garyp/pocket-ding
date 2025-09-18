@@ -68,10 +68,15 @@ export class SyncService {
       // Sync will start with first phase (bookmarks) - no initial progress report needed
 
       // Phase 1: Sync unarchived bookmarks
-      const unarchivedProcessed = await this.#syncUnarchivedBookmarks(api, lastSyncTimestamp || undefined);
+      const unarchivedResult = await this.#syncUnarchivedBookmarks(api, lastSyncTimestamp || undefined);
 
       // Phase 2: Sync archived bookmarks
-      const archivedProcessed = await this.#syncArchivedBookmarks(api, lastSyncTimestamp || undefined);
+      const archivedResult = await this.#syncArchivedBookmarks(api, lastSyncTimestamp || undefined);
+
+      // After syncing both unarchived and archived bookmarks, handle deletions (only for full sync)
+      if (!lastSyncTimestamp) {
+        await this.#deleteOrphanedBookmarks(unarchivedResult.remoteBookmarkIds, archivedResult.remoteBookmarkIds);
+      }
 
       // End of bookmark phases: Update timestamp (also resets offsets)
       await DatabaseService.setLastSyncTimestamp(syncStartTime);
@@ -87,8 +92,8 @@ export class SyncService {
 
       logInfo('sync', 'Sync completed successfully', {
         processed: this.#processedCount,
-        unarchived: unarchivedProcessed,
-        archived: archivedProcessed
+        unarchived: unarchivedResult.processedCount,
+        archived: archivedResult.processedCount
       });
 
       return {
@@ -127,12 +132,13 @@ export class SyncService {
     bookmarkType: 'unarchived' | 'archived',
     phase: SyncPhase,
     lastSyncTimestamp?: string
-  ): Promise<number> {
+  ): Promise<{ processedCount: number; remoteBookmarkIds: Set<number> }> {
     const isArchived = bookmarkType === 'archived';
     let offset = isArchived ? await DatabaseService.getArchivedOffset() : await DatabaseService.getUnarchivedOffset();
     let processedCount = 0;
     let totalBookmarksFound = 0;
     const limit = 100; // Page size for pagination
+    const remoteBookmarkIds = new Set<number>();
 
     logInfo('sync', `Starting ${bookmarkType} bookmarks sync`, {
       resumeOffset: offset,
@@ -161,6 +167,11 @@ export class SyncService {
         for (const remoteBookmark of remoteBookmarks) {
           if (this.#abortController?.signal.aborted) {
             throw new Error('Sync cancelled');
+          }
+
+          // Track all remote bookmark IDs for deletion comparison (only during full sync)
+          if (!lastSyncTimestamp) {
+            remoteBookmarkIds.add(remoteBookmark.id);
           }
 
           const wasProcessed = await this.#processBookmark(remoteBookmark, localBookmarksMap);
@@ -204,10 +215,11 @@ export class SyncService {
     logInfo('sync', `Completed ${bookmarkType} bookmarks sync`, {
       processedCount,
       totalBookmarksFound,
-      finalOffset: offset
+      finalOffset: offset,
+      remoteBookmarkIds: remoteBookmarkIds.size
     });
 
-    return processedCount;
+    return { processedCount, remoteBookmarkIds };
   }
 
   /**
@@ -243,14 +255,14 @@ export class SyncService {
   /**
    * Phase 1: Sync unarchived bookmarks with offset resumption
    */
-  async #syncUnarchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<number> {
+  async #syncUnarchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<{ processedCount: number; remoteBookmarkIds: Set<number> }> {
     return await this.#syncBookmarksWithPagination(api, 'unarchived', 'bookmarks', lastSyncTimestamp);
   }
 
   /**
    * Phase 2: Sync archived bookmarks with offset resumption
    */
-  async #syncArchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<number> {
+  async #syncArchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<{ processedCount: number; remoteBookmarkIds: Set<number> }> {
     return await this.#syncBookmarksWithPagination(api, 'archived', 'archived-bookmarks', lastSyncTimestamp);
   }
 
@@ -480,6 +492,70 @@ export class SyncService {
         logError('sync', 'Invalid API response format - expected array', new Error('API returned non-array response'));
       }
       // Don't throw - continue with other bookmarks
+    }
+  }
+
+  /**
+   * Delete local bookmarks that no longer exist on the server (only during full sync)
+   */
+  async #deleteOrphanedBookmarks(
+    unarchivedRemoteIds: Set<number>,
+    archivedRemoteIds: Set<number>
+  ): Promise<void> {
+    try {
+      // Combine all remote bookmark IDs
+      const allRemoteIds = new Set([...unarchivedRemoteIds, ...archivedRemoteIds]);
+
+      logInfo('sync', 'Checking for orphaned bookmarks to delete', {
+        remoteBookmarkCount: allRemoteIds.size,
+        unarchivedCount: unarchivedRemoteIds.size,
+        archivedCount: archivedRemoteIds.size
+      });
+
+      // Get all local bookmarks
+      const localBookmarks = await DatabaseService.getAllBookmarks();
+      
+      // Find bookmarks that exist locally but not remotely
+      const bookmarksToDelete = localBookmarks.filter(
+        localBookmark => !allRemoteIds.has(localBookmark.id)
+      );
+
+      if (bookmarksToDelete.length === 0) {
+        logInfo('sync', 'No orphaned bookmarks found to delete');
+        return;
+      }
+
+      logInfo('sync', `Found ${bookmarksToDelete.length} orphaned bookmarks to delete`, {
+        orphanedCount: bookmarksToDelete.length,
+        bookmarkIds: bookmarksToDelete.map(b => b.id)
+      });
+
+      // Delete each orphaned bookmark
+      let deletedCount = 0;
+      for (const bookmark of bookmarksToDelete) {
+        try {
+          await DatabaseService.deleteBookmark(bookmark.id);
+          deletedCount++;
+          logInfo('sync', `Deleted orphaned bookmark: ${bookmark.title}`, {
+            bookmarkId: bookmark.id,
+            title: bookmark.title,
+            url: bookmark.url
+          });
+        } catch (error) {
+          logError('sync', `Failed to delete orphaned bookmark ${bookmark.id}`, error);
+          // Continue with other deletions even if one fails
+        }
+      }
+
+      logInfo('sync', `Completed deletion of orphaned bookmarks`, {
+        attemptedDeletions: bookmarksToDelete.length,
+        successfulDeletions: deletedCount,
+        failedDeletions: bookmarksToDelete.length - deletedCount
+      });
+
+    } catch (error) {
+      logError('sync', 'Failed to delete orphaned bookmarks', error);
+      // Don't throw - we don't want deletion failures to break the sync
     }
   }
 
