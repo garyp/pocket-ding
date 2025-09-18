@@ -137,7 +137,7 @@ export async function waitForComponentReady<T extends HTMLElement>(
   };
   
   // Wait for updateComplete if it's a Lit component
-  if ('updateComplete' in component && typeof (component as any).updateComplete?.then === 'function') {
+  if (component && typeof component === 'object' && 'updateComplete' in component && typeof (component as any).updateComplete?.then === 'function') {
     await waitForComponent(async () => {
       // Advance timers before waiting for updateComplete
       if (mergedOptions.advanceTimers !== false) {

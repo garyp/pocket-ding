@@ -64,7 +64,10 @@ global.IntersectionObserver = function(_callback: IntersectionObserverCallback, 
   };
 } as any;
 
-// Mock IndexedDB
+// Setup fake IndexedDB for comprehensive database testing
+import 'fake-indexeddb/auto';
+
+// Additional IndexedDB globals that might be needed
 const mockIDBKeyRange = {
   bound: vi.fn(),
   only: vi.fn(),
@@ -72,10 +75,13 @@ const mockIDBKeyRange = {
   upperBound: vi.fn(),
 };
 
-Object.defineProperty(globalThis, 'IDBKeyRange', {
-  value: mockIDBKeyRange,
-  writable: true,
-});
+// Ensure IDBKeyRange is available for any tests that might use it directly
+if (!globalThis.IDBKeyRange) {
+  Object.defineProperty(globalThis, 'IDBKeyRange', {
+    value: mockIDBKeyRange,
+    writable: true,
+  });
+}
 
 // Minimal PWA Mock Infrastructure
 // Only mock essential browser APIs that are actually used by production code
@@ -101,9 +107,11 @@ const mockServiceWorkerContainer = {
   removeEventListener: vi.fn(),
 };
 
+// Make service worker container configurable for test customization
 Object.defineProperty(navigator, 'serviceWorker', {
   value: mockServiceWorkerContainer,
   writable: true,
+  configurable: true,
 });
 
 // Make essential mocks available globally for PWA tests that need them
