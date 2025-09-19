@@ -35,36 +35,9 @@ export default defineConfig(({ command }) => {
         filename: 'sw.ts',
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-          // Service worker content changes on each build due to __APP_VERSION__
           injectionPoint: 'self.__WB_MANIFEST',
-        },
-        workbox: {
-          skipWaiting: true,
-          clientsClaim: true,
-          // More aggressive cache invalidation
-          cleanupOutdatedCaches: true,
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-                }
-              }
-            },
-            {
-              // Force network-first for main app JavaScript files
-              urlPattern: /\/main-[a-zA-Z0-9_-]+\.js$/,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'app-js-cache',
-                networkTimeoutSeconds: 2
-              }
-            }
-          ]
+          // Configure Rollup options for service worker build
+          rollupFormat: 'iife',
         },
         manifest: {
           name: 'Pocket Ding',

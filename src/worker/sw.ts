@@ -2,7 +2,8 @@
 /// <reference path="../types/service-worker.d.ts" />
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { NetworkFirst } from 'workbox-strategies';
+import { NetworkFirst, CacheFirst } from 'workbox-strategies';
+import { ExpirationPlugin } from 'workbox-expiration';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
 import type { AppSettings, SyncPhase } from '../types';
@@ -28,6 +29,29 @@ registerRoute(
   )
 );
 
+// Cache Google Fonts with cache-first strategy
+registerRoute(
+  ({ url }) => url.origin === 'https://fonts.googleapis.com',
+  new CacheFirst({
+    cacheName: 'google-fonts-cache',
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 10,
+        maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+      }) as any,
+    ],
+  })
+);
+
+// Force network-first for main app JavaScript files to ensure updates
+registerRoute(
+  ({ url }) => /\/main-[a-zA-Z0-9_-]+\.js$/.test(url.pathname),
+  new NetworkFirst({
+    cacheName: 'app-js-cache',
+    networkTimeoutSeconds: 3,
+  })
+);
+
 // Sync state management
 let syncWorker: Worker | null = null;
 let syncInProgress = false;
@@ -48,6 +72,7 @@ logInfo('serviceWorker', 'Service worker script loaded/reloaded');
 // Force service worker update by changing content on each build
 const SW_BUILD_VERSION = __APP_VERSION__.buildTimestamp;
 logInfo('serviceWorker', `Service worker build version: ${SW_BUILD_VERSION}`);
+
 logInfo('serviceWorker', 'Full version info:', __APP_VERSION__);
 
 // Listen for service worker lifecycle events
@@ -72,6 +97,17 @@ self.addEventListener('activate', (event) => {
       // Log all controlled clients
       const clients = await self.clients.matchAll({ type: 'window' });
       logInfo('serviceWorker', `Now controlling ${clients.length} client(s)`);
+
+      // Check if periodic sync should be registered
+      const settings = await getSettings();
+      if (settings?.auto_sync && 'periodicSync' in self.registration) {
+        try {
+          await (self.registration as any).periodicSync.register('periodic-sync');
+          logInfo('serviceWorker', 'Registered periodic sync on activation');
+        } catch (error) {
+          logError('activate', 'Failed to register periodic sync on activation', error);
+        }
+      }
 
       // Notify clients about the new version
       clients.forEach(client => {
@@ -527,27 +563,6 @@ self.addEventListener('periodicsync', (event: any) => {
   }
 });
 
-/**
- * Handle service worker activation
- */
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      // Clean up old caches
-      await self.clients.claim();
-      
-      // Check if periodic sync should be registered
-      const settings = await getSettings();
-      if (settings?.auto_sync && 'periodicSync' in self.registration) {
-        try {
-          await (self.registration as any).periodicSync.register('periodic-sync');
-        } catch (error) {
-          logError('activate', 'Failed to register periodic sync on activation', error);
-        }
-      }
-    })()
-  );
-});
 
 /**
  * Track user engagement for periodic sync and log important fetch events
