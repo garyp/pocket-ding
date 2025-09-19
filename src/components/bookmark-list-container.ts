@@ -330,7 +330,11 @@ export class BookmarkListContainer extends LitElement {
     const faviconState = this.#faviconController.getFaviconState();
 
     return html`
-      <sync-progress .syncState=${syncState}></sync-progress>
+      <sync-progress
+        .syncState=${syncState}
+        .onPause=${() => this.#syncController.pauseSync()}
+        .onResume=${() => this.#syncController.resumeSync()}
+      ></sync-progress>
 
       ${this.#syncController.hasSyncError() ? html`
         <sync-error-notification

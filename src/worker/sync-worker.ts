@@ -7,16 +7,17 @@ import { logInfo, logError } from './sw-logger';
 declare const self: DedicatedWorkerGlobalScope;
 
 interface SyncWorkerMessage {
-  type: 'START_SYNC' | 'CANCEL_SYNC';
+  type: 'START_SYNC' | 'CANCEL_SYNC' | 'PAUSE_SYNC' | 'RESUME_SYNC';
   payload?: {
     settings?: AppSettings;
     fullSync?: boolean;
+    reason?: string;
   };
   id: string;
 }
 
 interface SyncWorkerResponse {
-  type: 'SYNC_PROGRESS' | 'SYNC_COMPLETE' | 'SYNC_ERROR' | 'SYNC_CANCELLED';
+  type: 'SYNC_PROGRESS' | 'SYNC_COMPLETE' | 'SYNC_ERROR' | 'SYNC_CANCELLED' | 'SYNC_PAUSED' | 'SYNC_RESUMED';
   payload: any;
   id: string;
 }
@@ -145,6 +146,49 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) 
         self.postMessage({
           type: 'SYNC_ERROR',
           payload: { error: 'No matching sync operation to cancel' },
+          id
+        } as SyncWorkerResponse);
+      }
+      break;
+
+    case 'PAUSE_SYNC':
+      if (currentSyncService && currentSyncId === id) {
+        logInfo('syncWorker', 'Pausing sync operation', { id, reason: payload?.reason });
+        currentSyncService.pauseSync();
+
+        self.postMessage({
+          type: 'SYNC_PAUSED',
+          payload: {
+            processed: currentSyncService.getProcessedCount(),
+            reason: payload?.reason
+          },
+          id
+        } as SyncWorkerResponse);
+      } else {
+        self.postMessage({
+          type: 'SYNC_ERROR',
+          payload: { error: 'No matching sync operation to pause' },
+          id
+        } as SyncWorkerResponse);
+      }
+      break;
+
+    case 'RESUME_SYNC':
+      if (currentSyncService && currentSyncId === id && currentSyncService.isPaused()) {
+        logInfo('syncWorker', 'Resuming sync operation', { id });
+        currentSyncService.resumeSync();
+
+        self.postMessage({
+          type: 'SYNC_RESUMED',
+          payload: {
+            processed: currentSyncService.getProcessedCount()
+          },
+          id
+        } as SyncWorkerResponse);
+      } else {
+        self.postMessage({
+          type: 'SYNC_ERROR',
+          payload: { error: 'No matching paused sync operation to resume' },
           id
         } as SyncWorkerResponse);
       }

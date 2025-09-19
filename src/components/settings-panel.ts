@@ -599,7 +599,12 @@ export class SettingsPanel extends LitElement {
               ${this.#syncController.isSyncing() ? 'Syncing...' : 'Force Full Sync'}
             </md-text-button>
 
-            <sync-progress .syncState=${this.#syncController.getSyncState()} .showIcon=${false}></sync-progress>
+            <sync-progress
+              .syncState=${this.#syncController.getSyncState()}
+              .showIcon=${false}
+              .onPause=${() => this.#syncController.pauseSync()}
+              .onResume=${() => this.#syncController.resumeSync()}
+            ></sync-progress>
 
             ${this.#syncController.hasSyncError() ? html`
               <sync-error-notification
