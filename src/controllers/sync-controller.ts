@@ -164,7 +164,7 @@ export class SyncController implements ReactiveController {
         this._syncState = {
           ...this._syncState,
           syncStatus: message.status,
-          isSyncing: message.status === 'starting' || message.status === 'syncing'
+          isSyncing: message.status === 'starting' || message.status === 'syncing' || message.status === 'paused'
         };
 
         // Handle special sync statuses
@@ -350,6 +350,24 @@ export class SyncController implements ReactiveController {
     if (!this._syncState.isSyncing) return;
 
     await this.postToServiceWorker(SyncMessages.cancelSync('User requested cancellation'));
+  }
+
+  /**
+   * Pause ongoing sync operation
+   */
+  async pauseSync(): Promise<void> {
+    if (!this._syncState.isSyncing || this._syncState.syncStatus === 'paused') return;
+
+    await this.postToServiceWorker(SyncMessages.pauseSync('User requested pause'));
+  }
+
+  /**
+   * Resume paused sync operation
+   */
+  async resumeSync(): Promise<void> {
+    if (this._syncState.syncStatus !== 'paused') return;
+
+    await this.postToServiceWorker(SyncMessages.resumeSync());
   }
 
   /**

@@ -26,6 +26,9 @@ export class SyncService {
   #onProgress?: (progress: SyncProgress) => void;
   #abortController?: AbortController;
   #processedCount: number = 0;
+  #isPaused: boolean = false;
+  #pausePromise: Promise<void> | undefined;
+  #pauseResolve: (() => void) | undefined;
 
   constructor(onProgress?: (progress: SyncProgress) => void) {
     if (onProgress) {
@@ -117,6 +120,55 @@ export class SyncService {
   cancelSync(): void {
     logInfo('sync', 'Sync cancellation requested');
     this.#abortController?.abort();
+    // If paused, resume to allow cancellation to complete
+    if (this.#isPaused) {
+      this.resumeSync();
+    }
+  }
+
+  /**
+   * Pause the current sync operation
+   */
+  pauseSync(): void {
+    if (!this.#isPaused && this.#abortController && !this.#abortController.signal.aborted) {
+      logInfo('sync', 'Sync pause requested');
+      this.#isPaused = true;
+      this.#pausePromise = new Promise(resolve => {
+        this.#pauseResolve = resolve;
+      });
+    }
+  }
+
+  /**
+   * Resume a paused sync operation
+   */
+  resumeSync(): void {
+    if (this.#isPaused && this.#pauseResolve) {
+      logInfo('sync', 'Sync resume requested');
+      this.#isPaused = false;
+      const resolve = this.#pauseResolve;
+      this.#pausePromise = undefined;
+      this.#pauseResolve = undefined;
+      resolve();
+    }
+  }
+
+  /**
+   * Check if sync is currently paused
+   */
+  isPaused(): boolean {
+    return this.#isPaused;
+  }
+
+  /**
+   * Wait if sync is paused
+   */
+  async #waitIfPaused(): Promise<void> {
+    if (this.#isPaused && this.#pausePromise) {
+      logInfo('sync', 'Sync paused, waiting for resume');
+      await this.#pausePromise;
+      logInfo('sync', 'Sync resumed');
+    }
   }
 
   /**
@@ -144,6 +196,9 @@ export class SyncService {
     const localBookmarksMap = new Map(localBookmarks.map(b => [b.id, b]));
 
     while (true) {
+      // Check for pause
+      await this.#waitIfPaused();
+
       if (this.#abortController?.signal.aborted) {
         throw new Error('Sync cancelled');
       }
@@ -159,6 +214,9 @@ export class SyncService {
         }
 
         for (const remoteBookmark of remoteBookmarks) {
+          // Check for pause
+          await this.#waitIfPaused();
+
           if (this.#abortController?.signal.aborted) {
             throw new Error('Sync cancelled');
           }
@@ -271,6 +329,9 @@ export class SyncService {
 
       let processed = 0;
       for (const bookmark of bookmarksNeedingAssetSync) {
+        // Check for pause
+        await this.#waitIfPaused();
+
         if (this.#abortController?.signal.aborted) {
           logInfo('sync', 'Asset sync cancelled by abort signal');
           throw new Error('Sync cancelled');
@@ -351,6 +412,9 @@ export class SyncService {
 
       let processed = 0;
       for (const bookmark of bookmarksNeedingSync) {
+        // Check for pause
+        await this.#waitIfPaused();
+
         if (this.#abortController?.signal.aborted) {
           throw new Error('Sync cancelled');
         }

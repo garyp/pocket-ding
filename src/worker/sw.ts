@@ -469,7 +469,35 @@ self.addEventListener('message', async (event) => {
         logInfo('sync', 'Received CANCEL_SYNC but no sync is currently active');
       }
       break;
-      
+
+    case 'PAUSE_SYNC':
+      if (syncWorker && currentSyncId) {
+        logInfo('sync', `Received PAUSE_SYNC message: ${message.reason || 'User requested pause'}`);
+        syncWorker.postMessage({
+          type: 'PAUSE_SYNC',
+          payload: { reason: message.reason },
+          id: currentSyncId
+        });
+        await broadcastToClients(SyncMessages.syncStatus('paused'));
+      } else {
+        logInfo('sync', 'Received PAUSE_SYNC but no sync is currently active');
+      }
+      break;
+
+    case 'RESUME_SYNC':
+      if (syncWorker && currentSyncId) {
+        logInfo('sync', 'Received RESUME_SYNC message');
+        syncWorker.postMessage({
+          type: 'RESUME_SYNC',
+          payload: {},
+          id: currentSyncId
+        });
+        await broadcastToClients(SyncMessages.syncStatus('syncing'));
+      } else {
+        logInfo('sync', 'Received RESUME_SYNC but no sync is currently active or paused');
+      }
+      break;
+
     case 'REGISTER_PERIODIC_SYNC':
       if ('periodicSync' in self.registration) {
         try {

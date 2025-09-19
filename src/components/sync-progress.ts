@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { SyncState } from '../types';
 import '@material/web/icon/icon.js';
+import '@material/web/button/text-button.js';
 import '@material/web/progress/linear-progress.js';
 
 /**
@@ -12,6 +13,8 @@ import '@material/web/progress/linear-progress.js';
 export class SyncProgress extends LitElement {
   @property({ type: Object }) syncState?: SyncState;
   @property({ type: Boolean }) showIcon = true;
+  @property({ attribute: false }) onPause?: () => void;
+  @property({ attribute: false }) onResume?: () => void;
 
   static override styles = css`
     :host {
@@ -45,6 +48,18 @@ export class SyncProgress extends LitElement {
       animation: pulse 2s infinite;
     }
 
+    .sync-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pause-button {
+      --md-text-button-container-height: 28px;
+      --md-text-button-label-text-size: 0.75rem;
+      min-width: auto;
+    }
+
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
@@ -76,18 +91,41 @@ export class SyncProgress extends LitElement {
 
     const phaseText = this.#getPhaseDisplayText(this.syncState.syncPhase);
     const hasProgress = this.syncState.syncTotal > 0;
+    const isPaused = this.syncState.syncStatus === 'paused';
 
     return html`
       <div class="sync-progress-container">
         <div class="sync-progress-text">
           <span class="sync-phase-text">
             ${phaseText}${hasProgress ? `: ${this.syncState.syncProgress}/${this.syncState.syncTotal}` : '...'}
+            ${isPaused ? ' (Paused)' : ''}
           </span>
-          ${this.showIcon ? html`<md-icon class="sync-badge">sync</md-icon>` : ''}
+          <div class="sync-controls">
+            ${isPaused ? html`
+              <md-text-button
+                class="pause-button"
+                @click=${this.onResume}
+                ?disabled=${!this.onResume}
+              >
+                <md-icon slot="icon">play_arrow</md-icon>
+                Resume
+              </md-text-button>
+            ` : html`
+              <md-text-button
+                class="pause-button"
+                @click=${this.onPause}
+                ?disabled=${!this.onPause}
+              >
+                <md-icon slot="icon">pause</md-icon>
+                Pause
+              </md-text-button>
+            `}
+            ${this.showIcon ? html`<md-icon class="sync-badge">sync</md-icon>` : ''}
+          </div>
         </div>
         <md-linear-progress
           .value=${hasProgress ? (this.syncState.syncProgress / this.syncState.syncTotal) : 0}
-          ?indeterminate=${!hasProgress}
+          ?indeterminate=${!hasProgress && !isPaused}
         ></md-linear-progress>
       </div>
     `;
