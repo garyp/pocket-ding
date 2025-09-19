@@ -317,6 +317,7 @@ export class DatabaseService {
       last_sync_timestamp: timestamp,
       unarchived_offset: 0,
       archived_offset: 0
+      // Synced IDs are cleared by not including them (they're optional)
     });
   }
 
@@ -511,8 +512,12 @@ export class DatabaseService {
 
   static async updateSyncedUnarchivedIds(ids: Set<number>): Promise<void> {
     const metadata = await db.syncMetadata.toCollection().first();
-    const idsJson = JSON.stringify(Array.from(ids));
-    
+
+    // Get existing IDs and merge with new ones
+    const existingIds = await this.getSyncedUnarchivedIds();
+    const mergedIds = new Set([...existingIds, ...ids]);
+    const idsJson = JSON.stringify(Array.from(mergedIds));
+
     if (metadata) {
       await db.syncMetadata.update(metadata.id!, { synced_unarchived_ids: idsJson });
     } else {
@@ -525,8 +530,12 @@ export class DatabaseService {
 
   static async updateSyncedArchivedIds(ids: Set<number>): Promise<void> {
     const metadata = await db.syncMetadata.toCollection().first();
-    const idsJson = JSON.stringify(Array.from(ids));
-    
+
+    // Get existing IDs and merge with new ones
+    const existingIds = await this.getSyncedArchivedIds();
+    const mergedIds = new Set([...existingIds, ...ids]);
+    const idsJson = JSON.stringify(Array.from(mergedIds));
+
     if (metadata) {
       await db.syncMetadata.update(metadata.id!, { synced_archived_ids: idsJson });
     } else {

@@ -70,7 +70,6 @@ describe('SyncService', () => {
     vi.mocked(DatabaseService.getSyncedArchivedIds).mockResolvedValue(new Set());
     vi.mocked(DatabaseService.updateSyncedUnarchivedIds).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.updateSyncedArchivedIds).mockResolvedValue(undefined);
-    vi.mocked(DatabaseService.clearSyncedIds).mockResolvedValue(undefined);
 
     // Reset all database mocks
     vi.clearAllMocks();
@@ -763,7 +762,6 @@ describe('SyncService', () => {
       vi.mocked(DatabaseService.getSyncedArchivedIds).mockResolvedValue(new Set());
       vi.mocked(DatabaseService.updateSyncedUnarchivedIds).mockResolvedValue(undefined);
       vi.mocked(DatabaseService.updateSyncedArchivedIds).mockResolvedValue(undefined);
-      vi.mocked(DatabaseService.clearSyncedIds).mockResolvedValue(undefined);
       
       // Mock API returning bookmarks starting from offset 100 (simulating resumed sync)
       // This simulates that bookmark 1 was processed in the previous interrupted sync
@@ -795,7 +793,7 @@ describe('SyncService', () => {
       // Verify that synced IDs were properly managed
       expect(DatabaseService.getSyncedUnarchivedIds).toHaveBeenCalled();
       expect(DatabaseService.updateSyncedUnarchivedIds).toHaveBeenCalled();
-      expect(DatabaseService.clearSyncedIds).toHaveBeenCalled();
+      // clearSyncedIds is now handled internally in setLastSyncTimestamp
     });
 
     it('should correctly identify orphaned bookmarks across both archived and unarchived', async () => {
