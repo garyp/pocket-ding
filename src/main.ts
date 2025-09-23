@@ -1,6 +1,7 @@
 import { css } from 'lit';
 import { ThemeService } from './services/theme-service';
 import { DebugService } from './services/debug-service';
+import { pageVisibilityService } from './services/page-visibility-service';
 import './components/app-root';
 
 // Material Symbols font bundled locally for offline use
@@ -15,6 +16,9 @@ ThemeService.init();
 
 // Initialize debug service
 DebugService.initialize();
+
+// Initialize page visibility service for sync coordination
+pageVisibilityService.initialize();
 
 // Register service worker with VitePWA
 import { registerSW } from 'virtual:pwa-register';

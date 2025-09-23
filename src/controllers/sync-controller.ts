@@ -2,8 +2,10 @@ import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { SettingsService } from '../services/settings-service';
 import { DatabaseService } from '../services/database';
 import { ReactiveQueryController } from './reactive-query-controller';
-import { SyncMessages, type SyncMessage } from '../types/sync-messages';
+import type { SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
+import { SyncWorkerManager } from '../services/sync-worker-manager';
+import { pageVisibilityService } from '../services/page-visibility-service';
 import type { AppSettings, SyncState, SyncControllerOptions } from '../types';
 
 
@@ -20,6 +22,7 @@ export class SyncController implements ReactiveController {
   #settingsQuery: ReactiveQueryController<AppSettings | undefined>;
   #syncErrorQuery: ReactiveQueryController<string | null>;
   #syncRetryCountQuery: ReactiveQueryController<number>;
+  #syncWorkerManager: SyncWorkerManager;
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -53,6 +56,68 @@ export class SyncController implements ReactiveController {
       () => DatabaseService.getSyncRetryCount()
     );
 
+    // Initialize sync worker manager with typed callbacks
+    this.#syncWorkerManager = new SyncWorkerManager({
+      onProgress: (current, total, phase) => {
+        this._syncState = {
+          ...this._syncState,
+          syncProgress: current,
+          syncTotal: total,
+          syncPhase: phase,
+          syncStatus: 'syncing'
+        };
+        this.#host.requestUpdate();
+      },
+      onComplete: (processed) => {
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: false,
+          syncProgress: processed || this._syncState.syncProgress,
+          syncTotal: processed || this._syncState.syncTotal,
+          syncPhase: 'complete',
+          syncStatus: 'completed'
+        };
+        this.#host.requestUpdate();
+
+        if (this.#options.onSyncCompleted) {
+          this.#options.onSyncCompleted();
+        }
+
+        // Clear synced highlights after delay
+        setTimeout(() => {
+          this.clearSyncedHighlights();
+        }, 3000);
+      },
+      onError: (error, _recoverable) => {
+        DebugService.logSyncError(new Error(error), { phase: this._syncState.syncPhase });
+        this.#notifyError('Unable to sync your bookmarks. Please check your connection and try again.');
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: false,
+          syncProgress: 0,
+          syncTotal: 0,
+          syncStatus: 'failed',
+          syncPhase: undefined,
+        };
+        this.#host.requestUpdate();
+
+        if (this.#options.onSyncError) {
+          this.#options.onSyncError(new Error(error));
+        }
+      },
+      onCancelled: (processed) => {
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: false,
+          syncProgress: processed || 0,
+          syncTotal: processed || 0,
+          syncStatus: 'idle',
+          syncPhase: undefined,
+        };
+        this.#host.requestUpdate();
+      }
+    });
+
     host.addController(this);
   }
 
@@ -67,7 +132,7 @@ export class SyncController implements ReactiveController {
   private async initializeSync() {
     // Setup service worker message handler
     await this.setupServiceWorker();
-    
+
     // Check for ongoing sync status
     if (this.#serviceWorkerReady) {
       await this.checkSyncStatus();
@@ -80,6 +145,9 @@ export class SyncController implements ReactiveController {
       navigator.serviceWorker.removeEventListener('message', this.#messageHandler);
       this.#messageHandler = null;
     }
+
+    // Clean up sync worker manager
+    this.#syncWorkerManager.cleanup();
   }
 
   private async setupServiceWorker() {
@@ -99,30 +167,18 @@ export class SyncController implements ReactiveController {
       };
       navigator.serviceWorker.addEventListener('message', this.#messageHandler);
 
-      // Check if periodic sync should be enabled based on settings
-      const settings = this.settings;
-      if (settings?.auto_sync) {
-        this.postToServiceWorker(SyncMessages.registerPeriodicSync(true));
-      }
+      // Note: Periodic sync state is now managed globally by PageVisibilityService
+      // based on page visibility to prevent service worker blocking when app is visible
     } catch (error) {
       DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { context: 'Service worker setup failed' });
-      this.#notifyError('Failed to initialize sync service');
+      this.#notifyError('Unable to set up background sync. Please refresh the page and try again.');
     }
   }
 
   private async checkSyncStatus() {
-    // Request current sync status from service worker
-    this.postToServiceWorker(SyncMessages.checkSyncPermission());
-
-    // Give the service worker a brief moment to respond with current state
-    // If no response comes within 100ms, check if we need to resume sync
-    setTimeout(() => {
-      // Only update if we haven't received any sync status updates yet
-      if (this._syncState.syncStatus === 'idle' && !this._syncState.isSyncing) {
-        DebugService.logInfo('sync', 'No sync status response from service worker - checking if sync needs to resume');
-        this.#checkAndResumeSync();
-      }
-    }, 100);
+    // Check if there are pending sync operations that need to be resumed
+    DebugService.logInfo('sync', 'Checking if sync needs to resume after app startup');
+    this.#checkAndResumeSync();
   }
 
   /**
@@ -143,10 +199,11 @@ export class SyncController implements ReactiveController {
     }
   }
 
+
   private handleServiceWorkerMessage(message: SyncMessage) {
     switch (message.type) {
       case 'SW_LOG':
-        // Forward service worker logs to DebugService
+        // Forward service worker logs to DebugService for debugging
         switch (message.level) {
           case 'info':
             DebugService.logInfo('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
@@ -161,95 +218,25 @@ export class SyncController implements ReactiveController {
         break;
 
       case 'SYNC_STATUS':
-        this._syncState = {
-          ...this._syncState,
-          syncStatus: message.status,
-          isSyncing: message.status === 'starting' || message.status === 'syncing'
-        };
-
-        // Handle special sync statuses
+        // Only handle interrupted status for resuming sync when app returns from background
         if (message.status === 'interrupted') {
           DebugService.logInfo('sync', 'Interrupted sync detected - resuming');
           this.#checkAndResumeSync();
         }
-
-        this.#host.requestUpdate();
+        // Note: Other status updates (syncing, completed, failed) from background sync are ignored
+        // since background sync should be invisible to the user. Foreground sync uses SyncWorkerManager.
         break;
 
       case 'SYNC_PROGRESS':
-        this._syncState = {
-          ...this._syncState,
-          isSyncing: true,
-          syncProgress: message.current,
-          syncTotal: message.total,
-          syncPhase: message.phase,
-          syncStatus: 'syncing'
-        };
-
-        // Log progress restoration for debugging
-        DebugService.logInfo('sync', `Sync progress restored: ${message.current}/${message.total} (${message.phase})`);
-
-        this.#host.requestUpdate();
-        break;
-
       case 'SYNC_COMPLETE':
-        // Reset phase tracking on completion
-        this._syncState = {
-          ...this._syncState,
-          isSyncing: false,
-          syncProgress: 0,
-          syncTotal: 0,
-          syncPhase: 'complete',
-          syncStatus: message.success ? 'completed' : 'failed'
-        };
-        this.#host.requestUpdate();
-
-        if (message.success && this.#options.onSyncCompleted) {
-          this.#options.onSyncCompleted();
-        }
-
-        // Clear synced highlights after delay
-        setTimeout(() => {
-          this.clearSyncedHighlights();
-        }, 3000);
-        break;
-
       case 'SYNC_ERROR':
-        DebugService.logSyncError(new Error(message.error || 'Unknown sync error'), { phase: this._syncState.syncPhase });
-        this.#notifyError(`Sync failed: ${message.error || 'Unknown error'}`);
-        // Reset phase tracking on error
-        this._syncState = {
-          ...this._syncState,
-          isSyncing: false,
-          syncProgress: 0,
-          syncTotal: 0,
-          syncStatus: 'failed',
-          syncPhase: undefined,
-        };
-        this.#host.requestUpdate();
-
-        if (this.#options.onSyncError) {
-          this.#options.onSyncError(new Error(message.error));
-        }
+        // Background sync progress/complete/error messages are ignored for UI updates
+        // Background sync should be invisible to the user. Foreground sync uses SyncWorkerManager.
+        DebugService.logInfo('sync', `Background sync message ignored: ${message.type}`, { messageType: message.type });
         break;
     }
   }
 
-  private async postToServiceWorker(message: SyncMessage) {
-    if (!this.#serviceWorkerReady) {
-      DebugService.logWarning('sync', 'Service worker not ready for message posting');
-      return;
-    }
-
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      if (registration.active) {
-        registration.active.postMessage(message);
-      }
-    } catch (error) {
-      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to post message to service worker');
-    }
-  }
 
   // Public API methods
 
@@ -287,7 +274,7 @@ export class SyncController implements ReactiveController {
   }
 
   /**
-   * Request a sync operation
+   * Request a sync operation (directly via sync worker, bypassing service worker)
    */
   async requestSync(fullSync = false): Promise<void> {
     if (this._syncState.isSyncing) return;
@@ -297,13 +284,6 @@ export class SyncController implements ReactiveController {
       if (this.isSettingsLoading) {
         DebugService.logWarning('sync', 'Cannot sync while settings are loading');
         this.#notifyError('Please wait for settings to load');
-        return;
-      }
-
-      // Check if service worker is ready
-      if (!this.#serviceWorkerReady) {
-        DebugService.logWarning('sync', 'Service worker not ready for sync request');
-        this.#notifyError('Sync service is not ready. Please try again.');
         return;
       }
 
@@ -322,15 +302,16 @@ export class SyncController implements ReactiveController {
         };
         this.#host.requestUpdate();
 
-        // Request sync from service worker
-        await this.postToServiceWorker(SyncMessages.requestSync(true, fullSync));
+        // Start sync directly via sync worker manager (bypasses service worker)
+        DebugService.logInfo('sync', 'Starting manual sync directly via worker', { fullSync });
+        await this.#syncWorkerManager.startSync(settings, fullSync);
       } else {
         DebugService.logWarning('sync', 'Cannot sync without valid Linkding settings');
         this.#notifyError('Please configure your Linkding settings first');
       }
     } catch (error) {
       DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { fullSync });
-      this.#notifyError('Failed to start sync');
+      this.#notifyError('Unable to start sync. Please check your connection and settings.');
       // Reset sync state on error
       this._syncState = {
         ...this._syncState,
@@ -349,14 +330,24 @@ export class SyncController implements ReactiveController {
   async cancelSync(): Promise<void> {
     if (!this._syncState.isSyncing) return;
 
-    await this.postToServiceWorker(SyncMessages.cancelSync('User requested cancellation'));
+    // Cancel sync directly via worker manager
+    DebugService.logInfo('sync', 'Cancelling manual sync via worker');
+    this.#syncWorkerManager.cancelSync();
   }
 
   /**
-   * Enable or disable periodic background sync
+   * Refresh periodic sync state coordination
+   * Triggers PageVisibilityService to re-evaluate periodic sync state based on current settings and page visibility
    */
-  async setPeriodicSync(enabled: boolean): Promise<void> {
-    await this.postToServiceWorker(SyncMessages.registerPeriodicSync(enabled));
+  async refreshPeriodicSyncState(): Promise<void> {
+    // Trigger coordination update which will read current settings and apply visibility-based logic
+    try {
+      await pageVisibilityService.updatePeriodicSyncState();
+    } catch (error) {
+      // Log error for debugging but re-throw to let callers handle failures appropriately
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to refresh periodic sync state');
+      throw error;
+    }
   }
 
   /**

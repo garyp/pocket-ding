@@ -1,25 +1,13 @@
 /// <reference lib="webworker" />
 
 import { SyncService } from './sync-service';
-import type { AppSettings } from '../types';
+import type {
+  SyncWorkerRequestMessage
+} from '../types/worker-messages';
+import { SyncWorkerResponses } from '../types/worker-messages';
 import { logInfo, logError } from './sw-logger';
 
 declare const self: DedicatedWorkerGlobalScope;
-
-interface SyncWorkerMessage {
-  type: 'START_SYNC' | 'CANCEL_SYNC';
-  payload?: {
-    settings?: AppSettings;
-    fullSync?: boolean;
-  };
-  id: string;
-}
-
-interface SyncWorkerResponse {
-  type: 'SYNC_PROGRESS' | 'SYNC_COMPLETE' | 'SYNC_ERROR' | 'SYNC_CANCELLED';
-  payload: any;
-  id: string;
-}
 
 let currentSyncService: SyncService | null = null;
 let currentSyncId: string | null = null;
@@ -28,7 +16,7 @@ let syncInitializationInProgress = false;
 /**
  * Dedicated worker for handling sync operations to keep the service worker responsive
  */
-self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) => {
+self.addEventListener('message', async (event: MessageEvent<SyncWorkerRequestMessage>) => {
   const { type, payload, id } = event.data;
 
   logInfo('syncWorker', `Received message: ${type}`, { id });
@@ -38,14 +26,12 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) 
       // Prevent race conditions from multiple START_SYNC messages
       if (currentSyncService || syncInitializationInProgress) {
         const conflictMessage = currentSyncService ? 'Sync already in progress' : 'Sync initialization already in progress';
-        self.postMessage({
-          type: 'SYNC_ERROR',
-          payload: {
-            error: conflictMessage,
-            recoverable: true // Client can retry
-          },
-          id
-        } as SyncWorkerResponse);
+        self.postMessage(SyncWorkerResponses.error(
+          conflictMessage,
+          id,
+          0,
+          true // Client can retry
+        ));
         return;
       }
 
@@ -54,14 +40,12 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) 
 
       if (!payload?.settings) {
         syncInitializationInProgress = false; // Reset flag on error
-        self.postMessage({
-          type: 'SYNC_ERROR',
-          payload: {
-            error: 'Settings required for sync',
-            recoverable: true
-          },
-          id
-        } as SyncWorkerResponse);
+        self.postMessage(SyncWorkerResponses.error(
+          'Settings required for sync',
+          id,
+          0,
+          true
+        ));
         return;
       }
 
@@ -70,11 +54,12 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) 
       try {
         // Create sync service with progress callback
         currentSyncService = new SyncService((progress) => {
-          self.postMessage({
-            type: 'SYNC_PROGRESS',
-            payload: progress,
-            id: currentSyncId!
-          } as SyncWorkerResponse);
+          self.postMessage(SyncWorkerResponses.progress(
+            progress.current,
+            progress.total,
+            progress.phase,
+            currentSyncId!
+          ));
         });
 
         logInfo('syncWorker', 'Starting sync operation', {
@@ -88,36 +73,26 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) 
         const result = await currentSyncService.performSync(payload.settings);
 
         if (result.success) {
-          self.postMessage({
-            type: 'SYNC_COMPLETE',
-            payload: {
-              processed: result.processed,
-              timestamp: result.timestamp
-            },
-            id: currentSyncId!
-          } as SyncWorkerResponse);
+          self.postMessage(SyncWorkerResponses.complete(
+            result.processed,
+            currentSyncId!
+          ));
         } else {
-          self.postMessage({
-            type: 'SYNC_ERROR',
-            payload: {
-              error: result.error?.message || 'Unknown sync error',
-              processed: result.processed
-            },
-            id: currentSyncId!
-          } as SyncWorkerResponse);
+          self.postMessage(SyncWorkerResponses.error(
+            result.error?.message || 'Unknown sync error',
+            currentSyncId!,
+            result.processed
+          ));
         }
       } catch (error) {
         logError('syncWorker', 'Sync operation failed', error);
 
-        self.postMessage({
-          type: 'SYNC_ERROR',
-          payload: {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            processed: currentSyncService?.getProcessedCount() || 0,
-            recoverable: true // Sync errors are typically recoverable
-          },
-          id: currentSyncId!
-        } as SyncWorkerResponse);
+        self.postMessage(SyncWorkerResponses.error(
+          error instanceof Error ? error.message : 'Unknown error',
+          currentSyncId!,
+          currentSyncService?.getProcessedCount() || 0,
+          true // Sync errors are typically recoverable
+        ));
       } finally {
         // Always clean up state, including initialization flag
         syncInitializationInProgress = false;
@@ -131,31 +106,26 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) 
         logInfo('syncWorker', 'Cancelling sync operation', { id });
         currentSyncService.cancelSync();
 
-        self.postMessage({
-          type: 'SYNC_CANCELLED',
-          payload: {
-            processed: currentSyncService.getProcessedCount()
-          },
+        self.postMessage(SyncWorkerResponses.cancelled(
+          currentSyncService.getProcessedCount(),
           id
-        } as SyncWorkerResponse);
+        ));
 
         currentSyncService = null;
         currentSyncId = null;
       } else {
-        self.postMessage({
-          type: 'SYNC_ERROR',
-          payload: { error: 'No matching sync operation to cancel' },
+        self.postMessage(SyncWorkerResponses.error(
+          'No matching sync operation to cancel',
           id
-        } as SyncWorkerResponse);
+        ));
       }
       break;
 
     default:
-      self.postMessage({
-        type: 'SYNC_ERROR',
-        payload: { error: `Unknown message type: ${type}` },
+      self.postMessage(SyncWorkerResponses.error(
+        `Unknown message type: ${type}`,
         id
-      } as SyncWorkerResponse);
+      ));
   }
 });
 
@@ -165,15 +135,12 @@ self.addEventListener('error', (event) => {
   logError('syncWorker', 'Worker error', new Error(errorMessage));
 
   if (currentSyncId) {
-    self.postMessage({
-      type: 'SYNC_ERROR',
-      payload: {
-        error: errorMessage,
-        processed: currentSyncService?.getProcessedCount() || 0,
-        recoverable: false // Indicate this is an unrecoverable error
-      },
-      id: currentSyncId
-    } as SyncWorkerResponse);
+    self.postMessage(SyncWorkerResponses.error(
+      errorMessage,
+      currentSyncId,
+      currentSyncService?.getProcessedCount() || 0,
+      false // Indicate this is an unrecoverable error
+    ));
   }
 
   // Clean up current operation
@@ -191,15 +158,12 @@ self.addEventListener('unhandledrejection', (event) => {
   logError('syncWorker', 'Unhandled promise rejection', event.reason);
 
   if (currentSyncId) {
-    self.postMessage({
-      type: 'SYNC_ERROR',
-      payload: {
-        error: errorMessage,
-        processed: currentSyncService?.getProcessedCount() || 0,
-        recoverable: true // Promise rejections might be recoverable
-      },
-      id: currentSyncId
-    } as SyncWorkerResponse);
+    self.postMessage(SyncWorkerResponses.error(
+      errorMessage,
+      currentSyncId,
+      currentSyncService?.getProcessedCount() || 0,
+      true // Promise rejections might be recoverable
+    ));
   }
 
   // Clean up current operation for unhandled rejections

@@ -435,9 +435,9 @@ export class SettingsPanel extends LitElement {
         ThemeService.setThemeFromSettings(settings.theme_mode);
       }
       
-      // Enable/disable periodic sync based on auto_sync setting
+      // Refresh periodic sync coordination based on updated settings
       if (this.#syncController) {
-        await this.#syncController.setPeriodicSync(settings.auto_sync);
+        await this.#syncController.refreshPeriodicSyncState();
       }
       
       this.dispatchEvent(new CustomEvent('settings-saved', {

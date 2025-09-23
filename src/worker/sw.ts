@@ -6,6 +6,7 @@ import { NetworkFirst, CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
+import { SyncService } from './sync-service';
 import type { AppSettings, SyncPhase } from '../types';
 import { logInfo, logError } from './sw-logger';
 
@@ -52,19 +53,90 @@ registerRoute(
   })
 );
 
-// Sync state management
-let syncWorker: Worker | null = null;
+// Sync state management (for background sync only)
 let syncInProgress = false;
 let currentSyncProgress: { current: number; total: number; phase: SyncPhase } | null = null;
-let currentSyncId: string | null = null;
+let currentSyncService: SyncService | null = null;
 
-// Worker lifecycle management
-const WORKER_IDLE_TIMEOUT = 300000; // 5 minutes
-let workerIdleTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Consolidated keepalive manager for service worker lifecycle
+ */
+class KeepaliveManager {
+  #intervals: Set<number> = new Set();
+  #port: MessagePort | null = null;
+  #isActive = false;
 
-// Service worker keepalive mechanisms
-let keepalivePort: MessagePort | null = null;
-let keepaliveInterval: number | null = null;
+  /**
+   * Start keepalive mechanism to prevent service worker termination
+   */
+  start(): void {
+    if (this.#isActive) {
+      logInfo('serviceWorker', 'Keepalive already active');
+      return;
+    }
+
+    logInfo('serviceWorker', 'Starting keepalive mechanism during sync');
+    this.#isActive = true;
+
+    // Strategy 1: Periodic heartbeat logging
+    const heartbeatId = setInterval(() => {
+      logInfo('serviceWorker', 'Keepalive heartbeat');
+    }, 10000) as unknown as number; // 10 second heartbeat
+    this.#intervals.add(heartbeatId);
+
+    // Strategy 2: Message channel to keep SW active
+    const channel = new MessageChannel();
+    this.#port = channel.port1;
+
+    const channelId = setInterval(() => {
+      if (this.#port) {
+        this.#port.postMessage({ type: 'keepalive' });
+      }
+    }, 15000) as unknown as number; // 15 second channel keepalive
+    this.#intervals.add(channelId);
+  }
+
+  /**
+   * Stop keepalive mechanism and clean up all resources
+   */
+  stop(): void {
+    if (!this.#isActive) {
+      return;
+    }
+
+    logInfo('serviceWorker', 'Stopping keepalive mechanism');
+
+    // Clear all intervals
+    this.#intervals.forEach(id => clearInterval(id));
+    this.#intervals.clear();
+
+    // Close message port
+    if (this.#port) {
+      this.#port.close();
+      this.#port = null;
+    }
+
+    this.#isActive = false;
+    logInfo('serviceWorker', 'Keepalive mechanism stopped');
+  }
+
+  /**
+   * Check if keepalive is currently active
+   */
+  get isActive(): boolean {
+    return this.#isActive;
+  }
+
+  /**
+   * Get the number of active intervals (for testing)
+   */
+  get activeIntervalCount(): number {
+    return this.#intervals.size;
+  }
+}
+
+// Global keepalive manager instance
+const keepaliveManager = new KeepaliveManager();
 
 // Track service worker lifecycle for debugging sync issues
 logInfo('serviceWorker', 'Service worker script loaded/reloaded');
@@ -98,16 +170,8 @@ self.addEventListener('activate', (event) => {
       const clients = await self.clients.matchAll({ type: 'window' });
       logInfo('serviceWorker', `Now controlling ${clients.length} client(s)`);
 
-      // Check if periodic sync should be registered
-      const settings = await getSettings();
-      if (settings?.auto_sync && 'periodicSync' in self.registration) {
-        try {
-          await (self.registration as any).periodicSync.register('periodic-sync');
-          logInfo('serviceWorker', 'Registered periodic sync on activation');
-        } catch (error) {
-          logError('activate', 'Failed to register periodic sync on activation', error);
-        }
-      }
+      // Note: Periodic sync registration is now handled by SyncController
+      // based on page visibility to prevent service worker blocking when app is visible
 
       // Notify clients about the new version
       clients.forEach(client => {
@@ -125,205 +189,92 @@ self.addEventListener('activate', (event) => {
 
 // Service worker will automatically handle fetch events via Workbox
 
-/**
- * Start keepalive mechanism to prevent service worker termination during sync
- */
-function startKeepalive() {
-  if (keepaliveInterval) return; // Already active
-
-  logInfo('serviceWorker', 'Starting keepalive mechanism during sync');
-
-  // Use multiple keepalive strategies:
-
-  // Strategy 1: Periodic self-messaging
-  keepaliveInterval = setInterval(() => {
-    logInfo('serviceWorker', 'Keepalive heartbeat');
-  }, 10000) as unknown as number; // 10 second heartbeat
-
-  // Strategy 2: Create message channel to keep SW active
-  const channel = new MessageChannel();
-  keepalivePort = channel.port1;
-
-  // Send periodic messages through the channel
-  const channelInterval = setInterval(() => {
-    if (keepalivePort) {
-      keepalivePort.postMessage({ type: 'keepalive' });
-    }
-  }, 15000); // 15 second channel keepalive
-
-  // Store channel interval for cleanup
-  (keepalivePort as any).intervalId = channelInterval;
-}
-
-/**
- * Stop keepalive mechanism when sync completes
- */
-function stopKeepalive() {
-  if (keepaliveInterval) {
-    clearInterval(keepaliveInterval);
-    keepaliveInterval = null;
-    logInfo('serviceWorker', 'Stopped keepalive heartbeat');
-  }
-
-  if (keepalivePort) {
-    const intervalId = (keepalivePort as any).intervalId;
-    if (intervalId) {
-      clearInterval(intervalId);
-    }
-    keepalivePort.close();
-    keepalivePort = null;
-    logInfo('serviceWorker', 'Closed keepalive message port');
-  }
-}
 
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
 
 /**
- * Schedule cleanup of idle sync worker to conserve resources
+ * Perform background sync directly in the service worker
  */
-function scheduleWorkerCleanup(): void {
-  if (workerIdleTimer) {
-    clearTimeout(workerIdleTimer);
-  }
+async function performBackgroundSync(settings: AppSettings, fullSync = false): Promise<void> {
+  logInfo('backgroundSync', 'Starting direct sync in service worker');
 
-  workerIdleTimer = setTimeout(() => {
-    if (syncWorker && !syncInProgress) {
-      logInfo('syncWorker', 'Terminating idle sync worker after 5 minutes of inactivity');
-      syncWorker.terminate();
-      syncWorker = null;
-      workerIdleTimer = null;
+  try {
+    // Create sync service with progress callback
+    currentSyncService = new SyncService((progress) => {
+      currentSyncProgress = progress;
+      // Broadcast progress to clients
+      broadcastToClients(SyncMessages.syncProgress(
+        progress.current,
+        progress.total,
+        progress.phase
+      ));
+    });
+
+    logInfo('backgroundSync', 'Starting sync operation', {
+      fullSync,
+      linkdingUrl: settings.linkding_url
+    });
+
+    const result = await currentSyncService.performSync(settings);
+
+    if (result.success) {
+      syncInProgress = false;
+      currentSyncProgress = null;
+      keepaliveManager.stop();
+
+      await DatabaseService.resetSyncRetryCount();
+      await DatabaseService.setLastSyncError(null);
+
+      await broadcastToClients(SyncMessages.syncComplete(
+        true,
+        result.processed,
+        Date.now() - result.timestamp
+      ));
+      await broadcastToClients(SyncMessages.syncStatus('completed'));
+
+      logInfo('backgroundSync', 'Sync completed successfully', {
+        processed: result.processed,
+        duration: Date.now() - result.timestamp
+      });
+    } else {
+      throw new Error(result.error?.message || 'Unknown sync error');
     }
-  }, WORKER_IDLE_TIMEOUT);
-}
+  } catch (error) {
+    logError('backgroundSync', 'Sync operation failed', error);
 
-/**
- * Cancel any pending worker cleanup
- */
-function cancelWorkerCleanup(): void {
-  if (workerIdleTimer) {
-    clearTimeout(workerIdleTimer);
-    workerIdleTimer = null;
-  }
-}
-
-/**
- * Create and configure the dedicated sync worker
- */
-function createSyncWorker(): Worker {
-  // Import the sync worker using Vite's worker import syntax
-  const worker = new Worker(
-    new URL('./sync-worker.ts', import.meta.url),
-    { type: 'module' }
-  );
-
-  worker.addEventListener('message', async (event) => {
-    const { type, payload, id } = event.data;
-
-    logInfo('serviceWorker', `Received message from sync worker: ${type}`, { id });
-
-    switch (type) {
-      case 'SYNC_PROGRESS':
-        currentSyncProgress = payload;
-        await broadcastToClients(SyncMessages.syncProgress(
-          payload.current,
-          payload.total,
-          payload.phase
-        ));
-        break;
-
-      case 'SYNC_COMPLETE':
-        syncInProgress = false;
-        currentSyncId = null;
-        currentSyncProgress = null;
-        stopKeepalive();
-
-        await DatabaseService.resetSyncRetryCount();
-        await DatabaseService.setLastSyncError(null);
-
-        await broadcastToClients(SyncMessages.syncComplete(
-          true,
-          payload.processed,
-          Date.now() - payload.timestamp
-        ));
-        await broadcastToClients(SyncMessages.syncStatus('completed'));
-
-        // Schedule worker cleanup after successful completion
-        scheduleWorkerCleanup();
-        break;
-
-      case 'SYNC_ERROR':
-        syncInProgress = false;
-        currentSyncId = null;
-        currentSyncProgress = null;
-        stopKeepalive();
-
-        const errorMessage = payload.error || 'Unknown sync error';
-        const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') ||
-                               errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError');
-        const isRecoverable = payload.recoverable !== false; // Default to true if not specified
-
-        // Save error to database
-        await DatabaseService.setLastSyncError(errorMessage);
-
-        await broadcastToClients(SyncMessages.syncError(errorMessage, isNetworkError));
-        await broadcastToClients(SyncMessages.syncStatus('failed'));
-
-        // Terminate worker for unrecoverable errors
-        if (!isRecoverable && syncWorker) {
-          logInfo('syncWorker', 'Terminating sync worker due to unrecoverable error');
-          syncWorker.terminate();
-          syncWorker = null;
-        }
-
-        // Schedule retry for recoverable errors
-        if (isRecoverable && (isNetworkError || payload.recoverable === true)) {
-          const retryCount = await DatabaseService.getSyncRetryCount();
-          if (retryCount < SYNC_RETRY_DELAYS.length) {
-            const delay = SYNC_RETRY_DELAYS[retryCount];
-            await DatabaseService.incrementSyncRetryCount();
-            logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
-            setTimeout(() => {
-              (self.registration as any).sync?.register('sync-bookmarks');
-            }, delay);
-          }
-        }
-
-        // Schedule worker cleanup after error (unless it was already terminated)
-        if (syncWorker) {
-          scheduleWorkerCleanup();
-        }
-        break;
-
-      case 'SYNC_CANCELLED':
-        syncInProgress = false;
-        currentSyncId = null;
-        currentSyncProgress = null;
-        stopKeepalive();
-
-        await broadcastToClients(SyncMessages.syncStatus('cancelled'));
-
-        // Schedule worker cleanup after cancellation
-        scheduleWorkerCleanup();
-        break;
-    }
-  });
-
-  worker.addEventListener('error', (error) => {
-    logError('syncWorker', 'Sync worker error', error);
     syncInProgress = false;
-    currentSyncId = null;
-    stopKeepalive();
+    currentSyncProgress = null;
+    keepaliveManager.stop();
 
-    // Terminate and recreate worker on next sync to prevent stuck states
-    if (syncWorker) {
-      syncWorker.terminate();
-      syncWorker = null;
-      logInfo('syncWorker', 'Terminated sync worker due to error, will recreate on next sync');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') ||
+                           errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError');
+
+    // Save error to database
+    await DatabaseService.setLastSyncError(errorMessage);
+
+    await broadcastToClients(SyncMessages.syncError(errorMessage, isNetworkError));
+    await broadcastToClients(SyncMessages.syncStatus('failed'));
+
+    // Schedule retry for recoverable errors
+    if (isNetworkError) {
+      const retryCount = await DatabaseService.getSyncRetryCount();
+      if (retryCount < SYNC_RETRY_DELAYS.length) {
+        const delay = SYNC_RETRY_DELAYS[retryCount];
+        await DatabaseService.incrementSyncRetryCount();
+        logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
+        setTimeout(() => {
+          (self.registration as any).sync?.register('sync-bookmarks');
+        }, delay);
+      }
     }
-  });
 
-  return worker;
+    throw error; // Re-throw to be handled by caller
+  } finally {
+    // Always clean up state
+    currentSyncService = null;
+  }
 }
 
 
@@ -350,7 +301,7 @@ async function getSettings(): Promise<AppSettings | null> {
 }
 
 /**
- * Perform sync operation using dedicated worker
+ * Perform sync operation directly in service worker
  */
 async function performSync(fullSync = false): Promise<void> {
   if (syncInProgress) {
@@ -374,43 +325,21 @@ async function performSync(fullSync = false): Promise<void> {
       await DatabaseService.resetSyncRetryCount();
     }
 
-    // Cancel any pending worker cleanup since we're about to use it
-    cancelWorkerCleanup();
-
-    // Start keepalive to prevent service worker termination during sync coordination
-    startKeepalive();
-
-    // Create sync worker if it doesn't exist
-    if (!syncWorker) {
-      syncWorker = createSyncWorker();
-    }
-
-    // Generate unique sync ID for this operation
-    currentSyncId = crypto.randomUUID();
+    // Start keepalive to prevent service worker termination during sync
+    keepaliveManager.start();
 
     await broadcastToClients(SyncMessages.syncStatus('syncing'));
 
-    // Start sync operation in dedicated worker
-    syncWorker.postMessage({
-      type: 'START_SYNC',
-      payload: {
-        settings,
-        fullSync
-      },
-      id: currentSyncId
-    });
+    logInfo('performSync', 'Starting direct sync operation');
 
-    logInfo('performSync', `Sync operation delegated to worker with ID: ${currentSyncId}`);
-
-    // The worker will handle the sync and report back via message events
-    // Error handling, progress updates, and completion are handled in createSyncWorker()
+    // Perform sync directly in service worker
+    await performBackgroundSync(settings, fullSync);
 
   } catch (error) {
-    logError('performSync', 'Failed to start sync', error);
+    logError('performSync', 'Failed to perform sync', error);
 
     syncInProgress = false;
-    currentSyncId = null;
-    stopKeepalive();
+    keepaliveManager.stop();
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await DatabaseService.setLastSyncError(errorMessage);
@@ -457,14 +386,16 @@ self.addEventListener('message', async (event) => {
       break;
       
     case 'CANCEL_SYNC':
-      if (syncWorker && currentSyncId) {
+      if (currentSyncService && syncInProgress) {
         logInfo('sync', `Received CANCEL_SYNC message: ${message.reason}`);
 
-        syncWorker.postMessage({
-          type: 'CANCEL_SYNC',
-          payload: { reason: message.reason },
-          id: currentSyncId
-        });
+        currentSyncService.cancelSync();
+
+        syncInProgress = false;
+        currentSyncProgress = null;
+        keepaliveManager.stop();
+
+        await broadcastToClients(SyncMessages.syncStatus('cancelled'));
       } else {
         logInfo('sync', 'Received CANCEL_SYNC but no sync is currently active');
       }
