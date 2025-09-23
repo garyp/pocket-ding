@@ -2,24 +2,33 @@
 
 ## Overview
 
-The app uses a service worker for typical PWA caching, while a sync worker handles background synchronization tasks. The sync worker runs in the background, can be manually initiated, and automatically resumes after app closure (if background sync API is supported). The app manages lifecycle events like app closure and multiple tabs using the Web Lock API to prevent conflicts and ensure data integrity.
+The app uses a service worker for PWA caching AND background synchronization when the app is not loaded. When the app is in the foreground, a dedicated sync worker handles synchronization tasks. Both workers share the same core sync service logic but operate in different contexts. The sync worker runs while the app is active, can be manually initiated, and hands off to the service worker when the app closes (if background sync API is supported). The app manages lifecycle events like app closure and multiple tabs using the Web Lock API to prevent conflicts and ensure data integrity.
 
 ## Architecture Components
 
 ### Service Worker
-- **Purpose**: Typical PWA functionality (network caching, etc.)
-- **Scope**: Does NOT handle synchronization
-- **Responsibility**: Standard PWA operations only
+- **Purpose**: PWA functionality (network caching) AND background synchronization
+- **Sync Responsibility**: Handles synchronization when app is NOT loaded (background sync, periodic sync)
+- **Standard PWA**: Manages network caching, offline functionality, and app lifecycle
+- **Background Context**: Only worker available when app is closed or not in foreground
 
 ### Sync Worker
-- **Purpose**: Handles all synchronization with Linkding server
+- **Purpose**: Handles synchronization with Linkding server when app is active
 - **Type**: Web Worker (dedicated to sync operations)
-- **Lifecycle**: Runs in background while app is active
+- **Lifecycle**: Runs in background while app is loaded and in foreground
+- **Context**: Only available when app is actively loaded in browser
+
+### Sync Service
+- **Purpose**: Core synchronization logic shared between Service Worker and Sync Worker
+- **Implementation**: Reusable sync functionality that works in both worker contexts
+- **Responsibility**: Bookmark fetching, data processing, IndexedDB operations, progress tracking
+- **Architecture**: Context-agnostic service that adapts to available APIs in each worker type
 
 ### Sync Controller
 - **Location**: Main application thread
 - **Purpose**: Manages sync worker lifecycle and coordinates sync operations
 - **Initialization**: Starts when app loads and user is on screen
+- **Coordination**: Handles handoff between service worker background sync and sync worker foreground sync
 
 ## Lifecycle Management
 
