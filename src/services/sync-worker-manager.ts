@@ -3,6 +3,7 @@ import type {
   SyncWorkerResponseMessage
 } from '../types/worker-messages';
 import { SyncWorkerMessages } from '../types/worker-messages';
+import { WebLockCoordinator } from './web-lock-coordinator';
 
 export interface SyncWorkerCallbacks {
   onProgress?: (current: number, total: number, phase: SyncPhase) => void;
@@ -24,12 +25,15 @@ export class SyncWorkerManager {
   #currentSyncId: string | null = null;
   #callbacks: SyncWorkerCallbacks;
   #creatingWorker: boolean = false;
+  #webLockCoordinator: WebLockCoordinator;
+  #workerHealthCheckInterval: number | null = null;
 
   /**
    * Initialize the sync worker manager with typed callbacks
    */
   constructor(callbacks: SyncWorkerCallbacks = {}) {
     this.#callbacks = callbacks;
+    this.#webLockCoordinator = new WebLockCoordinator();
   }
 
   /**
@@ -101,11 +105,68 @@ export class SyncWorkerManager {
   }
 
   /**
+   * Start worker health monitoring to detect orphaned syncs
+   */
+  #startWorkerHealthCheck(): void {
+    if (this.#workerHealthCheckInterval !== null) {
+      return; // Already monitoring
+    }
+
+    // Check worker health every 30 seconds
+    this.#workerHealthCheckInterval = setInterval(async () => {
+      try {
+        // Check if there are zombie locks that need cleanup
+        const lockStatus = await this.#webLockCoordinator.getLockStatus();
+
+        if (!lockStatus.available) {
+          console.warn('SyncWorkerManager: Detected held sync lock, performing emergency cleanup');
+          await this.emergencyLockCleanup();
+        }
+      } catch (error) {
+        console.warn('SyncWorkerManager: Worker health check failed', error);
+      }
+    }, 30000) as unknown as number;
+  }
+
+  /**
+   * Stop worker health monitoring
+   */
+  #stopWorkerHealthCheck(): void {
+    if (this.#workerHealthCheckInterval !== null) {
+      clearInterval(this.#workerHealthCheckInterval);
+      this.#workerHealthCheckInterval = null;
+    }
+  }
+
+  /**
+   * Emergency cleanup for orphaned locks
+   */
+  async emergencyLockCleanup(): Promise<void> {
+    try {
+      console.log('SyncWorkerManager: Performing emergency lock cleanup');
+      await this.#webLockCoordinator.emergencyCleanup();
+
+      // If we had a worker and sync ID, clean up local state too
+      if (this.#worker && this.#currentSyncId) {
+        console.log('SyncWorkerManager: Terminating worker during emergency cleanup');
+        this.#worker.terminate();
+        this.#worker = null;
+        this.#currentSyncId = null;
+      }
+    } catch (error) {
+      console.error('SyncWorkerManager: Emergency cleanup failed', error);
+    }
+  }
+
+  /**
    * Start a sync operation
    */
   async startSync(settings: AppSettings, fullSync = false): Promise<string> {
     const worker = await this.#createWorker();
     this.#currentSyncId = crypto.randomUUID();
+
+    // Start health monitoring when sync begins
+    this.#startWorkerHealthCheck();
 
     worker.postMessage(SyncWorkerMessages.startSync(
       settings,
@@ -131,6 +192,9 @@ export class SyncWorkerManager {
    * Cleanup the worker
    */
   cleanup(): void {
+    // Stop health monitoring
+    this.#stopWorkerHealthCheck();
+
     if (this.#worker) {
       this.#worker.terminate();
       this.#worker = null;

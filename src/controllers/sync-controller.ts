@@ -6,6 +6,7 @@ import type { SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
 import { SyncWorkerManager } from '../services/sync-worker-manager';
 import { pageVisibilityService } from '../services/page-visibility-service';
+import { WebLockCoordinator } from '../services/web-lock-coordinator';
 import type { AppSettings, SyncState, SyncControllerOptions } from '../types';
 
 
@@ -23,6 +24,10 @@ export class SyncController implements ReactiveController {
   #syncErrorQuery: ReactiveQueryController<string | null>;
   #syncRetryCountQuery: ReactiveQueryController<number>;
   #syncWorkerManager: SyncWorkerManager;
+  #webLockCoordinator: WebLockCoordinator;
+  #syncLockStatus: boolean = true; // Assume available until checked
+  #lockPollingInterval: number | null = null;
+  #beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -56,6 +61,9 @@ export class SyncController implements ReactiveController {
       () => DatabaseService.getSyncRetryCount()
     );
 
+    // Initialize web lock coordinator for multi-tab safety
+    this.#webLockCoordinator = new WebLockCoordinator();
+
     // Initialize sync worker manager with typed callbacks
     this.#syncWorkerManager = new SyncWorkerManager({
       onProgress: (current, total, phase) => {
@@ -88,7 +96,7 @@ export class SyncController implements ReactiveController {
           this.clearSyncedHighlights();
         }, 3000);
       },
-      onError: (error, _recoverable) => {
+      onError: (error) => {
         DebugService.logSyncError(new Error(error), { phase: this._syncState.syncPhase });
         this.#notifyError('Unable to sync your bookmarks. Please check your connection and try again.');
         this._syncState = {
@@ -123,15 +131,20 @@ export class SyncController implements ReactiveController {
 
   hostConnected(): void {
     this.initializeSync();
+    this.#setupBeforeUnloadHandler();
   }
 
   hostDisconnected(): void {
     this.cleanupSync();
+    this.#cleanupBeforeUnloadHandler();
   }
 
   private async initializeSync() {
     // Setup service worker message handler
     await this.setupServiceWorker();
+
+    // Start lock status polling for multi-tab coordination
+    this.#startLockPolling();
 
     // Check for ongoing sync status
     if (this.#serviceWorkerReady) {
@@ -140,6 +153,9 @@ export class SyncController implements ReactiveController {
   }
 
   private cleanupSync() {
+    // Stop lock polling
+    this.#stopLockPolling();
+
     // Clean up message handler
     if (this.#messageHandler && 'serviceWorker' in navigator && navigator.serviceWorker?.removeEventListener) {
       navigator.serviceWorker.removeEventListener('message', this.#messageHandler);
@@ -148,6 +164,62 @@ export class SyncController implements ReactiveController {
 
     // Clean up sync worker manager
     this.#syncWorkerManager.cleanup();
+  }
+
+  /**
+   * Setup beforeunload handler to register background sync when sync is in progress
+   */
+  #setupBeforeUnloadHandler(): void {
+    this.#beforeUnloadHandler = (event: BeforeUnloadEvent) => {
+      // Only register background sync if sync is currently in progress
+      if (this._syncState.isSyncing && this.#serviceWorkerReady) {
+        try {
+          // Register background sync to continue when app is closed
+          this.#registerBackgroundSync();
+
+          // Show browser warning that work may be lost
+          event.preventDefault();
+          event.returnValue = 'Sync is in progress. Closing now may interrupt the sync operation.';
+          return event.returnValue;
+        } catch (error) {
+          DebugService.logWarning('sync', 'Failed to register background sync on beforeunload', { error });
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', this.#beforeUnloadHandler);
+  }
+
+  /**
+   * Cleanup beforeunload handler
+   */
+  #cleanupBeforeUnloadHandler(): void {
+    if (this.#beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.#beforeUnloadHandler);
+      this.#beforeUnloadHandler = null;
+    }
+  }
+
+  /**
+   * Register background sync when app is about to be closed
+   */
+  #registerBackgroundSync(): void {
+    if (!this.#serviceWorkerReady || !('serviceWorker' in navigator)) {
+      return;
+    }
+
+    try {
+      // Send message to service worker to register background sync
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'REGISTER_BACKGROUND_SYNC',
+          syncId: `sync-${Date.now()}`,
+          settings: this.settings
+        });
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to register background sync', { error });
+    }
   }
 
   private async setupServiceWorker() {
@@ -274,6 +346,34 @@ export class SyncController implements ReactiveController {
   }
 
   /**
+   * Start periodic lock status polling for UI updates
+   */
+  #startLockPolling(): void {
+    // Poll lock status every 5 seconds for UI updates
+    this.#lockPollingInterval = setInterval(async () => {
+      try {
+        const isAvailable = await this.#webLockCoordinator.isLockAvailable();
+        if (this.#syncLockStatus !== isAvailable) {
+          this.#syncLockStatus = isAvailable;
+          this.#host.requestUpdate();
+        }
+      } catch (error) {
+        DebugService.logWarning('sync', 'Failed to check lock status during polling', { error });
+      }
+    }, 5000) as unknown as number;
+  }
+
+  /**
+   * Stop lock status polling
+   */
+  #stopLockPolling(): void {
+    if (this.#lockPollingInterval !== null) {
+      clearInterval(this.#lockPollingInterval);
+      this.#lockPollingInterval = null;
+    }
+  }
+
+  /**
    * Request a sync operation (directly via sync worker, bypassing service worker)
    */
   async requestSync(fullSync = false): Promise<void> {
@@ -284,6 +384,14 @@ export class SyncController implements ReactiveController {
       if (this.isSettingsLoading) {
         DebugService.logWarning('sync', 'Cannot sync while settings are loading');
         this.#notifyError('Please wait for settings to load');
+        return;
+      }
+
+      // Check if sync lock is available before starting
+      const lockAvailable = await this.#webLockCoordinator.isLockAvailable();
+      if (!lockAvailable) {
+        DebugService.logInfo('sync', 'Sync lock not available - sync in progress in another tab');
+        this.#notifyError('Sync is already running in another tab. Please wait for it to complete.');
         return;
       }
 
@@ -355,6 +463,13 @@ export class SyncController implements ReactiveController {
    */
   isSyncing(): boolean {
     return this._syncState.isSyncing;
+  }
+
+  /**
+   * Check if sync lock is currently available (not held by another tab)
+   */
+  isSyncLockAvailable(): boolean {
+    return this.#syncLockStatus;
   }
 
 

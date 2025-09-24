@@ -114,6 +114,25 @@ Object.defineProperty(navigator, 'serviceWorker', {
   configurable: true,
 });
 
+// Mock Web Locks API for multi-tab coordination
+const mockLocks = {
+  query: vi.fn().mockResolvedValue({
+    held: [],
+    pending: []
+  }),
+  request: vi.fn().mockImplementation((name: string, options: any, callback: Function) => {
+    // Simple mock: always allow lock acquisition
+    const lock = { name, mode: options.mode || 'exclusive' };
+    return Promise.resolve(callback(lock));
+  })
+};
+
+Object.defineProperty(navigator, 'locks', {
+  value: mockLocks,
+  writable: true,
+  configurable: true,
+});
+
 // Make essential mocks available globally for PWA tests that need them
 Object.defineProperty(global, 'mockServiceWorkerRegistration', {
   value: mockServiceWorkerRegistration,

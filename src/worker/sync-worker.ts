@@ -5,6 +5,7 @@ import type {
   SyncWorkerRequestMessage
 } from '../types/worker-messages';
 import { SyncWorkerResponses } from '../types/worker-messages';
+import { WebLockCoordinator } from '../services/web-lock-coordinator';
 import { logInfo, logError } from './sw-logger';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -12,6 +13,7 @@ declare const self: DedicatedWorkerGlobalScope;
 let currentSyncService: SyncService | null = null;
 let currentSyncId: string | null = null;
 let syncInitializationInProgress = false;
+let syncLockReleaser: (() => void) | null = null;
 
 /**
  * Dedicated worker for handling sync operations to keep the service worker responsive
@@ -52,6 +54,24 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerRequestMes
       currentSyncId = id;
 
       try {
+        // CRITICAL: Acquire Web Lock as first step to prevent concurrent syncs
+        logInfo('syncWorker', 'Acquiring sync lock for multi-tab safety', { syncId: id });
+        const lockReleaser = await WebLockCoordinator.acquireSyncLockInWorker();
+
+        if (!lockReleaser) {
+          syncInitializationInProgress = false; // Reset flag on error
+          self.postMessage(SyncWorkerResponses.error(
+            'Could not acquire sync lock - another sync is in progress',
+            id,
+            0,
+            true // Recoverable - user can retry
+          ));
+          return;
+        }
+
+        syncLockReleaser = lockReleaser;
+        logInfo('syncWorker', 'Sync lock acquired successfully', { syncId: id });
+
         // Create sync service with progress callback
         currentSyncService = new SyncService((progress) => {
           self.postMessage(SyncWorkerResponses.progress(
@@ -94,6 +114,13 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerRequestMes
           true // Sync errors are typically recoverable
         ));
       } finally {
+        // CRITICAL: Always release Web Lock on completion, cancellation, or error
+        if (syncLockReleaser) {
+          logInfo('syncWorker', 'Releasing sync lock', { syncId: currentSyncId });
+          syncLockReleaser();
+          syncLockReleaser = null;
+        }
+
         // Always clean up state, including initialization flag
         syncInitializationInProgress = false;
         currentSyncService = null;
@@ -110,6 +137,13 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerRequestMes
           currentSyncService.getProcessedCount(),
           id
         ));
+
+        // Release lock on cancellation
+        if (syncLockReleaser) {
+          logInfo('syncWorker', 'Releasing sync lock after cancellation', { syncId: id });
+          syncLockReleaser();
+          syncLockReleaser = null;
+        }
 
         currentSyncService = null;
         currentSyncId = null;
@@ -143,11 +177,19 @@ self.addEventListener('error', (event) => {
     ));
   }
 
-  // Clean up current operation
+  // Clean up current operation and release lock
   if (currentSyncService) {
     currentSyncService.cancelSync();
     currentSyncService = null;
   }
+
+  // Release lock on worker error
+  if (syncLockReleaser) {
+    logInfo('syncWorker', 'Releasing sync lock after worker error', { syncId: currentSyncId });
+    syncLockReleaser();
+    syncLockReleaser = null;
+  }
+
   syncInitializationInProgress = false;
   currentSyncId = null;
 });
@@ -166,11 +208,19 @@ self.addEventListener('unhandledrejection', (event) => {
     ));
   }
 
-  // Clean up current operation for unhandled rejections
+  // Clean up current operation for unhandled rejections and release lock
   if (currentSyncService) {
     currentSyncService.cancelSync();
     currentSyncService = null;
   }
+
+  // Release lock on unhandled rejection
+  if (syncLockReleaser) {
+    logInfo('syncWorker', 'Releasing sync lock after unhandled rejection', { syncId: currentSyncId });
+    syncLockReleaser();
+    syncLockReleaser = null;
+  }
+
   syncInitializationInProgress = false;
   currentSyncId = null;
 
