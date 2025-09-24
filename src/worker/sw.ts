@@ -10,6 +10,7 @@ import { SyncService } from './sync-service';
 import { WebLockCoordinator } from '../services/web-lock-coordinator';
 import type { AppSettings, SyncPhase } from '../types';
 import { logInfo, logError } from './sw-logger';
+import { hasBackgroundSync, hasPeriodicBackgroundSync } from '../utils/pwa-capabilities';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -54,12 +55,25 @@ registerRoute(
   })
 );
 
+// PWA capability detection (detected once at startup)
+const PWA_CAPABILITIES = {
+  backgroundSync: hasBackgroundSync(),
+  periodicBackgroundSync: hasPeriodicBackgroundSync()
+};
+
+// Log capability detection results
+logInfo('serviceWorker', 'PWA capabilities detected:', PWA_CAPABILITIES);
+
 // Sync state management (for background sync only)
 let syncInProgress = false;
 let currentSyncProgress: { current: number; total: number; phase: SyncPhase } | null = null;
 let currentSyncService: SyncService | null = null;
 let backgroundSyncEnabled = true; // Disabled when app is in foreground
 let currentLockRelease: (() => void) | null = null;
+
+// Fallback mechanism state (when Background Sync API is not available)
+let fallbackRetryQueue: Array<{ tag: string; timestamp: number; retryCount: number }> = [];
+let periodicSyncTimer: number | null = null;
 
 /**
  * Consolidated keepalive manager for service worker lifecycle
@@ -173,6 +187,16 @@ self.addEventListener('activate', (event) => {
       const clients = await self.clients.matchAll({ type: 'window' });
       logInfo('serviceWorker', `Now controlling ${clients.length} client(s)`);
 
+      // Initialize fallback mechanisms if needed
+      if (!PWA_CAPABILITIES.backgroundSync) {
+        await initializeRetryQueue();
+        logInfo('serviceWorker', 'Background Sync API not available - initialized fallback retry queue');
+      }
+
+      if (!PWA_CAPABILITIES.periodicBackgroundSync) {
+        logInfo('serviceWorker', 'Periodic Background Sync API not available - will use timer fallback when visible');
+      }
+
       // Note: Periodic sync registration is now handled by SyncController
       // based on page visibility to prevent service worker blocking when app is visible
 
@@ -190,11 +214,162 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Online/offline event listeners for Background Sync fallback
+if (!PWA_CAPABILITIES.backgroundSync) {
+  logInfo('serviceWorker', 'Setting up online/offline event listeners for Background Sync fallback');
+
+  self.addEventListener('online', () => {
+    logInfo('backgroundSyncFallback', 'Network restored - processing retry queue');
+    processRetryQueue().catch(error => {
+      logError('backgroundSyncFallback', 'Failed to process retry queue on network restore', error);
+    });
+  });
+
+  self.addEventListener('offline', () => {
+    logInfo('backgroundSyncFallback', 'Network lost - sync operations will be queued for retry');
+  });
+}
+
 // Service worker will automatically handle fetch events via Workbox
 
 
 // Retry configuration
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
+
+/**
+ * Background Sync API fallback implementation using online/offline events
+ * Used when Background Sync API is not available (Firefox/Safari)
+ */
+
+/**
+ * Add a sync operation to the fallback retry queue
+ */
+async function addToRetryQueue(tag: string): Promise<void> {
+  if (!PWA_CAPABILITIES.backgroundSync) {
+    const queueItem = {
+      tag,
+      timestamp: Date.now(),
+      retryCount: 0
+    };
+
+    fallbackRetryQueue.push(queueItem);
+    logInfo('backgroundSyncFallback', `Added ${tag} to retry queue, queue size: ${fallbackRetryQueue.length}`);
+
+    // Save retry queue to IndexedDB for persistence
+    try {
+      await DatabaseService.saveSyncRetryQueue(fallbackRetryQueue);
+    } catch (error) {
+      logError('backgroundSyncFallback', 'Failed to persist retry queue', error);
+    }
+  }
+}
+
+/**
+ * Process the retry queue when network is restored
+ */
+async function processRetryQueue(): Promise<void> {
+  if (fallbackRetryQueue.length === 0 || !backgroundSyncEnabled) {
+    return;
+  }
+
+  logInfo('backgroundSyncFallback', `Processing retry queue with ${fallbackRetryQueue.length} items`);
+
+  // Process each item in the queue
+  const itemsToProcess = [...fallbackRetryQueue];
+  fallbackRetryQueue = [];
+
+  for (const item of itemsToProcess) {
+    try {
+      if (item.tag === 'sync-bookmarks') {
+        await performSync();
+        logInfo('backgroundSyncFallback', `Successfully processed ${item.tag} from retry queue`);
+      }
+    } catch (error) {
+      logError('backgroundSyncFallback', `Failed to process ${item.tag} from retry queue`, error);
+
+      // Re-add to queue if under retry limit
+      if (item.retryCount < SYNC_RETRY_DELAYS.length - 1) {
+        const delayMs = SYNC_RETRY_DELAYS[item.retryCount];
+        item.retryCount++;
+
+        // Schedule retry after delay
+        setTimeout(() => {
+          fallbackRetryQueue.push(item);
+          logInfo('backgroundSyncFallback', `Re-queued ${item.tag} for retry ${item.retryCount} after ${delayMs}ms`);
+        }, delayMs);
+      } else {
+        logInfo('backgroundSyncFallback', `Max retries exceeded for ${item.tag}, dropping from queue`);
+      }
+    }
+  }
+
+  // Update persisted queue
+  try {
+    await DatabaseService.saveSyncRetryQueue(fallbackRetryQueue);
+  } catch (error) {
+    logError('backgroundSyncFallback', 'Failed to update persisted retry queue', error);
+  }
+}
+
+/**
+ * Initialize fallback retry queue from IndexedDB on startup
+ */
+async function initializeRetryQueue(): Promise<void> {
+  try {
+    const persistedQueue = await DatabaseService.getSyncRetryQueue();
+    if (persistedQueue && Array.isArray(persistedQueue)) {
+      fallbackRetryQueue = persistedQueue;
+      logInfo('backgroundSyncFallback', `Restored retry queue with ${fallbackRetryQueue.length} items from IndexedDB`);
+    }
+  } catch (error) {
+    logError('backgroundSyncFallback', 'Failed to restore retry queue from IndexedDB', error);
+    fallbackRetryQueue = [];
+  }
+}
+
+/**
+ * Periodic Sync API fallback implementation using setInterval
+ * Used when Periodic Background Sync API is not available (Firefox/Safari)
+ */
+
+/**
+ * Start periodic sync timer when app is visible (fallback for Periodic Background Sync)
+ */
+async function startPeriodicSyncFallback(): Promise<void> {
+  if (PWA_CAPABILITIES.periodicBackgroundSync || periodicSyncTimer !== null) {
+    return; // Native API available or timer already running
+  }
+
+  // Use default sync interval (30 minutes) for periodic sync fallback
+  try {
+    const intervalMinutes = 30; // Default 30 minute interval
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    periodicSyncTimer = setInterval(() => {
+      if (backgroundSyncEnabled) {
+        logInfo('periodicSyncFallback', `Triggering periodic sync (fallback timer, ${intervalMinutes} min interval)`);
+        performSync().catch(error => {
+          logError('periodicSyncFallback', 'Periodic sync fallback failed', error);
+        });
+      }
+    }, intervalMs) as unknown as number;
+
+    logInfo('periodicSyncFallback', `Started periodic sync fallback timer (${intervalMinutes} min interval)`);
+  } catch (error) {
+    logError('periodicSyncFallback', 'Failed to start periodic sync fallback', error);
+  }
+}
+
+/**
+ * Stop periodic sync timer (used when app goes to background or native API is available)
+ */
+function stopPeriodicSyncFallback(): void {
+  if (periodicSyncTimer !== null) {
+    clearInterval(periodicSyncTimer);
+    periodicSyncTimer = null;
+    logInfo('periodicSyncFallback', 'Stopped periodic sync fallback timer');
+  }
+}
 
 /**
  * Perform background sync directly in the service worker with Web Lock coordination
@@ -301,9 +476,16 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
         const delay = SYNC_RETRY_DELAYS[retryCount];
         await DatabaseService.incrementSyncRetryCount();
         logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
+
         setTimeout(() => {
           if (backgroundSyncEnabled) {
-            (self.registration as any).sync?.register('sync-bookmarks');
+            if (PWA_CAPABILITIES.backgroundSync) {
+              // Use native Background Sync API
+              (self.registration as any).sync?.register('sync-bookmarks');
+            } else {
+              // Use fallback retry queue
+              addToRetryQueue('sync-bookmarks');
+            }
           }
         }, delay);
       }
@@ -433,8 +615,14 @@ self.addEventListener('message', async (event) => {
 
         await syncPromise;
       } else {
-        // For background sync, register sync event
-        await (self.registration as any).sync?.register('sync-bookmarks');
+        // For background sync, register sync event or use fallback
+        if (PWA_CAPABILITIES.backgroundSync) {
+          // Use native Background Sync API
+          await (self.registration as any).sync?.register('sync-bookmarks');
+        } else {
+          // Use fallback retry queue
+          await addToRetryQueue('sync-bookmarks');
+        }
       }
       break;
 
@@ -464,6 +652,11 @@ self.addEventListener('message', async (event) => {
     case 'APP_FOREGROUND':
       logInfo('visibility', 'App became foreground - disabling background sync');
       backgroundSyncEnabled = false;
+
+      // Stop periodic sync fallback timer if running
+      if (!PWA_CAPABILITIES.periodicBackgroundSync) {
+        stopPeriodicSyncFallback();
+      }
 
       // Cancel any in-progress background sync
       if (currentSyncService && syncInProgress) {
@@ -502,6 +695,11 @@ self.addEventListener('message', async (event) => {
       logInfo('visibility', 'App became background - re-enabling background sync');
       backgroundSyncEnabled = true;
 
+      // Start periodic sync fallback timer if needed
+      if (!PWA_CAPABILITIES.periodicBackgroundSync) {
+        await startPeriodicSyncFallback();
+      }
+
       // Notify all clients that service worker can now handle background sync
       await broadcastToClients({
         type: 'SW_LOG',
@@ -513,7 +711,7 @@ self.addEventListener('message', async (event) => {
       break;
       
     case 'REGISTER_PERIODIC_SYNC':
-      if ('periodicSync' in self.registration) {
+      if (PWA_CAPABILITIES.periodicBackgroundSync) {
         try {
           if (message.enabled) {
             // Register periodic sync (browser will decide actual frequency)
@@ -523,6 +721,8 @@ self.addEventListener('message', async (event) => {
             // Unregister periodic sync
             await (self.registration as any).periodicSync.unregister('periodic-sync');
             logInfo('periodicSync', 'Periodic sync unregistered');
+            // Also stop fallback timer if it's running
+            stopPeriodicSyncFallback();
           }
         } catch (error) {
           logError('periodicSync', 'Failed to register periodic sync', error);
@@ -532,10 +732,13 @@ self.addEventListener('message', async (event) => {
           ));
         }
       } else {
-        await broadcastToClients(SyncMessages.syncError(
-          'Periodic sync not supported in this browser',
-          false
-        ));
+        // Use fallback timer-based approach
+        logInfo('periodicSync', 'Periodic Background Sync API not available - using timer fallback');
+        if (message.enabled) {
+          await startPeriodicSyncFallback();
+        } else {
+          stopPeriodicSyncFallback();
+        }
       }
       break;
       
@@ -589,69 +792,75 @@ self.addEventListener('message', async (event) => {
 
 /**
  * Handle Background Sync API events with Web Lock coordination
+ * Only register if Background Sync API is supported
  */
-self.addEventListener('sync', (event: any) => {
-  if (event.tag === 'sync-bookmarks') {
-    logInfo('backgroundSync', 'Background sync event triggered');
+if (PWA_CAPABILITIES.backgroundSync) {
+  self.addEventListener('sync', (event: any) => {
+    if (event.tag === 'sync-bookmarks') {
+      logInfo('backgroundSync', 'Background sync event triggered');
 
-    // Wrap the sync operation to ensure proper error handling and lock coordination
-    const syncPromise = (async () => {
-      try {
-        await performSync();
-      } catch (error) {
-        logError('backgroundSync', 'Background sync event failed', error);
+      // Wrap the sync operation to ensure proper error handling and lock coordination
+      const syncPromise = (async () => {
+        try {
+          await performSync();
+        } catch (error) {
+          logError('backgroundSync', 'Background sync event failed', error);
 
-        // Ensure cleanup on error
-        syncInProgress = false;
-        currentSyncProgress = null;
-        keepaliveManager.stop();
+          // Ensure cleanup on error
+          syncInProgress = false;
+          currentSyncProgress = null;
+          keepaliveManager.stop();
 
-        if (currentLockRelease) {
-          logInfo('backgroundSync', 'Releasing Web Lock after sync event error');
-          currentLockRelease();
-          currentLockRelease = null;
+          if (currentLockRelease) {
+            logInfo('backgroundSync', 'Releasing Web Lock after sync event error');
+            currentLockRelease();
+            currentLockRelease = null;
+          }
+
+          // Don't re-throw to prevent endless retries
         }
+      })();
 
-        // Don't re-throw to prevent endless retries
-      }
-    })();
-
-    event.waitUntil(syncPromise);
-  }
-});
+      event.waitUntil(syncPromise);
+    }
+  });
+}
 
 /**
  * Handle Periodic Background Sync API events with Web Lock coordination
+ * Only register if Periodic Background Sync API is supported
  */
-self.addEventListener('periodicsync', (event: any) => {
-  if (event.tag === 'periodic-sync') {
-    logInfo('periodicSync', 'Periodic sync event triggered');
+if (PWA_CAPABILITIES.periodicBackgroundSync) {
+  self.addEventListener('periodicsync', (event: any) => {
+    if (event.tag === 'periodic-sync') {
+      logInfo('periodicSync', 'Periodic sync event triggered');
 
-    // Wrap the sync operation to ensure proper error handling and lock coordination
-    const syncPromise = (async () => {
-      try {
-        await performSync();
-      } catch (error) {
-        logError('periodicSync', 'Periodic sync event failed', error);
+      // Wrap the sync operation to ensure proper error handling and lock coordination
+      const syncPromise = (async () => {
+        try {
+          await performSync();
+        } catch (error) {
+          logError('periodicSync', 'Periodic sync event failed', error);
 
-        // Ensure cleanup on error
-        syncInProgress = false;
-        currentSyncProgress = null;
-        keepaliveManager.stop();
+          // Ensure cleanup on error
+          syncInProgress = false;
+          currentSyncProgress = null;
+          keepaliveManager.stop();
 
-        if (currentLockRelease) {
-          logInfo('periodicSync', 'Releasing Web Lock after periodic sync error');
-          currentLockRelease();
-          currentLockRelease = null;
+          if (currentLockRelease) {
+            logInfo('periodicSync', 'Releasing Web Lock after periodic sync error');
+            currentLockRelease();
+            currentLockRelease = null;
+          }
+
+          // Don't re-throw to prevent endless retries
         }
+      })();
 
-        // Don't re-throw to prevent endless retries
-      }
-    })();
-
-    event.waitUntil(syncPromise);
-  }
-});
+      event.waitUntil(syncPromise);
+    }
+  });
+}
 
 
 /**

@@ -8,6 +8,7 @@ import { SyncWorkerManager } from '../services/sync-worker-manager';
 import { pageVisibilityService } from '../services/page-visibility-service';
 import { WebLockCoordinator } from '../services/web-lock-coordinator';
 import type { AppSettings, SyncState, SyncControllerOptions } from '../types';
+import { detectCapabilities } from '../utils/pwa-capabilities';
 
 
 /**
@@ -28,6 +29,7 @@ export class SyncController implements ReactiveController {
   #syncLockStatus: boolean = true; // Assume available until checked
   #lockPollingInterval: number | null = null;
   #beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
+  #pwaCapabilities = detectCapabilities();
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -150,6 +152,9 @@ export class SyncController implements ReactiveController {
     if (this.#serviceWorkerReady) {
       await this.checkSyncStatus();
     }
+
+    // Phase 1.3: Register periodic background sync if capabilities available and settings allow
+    await this.#registerPeriodicBackgroundSyncIfAvailable();
   }
 
   private cleanupSync() {
@@ -168,7 +173,7 @@ export class SyncController implements ReactiveController {
 
   /**
    * Setup beforeunload handler to register background sync when sync is in progress
-   * Enhanced for Phase 1.2 with comprehensive sync state coordination
+   * Enhanced for Phase 1.3 with capability detection and graceful degradation
    */
   #setupBeforeUnloadHandler(): void {
     this.#beforeUnloadHandler = (event: BeforeUnloadEvent) => {
@@ -178,15 +183,24 @@ export class SyncController implements ReactiveController {
           // Phase 1.2: Preserve sync state for service worker resume
           this.#preserveSyncStateForBackgroundResume();
 
-          // Register background sync to continue when app is closed
-          this.#registerBackgroundSync();
+          // Phase 1.3: Register background sync only if API is available
+          if (this.#pwaCapabilities.backgroundSync) {
+            this.#registerBackgroundSync();
+            DebugService.logInfo('sync', 'Background sync registered for sync continuation');
+          } else {
+            DebugService.logInfo('sync', 'Background sync API not available - sync will not continue after closing app');
+          }
 
           // Phase 1.2: Handle sync worker graceful termination
           this.#gracefullyTerminateSyncWorker();
 
           // Show browser warning that work may be lost
+          const message = this.#pwaCapabilities.backgroundSync
+            ? 'Sync is in progress. Closing now may interrupt the sync operation.'
+            : 'Sync is in progress. Closing now will interrupt the sync as background sync is not supported in your browser.';
+
           event.preventDefault();
-          event.returnValue = 'Sync is in progress. Closing now may interrupt the sync operation.';
+          event.returnValue = message;
           return event.returnValue;
         } catch (error) {
           DebugService.logWarning('sync', 'Failed to handle beforeunload sync coordination', { error });
@@ -238,10 +252,15 @@ export class SyncController implements ReactiveController {
 
   /**
    * Register background sync when app is about to be closed
-   * Updated to use REQUEST_SYNC message that service worker handles
+   * Enhanced for Phase 1.3 with capability detection
    */
   #registerBackgroundSync(): void {
-    if (!this.#serviceWorkerReady || !('serviceWorker' in navigator)) {
+    if (!this.#serviceWorkerReady || !this.#pwaCapabilities.serviceWorker || !this.#pwaCapabilities.backgroundSync) {
+      DebugService.logWarning('sync', 'Cannot register background sync - required APIs not available', {
+        serviceWorkerReady: this.#serviceWorkerReady,
+        serviceWorkerSupported: this.#pwaCapabilities.serviceWorker,
+        backgroundSyncSupported: this.#pwaCapabilities.backgroundSync
+      });
       return;
     }
 
@@ -285,9 +304,11 @@ export class SyncController implements ReactiveController {
   }
 
   private async setupServiceWorker() {
-    if (!('serviceWorker' in navigator)) {
+    // Phase 1.3: Enhanced capability detection and user messaging
+    if (!this.#pwaCapabilities.serviceWorker) {
+      const message = 'Background sync is not supported in your browser. Sync will only work while the app is open.';
       DebugService.logWarning('sync', 'Service Worker not supported');
-      this.#notifyError('Background sync is not supported in your browser');
+      this.#notifyError(message);
       return;
     }
 
@@ -300,6 +321,13 @@ export class SyncController implements ReactiveController {
         this.handleServiceWorkerMessage(event.data as SyncMessage);
       };
       navigator.serviceWorker.addEventListener('message', this.#messageHandler);
+
+      // Phase 1.3: Log capability status for debugging
+      DebugService.logInfo('sync', 'Service worker ready with capabilities', {
+        backgroundSync: this.#pwaCapabilities.backgroundSync,
+        periodicBackgroundSync: this.#pwaCapabilities.periodicBackgroundSync,
+        webLocks: this.#pwaCapabilities.webLocks
+      });
 
       // Note: Periodic sync state is now managed globally by PageVisibilityService
       // based on page visibility to prevent service worker blocking when app is visible
@@ -330,6 +358,62 @@ export class SyncController implements ReactiveController {
       }
     } catch (error) {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to check for resume sync');
+    }
+  }
+
+  /**
+   * Register periodic background sync if capabilities are available and settings allow
+   * Phase 1.3: App initialization periodic sync registration
+   */
+  async #registerPeriodicBackgroundSyncIfAvailable(): Promise<void> {
+    // Only proceed if we have both service worker and periodic background sync APIs
+    if (!this.#serviceWorkerReady || !this.#pwaCapabilities.periodicBackgroundSync) {
+      if (this.#serviceWorkerReady) {
+        DebugService.logInfo('sync', 'Periodic background sync API not available - falling back to timer-based sync when app is visible');
+      }
+      return;
+    }
+
+    try {
+      // Wait for settings to be available
+      if (this.isSettingsLoading) {
+        // Listen for settings to become available
+        const settings = await new Promise<AppSettings | null>((resolve) => {
+          const checkSettings = () => {
+            if (!this.isSettingsLoading) {
+              resolve(this.settings);
+            } else {
+              setTimeout(checkSettings, 100);
+            }
+          };
+          checkSettings();
+        });
+
+        if (!settings) {
+          DebugService.logInfo('sync', 'No settings available - periodic background sync not registered');
+          return;
+        }
+      }
+
+      const settings = this.settings;
+      if (!settings || !settings.auto_sync) {
+        DebugService.logInfo('sync', 'Auto-sync not enabled in settings - periodic background sync not registered');
+        return;
+      }
+
+      // TODO: Add user permission and PWA installation checks
+      // For now, register if API is available and auto-sync is enabled
+
+      // Send message to service worker to register periodic background sync
+      // Note: Sync interval will be handled by service worker default (30 minutes)
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'REGISTER_PERIODIC_SYNC'
+        });
+        DebugService.logInfo('sync', 'Periodic background sync registration requested');
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to register periodic background sync', { error });
     }
   }
 
@@ -620,6 +704,14 @@ export class SyncController implements ReactiveController {
    */
   isSyncLockAvailable(): boolean {
     return this.#syncLockStatus;
+  }
+
+  /**
+   * Get PWA capabilities for the current browser
+   * Phase 1.3: Expose capabilities for user messaging and feature adaptation
+   */
+  getPWACapabilities() {
+    return { ...this.#pwaCapabilities };
   }
 
 

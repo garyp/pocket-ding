@@ -9,6 +9,7 @@ interface SyncMetadata {
   archived_offset?: number;
   retry_count?: number;
   last_error?: string;
+  retry_queue?: string; // JSON string of retry queue items
 }
 
 
@@ -468,6 +469,34 @@ export class DatabaseService {
         last_sync_timestamp: '',
         archived_offset: offset
       });
+    }
+  }
+
+  // Retry queue methods for Background Sync fallback
+  static async saveSyncRetryQueue(queue: Array<{ tag: string; timestamp: number; retryCount: number }>): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { retry_queue: JSON.stringify(queue) });
+    } else {
+      await db.syncMetadata.add({
+        last_sync_timestamp: '',
+        retry_queue: JSON.stringify(queue)
+      });
+    }
+  }
+
+  static async getSyncRetryQueue(): Promise<Array<{ tag: string; timestamp: number; retryCount: number }> | null> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    const queueData = metadata?.retry_queue;
+    if (!queueData) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(queueData);
+    } catch (error) {
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'database', 'Failed to parse retry queue data');
+      return null;
     }
   }
 
