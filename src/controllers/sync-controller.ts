@@ -168,21 +168,28 @@ export class SyncController implements ReactiveController {
 
   /**
    * Setup beforeunload handler to register background sync when sync is in progress
+   * Enhanced for Phase 1.2 with comprehensive sync state coordination
    */
   #setupBeforeUnloadHandler(): void {
     this.#beforeUnloadHandler = (event: BeforeUnloadEvent) => {
       // Only register background sync if sync is currently in progress
       if (this._syncState.isSyncing && this.#serviceWorkerReady) {
         try {
+          // Phase 1.2: Preserve sync state for service worker resume
+          this.#preserveSyncStateForBackgroundResume();
+
           // Register background sync to continue when app is closed
           this.#registerBackgroundSync();
+
+          // Phase 1.2: Handle sync worker graceful termination
+          this.#gracefullyTerminateSyncWorker();
 
           // Show browser warning that work may be lost
           event.preventDefault();
           event.returnValue = 'Sync is in progress. Closing now may interrupt the sync operation.';
           return event.returnValue;
         } catch (error) {
-          DebugService.logWarning('sync', 'Failed to register background sync on beforeunload', { error });
+          DebugService.logWarning('sync', 'Failed to handle beforeunload sync coordination', { error });
         }
       }
     };
@@ -201,7 +208,37 @@ export class SyncController implements ReactiveController {
   }
 
   /**
+   * Preserve sync state for service worker background resume
+   */
+  #preserveSyncStateForBackgroundResume(): void {
+    if (!this.#serviceWorkerReady || !('serviceWorker' in navigator)) {
+      return;
+    }
+
+    try {
+      // Send current sync state to service worker for background resume
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'PRESERVE_SYNC_STATE',
+          syncState: {
+            phase: this._syncState.syncPhase,
+            progress: this._syncState.syncProgress,
+            total: this._syncState.syncTotal,
+            status: this._syncState.syncStatus
+          },
+          settings: this.settings,
+          timestamp: Date.now()
+        });
+        DebugService.logInfo('sync', 'Sync state preserved for background resume');
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to preserve sync state', { error });
+    }
+  }
+
+  /**
    * Register background sync when app is about to be closed
+   * Updated to use REQUEST_SYNC message that service worker handles
    */
   #registerBackgroundSync(): void {
     if (!this.#serviceWorkerReady || !('serviceWorker' in navigator)) {
@@ -209,16 +246,41 @@ export class SyncController implements ReactiveController {
     }
 
     try {
-      // Send message to service worker to register background sync
+      // Use REQUEST_SYNC message for background sync registration
       if (navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
-          type: 'REGISTER_BACKGROUND_SYNC',
-          syncId: `sync-${Date.now()}`,
-          settings: this.settings
+          type: 'REQUEST_SYNC',
+          immediate: false, // Background sync, not immediate
+          priority: 'normal',
+          fullSync: false // Resume current sync, not full sync
         });
+        DebugService.logInfo('sync', 'Background sync registered for continuation');
       }
     } catch (error) {
       DebugService.logWarning('sync', 'Failed to register background sync', { error });
+    }
+  }
+
+  /**
+   * Handle sync worker graceful termination when app is closing
+   */
+  #gracefullyTerminateSyncWorker(): void {
+    try {
+      // Cancel sync worker gracefully to release resources
+      // The service worker will take over with background sync
+      if (this._syncState.isSyncing) {
+        DebugService.logInfo('sync', 'Gracefully terminating sync worker for background handoff');
+        this.#syncWorkerManager.cancelSync();
+
+        // Update state to indicate interrupted status
+        this._syncState = {
+          ...this._syncState,
+          syncStatus: 'interrupted', // Service worker can detect this and resume
+          syncPhase: this._syncState.syncPhase // Preserve current phase
+        };
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to gracefully terminate sync worker', { error });
     }
   }
 
@@ -290,22 +352,99 @@ export class SyncController implements ReactiveController {
         break;
 
       case 'SYNC_STATUS':
-        // Only handle interrupted status for resuming sync when app returns from background
+        // Phase 1.2: Enhanced status handling for better coordination
+        DebugService.logInfo('sync', `Service worker sync status: ${message.status}`);
+
         if (message.status === 'interrupted') {
           DebugService.logInfo('sync', 'Interrupted sync detected - resuming');
           this.#checkAndResumeSync();
+        } else if (message.status === 'starting' && !this._syncState.isSyncing) {
+          // Service worker starting background sync while app is in foreground
+          // Update UI to show that sync is happening in background
+          DebugService.logInfo('sync', 'Background sync starting while app is in foreground');
+          this.#updateSyncLockStatus();
         }
-        // Note: Other status updates (syncing, completed, failed) from background sync are ignored
-        // since background sync should be invisible to the user. Foreground sync uses SyncWorkerManager.
         break;
 
       case 'SYNC_PROGRESS':
-      case 'SYNC_COMPLETE':
-      case 'SYNC_ERROR':
-        // Background sync progress/complete/error messages are ignored for UI updates
-        // Background sync should be invisible to the user. Foreground sync uses SyncWorkerManager.
-        DebugService.logInfo('sync', `Background sync message ignored: ${message.type}`, { messageType: message.type });
+        // Phase 1.2: Handle background sync progress for better user awareness
+        if (message.current !== undefined && message.total !== undefined) {
+          DebugService.logInfo('sync', `Background sync progress: ${message.current}/${message.total} (${message.phase})`);
+          // Update lock status to reflect ongoing background sync
+          this.#updateSyncLockStatus();
+        }
         break;
+
+      case 'SYNC_COMPLETE':
+        // Phase 1.2: Enhanced completion handling
+        DebugService.logInfo('sync', `Background sync completed: ${message.success ? 'success' : 'failure'}`, {
+          processed: message.processed,
+          duration: message.duration,
+          error: message.error
+        });
+
+        if (message.success) {
+          // Trigger UI refresh to show new synced data
+          this.#host.requestUpdate();
+
+          // Notify completion callback if provided
+          if (this.#options.onSyncCompleted) {
+            this.#options.onSyncCompleted();
+          }
+        } else {
+          // Handle background sync failure
+          this.#handleBackgroundSyncError(message.error || 'Unknown background sync error');
+        }
+
+        // Update lock status after completion
+        setTimeout(() => {
+          this.#updateSyncLockStatus();
+        }, 1000); // Brief delay to allow lock release
+        break;
+
+      case 'SYNC_ERROR':
+        // Phase 1.2: Enhanced error handling
+        DebugService.logError(new Error(`Background sync error: ${message.error}`), 'sync', 'Service worker sync error', {
+          recoverable: message.recoverable,
+          timestamp: message.timestamp
+        });
+
+        this.#handleBackgroundSyncError(message.error, message.recoverable);
+        break;
+    }
+  }
+
+  /**
+   * Handle background sync errors from service worker
+   */
+  #handleBackgroundSyncError(errorMessage: string, recoverable = false): void {
+    // Only show error if not recoverable or if user needs to know
+    if (!recoverable || errorMessage.includes('settings') || errorMessage.includes('permission')) {
+      this.#notifyError(`Background sync failed: ${errorMessage}`);
+    }
+
+    // Save error to database for persistence
+    DatabaseService.setLastSyncError(errorMessage).catch(err => {
+      DebugService.logError(err instanceof Error ? err : new Error(String(err)), 'sync', 'Failed to save background sync error');
+    });
+
+    // Update UI
+    this.#host.requestUpdate();
+  }
+
+  /**
+   * Update sync lock status for UI display
+   */
+  async #updateSyncLockStatus(): Promise<void> {
+    try {
+      const isAvailable = await this.#webLockCoordinator.isLockAvailable();
+      if (this.#syncLockStatus !== isAvailable) {
+        this.#syncLockStatus = isAvailable;
+        this.#host.requestUpdate();
+        DebugService.logInfo('sync', `Sync lock status updated: ${isAvailable ? 'available' : 'locked'}`);
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to update sync lock status', { error });
     }
   }
 
@@ -387,10 +526,21 @@ export class SyncController implements ReactiveController {
         return;
       }
 
-      // Check if sync lock is available before starting
+      // Phase 1.2: Wait for service worker to release Web Lock before starting foreground sync
+      DebugService.logInfo('sync', 'Waiting for service worker to release Web Lock before starting foreground sync');
+      try {
+        await this.#webLockCoordinator.waitForLockRelease({ timeout: 30000 }); // 30 second timeout
+        DebugService.logInfo('sync', 'Web Lock is now available for foreground sync');
+      } catch (error) {
+        DebugService.logWarning('sync', 'Timeout waiting for Web Lock release - sync may be blocked by another tab', { error });
+        this.#notifyError('Sync is blocked by another tab or background process. Please wait and try again.');
+        return;
+      }
+
+      // Double-check lock is still available after waiting
       const lockAvailable = await this.#webLockCoordinator.isLockAvailable();
       if (!lockAvailable) {
-        DebugService.logInfo('sync', 'Sync lock not available - sync in progress in another tab');
+        DebugService.logInfo('sync', 'Sync lock not available after waiting - sync in progress in another tab');
         this.#notifyError('Sync is already running in another tab. Please wait for it to complete.');
         return;
       }

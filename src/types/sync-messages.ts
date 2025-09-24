@@ -15,7 +15,10 @@ export type SyncMessageType =
   | 'CHECK_SYNC_PERMISSION'
   | 'REQUEST_VERSION'
   | 'VERSION_INFO'
-  | 'SW_LOG';
+  | 'SW_LOG'
+  | 'APP_FOREGROUND'
+  | 'APP_BACKGROUND'
+  | 'PRESERVE_SYNC_STATE';
 
 export interface SyncRequestMessage {
   type: 'REQUEST_SYNC';
@@ -86,6 +89,28 @@ export interface VersionInfoMessage {
   version: import('./version').VersionInfo;
 }
 
+export interface AppForegroundMessage {
+  type: 'APP_FOREGROUND';
+  timestamp: number;
+}
+
+export interface AppBackgroundMessage {
+  type: 'APP_BACKGROUND';
+  timestamp: number;
+}
+
+export interface PreserveSyncStateMessage {
+  type: 'PRESERVE_SYNC_STATE';
+  syncState: {
+    phase?: string;
+    progress: number;
+    total: number;
+    status: string;
+  };
+  settings: any; // AppSettings
+  timestamp: number;
+}
+
 export type SyncMessage =
   | SyncRequestMessage
   | CancelSyncMessage
@@ -97,7 +122,10 @@ export type SyncMessage =
   | CheckSyncPermissionMessage
   | RequestVersionMessage
   | VersionInfoMessage
-  | ServiceWorkerLogMessage;
+  | ServiceWorkerLogMessage
+  | AppForegroundMessage
+  | AppBackgroundMessage
+  | PreserveSyncStateMessage;
 
 /**
  * Helper functions for message creation
@@ -170,6 +198,20 @@ export const SyncMessages = {
   checkSyncPermission(): CheckSyncPermissionMessage {
     return {
       type: 'CHECK_SYNC_PERMISSION'
+    };
+  },
+
+  appForeground(): AppForegroundMessage {
+    return {
+      type: 'APP_FOREGROUND',
+      timestamp: Date.now()
+    };
+  },
+
+  appBackground(): AppBackgroundMessage {
+    return {
+      type: 'APP_BACKGROUND',
+      timestamp: Date.now()
     };
   }
 };

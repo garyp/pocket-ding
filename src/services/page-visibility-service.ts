@@ -64,7 +64,8 @@ export class PageVisibilityService {
       this.#serviceWorkerReady = true;
       DebugService.logInfo('app', 'Service worker ready for page visibility coordination');
 
-      // Set initial periodic sync state
+      // Send initial visibility state and set periodic sync
+      this.#sendVisibilityMessage();
       await this.updatePeriodicSyncState();
     } catch (error) {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to setup service worker');
@@ -81,6 +82,11 @@ export class PageVisibilityService {
 
       if (wasVisible !== this.#isPageVisible) {
         DebugService.logInfo('app', `Page visibility changed: ${this.#isPageVisible ? 'visible' : 'hidden'}`);
+
+        // Send visibility message to service worker
+        this.#sendVisibilityMessage();
+
+        // Update periodic sync state
         this.updatePeriodicSyncState();
       }
     };
@@ -116,6 +122,26 @@ export class PageVisibilityService {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to update periodic sync state');
     }
   }
+
+  /**
+   * Send visibility message to service worker
+   */
+  #sendVisibilityMessage = (): void => {
+    if (!this.#serviceWorkerReady) {
+      return;
+    }
+
+    try {
+      const message = this.#isPageVisible
+        ? SyncMessages.appForeground()
+        : SyncMessages.appBackground();
+
+      this.#postToServiceWorker(message);
+      DebugService.logInfo('app', `Sent visibility message: ${message.type}`);
+    } catch (error) {
+      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to send visibility message to service worker');
+    }
+  };
 
   /**
    * Post message to service worker
