@@ -7,6 +7,7 @@ import { ExpirationPlugin } from 'workbox-expiration';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
 import { SyncService } from './sync-service';
+import { WebLockCoordinator } from '../services/web-lock-coordinator';
 import type { AppSettings, SyncPhase } from '../types';
 import { logInfo, logError } from './sw-logger';
 
@@ -57,6 +58,8 @@ registerRoute(
 let syncInProgress = false;
 let currentSyncProgress: { current: number; total: number; phase: SyncPhase } | null = null;
 let currentSyncService: SyncService | null = null;
+let backgroundSyncEnabled = true; // Disabled when app is in foreground
+let currentLockRelease: (() => void) | null = null;
 
 /**
  * Consolidated keepalive manager for service worker lifecycle
@@ -194,12 +197,46 @@ self.addEventListener('activate', (event) => {
 const SYNC_RETRY_DELAYS = [5000, 15000, 60000, 300000]; // 5s, 15s, 1m, 5m
 
 /**
- * Perform background sync directly in the service worker
+ * Perform background sync directly in the service worker with Web Lock coordination
  */
 async function performBackgroundSync(settings: AppSettings, fullSync = false): Promise<void> {
   logInfo('backgroundSync', 'Starting direct sync in service worker');
 
+  // Check if background sync is currently disabled (app in foreground)
+  if (!backgroundSyncEnabled) {
+    logInfo('backgroundSync', 'Background sync disabled - app is in foreground');
+    await broadcastToClients(SyncMessages.syncStatus('cancelled'));
+    return;
+  }
+
+  let lockRelease: (() => void) | null = null;
+
   try {
+    // Acquire Web Lock before starting sync to prevent conflicts
+    logInfo('backgroundSync', 'Acquiring Web Lock for sync operation');
+    lockRelease = await WebLockCoordinator.acquireSyncLockInWorker({
+      timeout: WebLockCoordinator.DEFAULT_TIMEOUT
+    });
+
+    if (!lockRelease) {
+      logInfo('backgroundSync', 'Could not acquire Web Lock - another sync is already in progress');
+      await broadcastToClients(SyncMessages.syncError(
+        'Sync already in progress in another tab',
+        false
+      ));
+      return;
+    }
+
+    currentLockRelease = lockRelease;
+    logInfo('backgroundSync', 'Web Lock acquired successfully');
+
+    // Check again if background sync is still enabled (could have changed while waiting for lock)
+    if (!backgroundSyncEnabled) {
+      logInfo('backgroundSync', 'Background sync disabled while waiting for lock - app went to foreground');
+      await broadcastToClients(SyncMessages.syncStatus('cancelled'));
+      return;
+    }
+
     // Create sync service with progress callback
     currentSyncService = new SyncService((progress) => {
       currentSyncProgress = progress;
@@ -257,15 +294,17 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
     await broadcastToClients(SyncMessages.syncError(errorMessage, isNetworkError));
     await broadcastToClients(SyncMessages.syncStatus('failed'));
 
-    // Schedule retry for recoverable errors
-    if (isNetworkError) {
+    // Schedule retry for recoverable errors (only if background sync still enabled)
+    if (isNetworkError && backgroundSyncEnabled) {
       const retryCount = await DatabaseService.getSyncRetryCount();
       if (retryCount < SYNC_RETRY_DELAYS.length) {
         const delay = SYNC_RETRY_DELAYS[retryCount];
         await DatabaseService.incrementSyncRetryCount();
         logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
         setTimeout(() => {
-          (self.registration as any).sync?.register('sync-bookmarks');
+          if (backgroundSyncEnabled) {
+            (self.registration as any).sync?.register('sync-bookmarks');
+          }
         }, delay);
       }
     }
@@ -274,6 +313,13 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
   } finally {
     // Always clean up state
     currentSyncService = null;
+
+    // Release Web Lock
+    if (lockRelease) {
+      logInfo('backgroundSync', 'Releasing Web Lock');
+      lockRelease();
+      currentLockRelease = null;
+    }
   }
 }
 
@@ -301,11 +347,18 @@ async function getSettings(): Promise<AppSettings | null> {
 }
 
 /**
- * Perform sync operation directly in service worker
+ * Perform sync operation directly in service worker with coordination
  */
 async function performSync(fullSync = false): Promise<void> {
   if (syncInProgress) {
     logInfo('performSync', 'Sync already in progress');
+    return;
+  }
+
+  // Check if background sync is enabled (could be disabled if app is in foreground)
+  if (!backgroundSyncEnabled) {
+    logInfo('performSync', 'Background sync is disabled - app is in foreground');
+    await broadcastToClients(SyncMessages.syncStatus('cancelled'));
     return;
   }
 
@@ -332,7 +385,7 @@ async function performSync(fullSync = false): Promise<void> {
 
     logInfo('performSync', 'Starting direct sync operation');
 
-    // Perform sync directly in service worker
+    // Perform sync directly in service worker with Web Lock coordination
     await performBackgroundSync(settings, fullSync);
 
   } catch (error) {
@@ -384,7 +437,7 @@ self.addEventListener('message', async (event) => {
         await (self.registration as any).sync?.register('sync-bookmarks');
       }
       break;
-      
+
     case 'CANCEL_SYNC':
       if (currentSyncService && syncInProgress) {
         logInfo('sync', `Received CANCEL_SYNC message: ${message.reason}`);
@@ -395,10 +448,68 @@ self.addEventListener('message', async (event) => {
         currentSyncProgress = null;
         keepaliveManager.stop();
 
+        // Release Web Lock if held
+        if (currentLockRelease) {
+          logInfo('sync', 'Releasing Web Lock after cancellation');
+          currentLockRelease();
+          currentLockRelease = null;
+        }
+
         await broadcastToClients(SyncMessages.syncStatus('cancelled'));
       } else {
         logInfo('sync', 'Received CANCEL_SYNC but no sync is currently active');
       }
+      break;
+
+    case 'APP_FOREGROUND':
+      logInfo('visibility', 'App became foreground - disabling background sync');
+      backgroundSyncEnabled = false;
+
+      // Cancel any in-progress background sync
+      if (currentSyncService && syncInProgress) {
+        logInfo('visibility', 'Cancelling in-progress background sync due to app foreground');
+
+        try {
+          currentSyncService.cancelSync();
+          syncInProgress = false;
+          currentSyncProgress = null;
+          keepaliveManager.stop();
+
+          // Release Web Lock if held
+          if (currentLockRelease) {
+            logInfo('visibility', 'Releasing Web Lock after foreground transition');
+            currentLockRelease();
+            currentLockRelease = null;
+          }
+
+          await broadcastToClients(SyncMessages.syncStatus('cancelled'));
+        } catch (error) {
+          logError('visibility', 'Error cancelling background sync during foreground transition', error);
+        }
+      }
+
+      // Notify all clients that service worker is now focusing on PWA duties
+      await broadcastToClients({
+        type: 'SW_LOG',
+        level: 'info',
+        operation: 'visibility',
+        message: 'Background sync disabled - focusing on PWA duties',
+        timestamp: Date.now()
+      } as any);
+      break;
+
+    case 'APP_BACKGROUND':
+      logInfo('visibility', 'App became background - re-enabling background sync');
+      backgroundSyncEnabled = true;
+
+      // Notify all clients that service worker can now handle background sync
+      await broadcastToClients({
+        type: 'SW_LOG',
+        level: 'info',
+        operation: 'visibility',
+        message: 'Background sync re-enabled',
+        timestamp: Date.now()
+      } as any);
       break;
       
     case 'REGISTER_PERIODIC_SYNC':
@@ -477,20 +588,68 @@ self.addEventListener('message', async (event) => {
 });
 
 /**
- * Handle Background Sync API events
+ * Handle Background Sync API events with Web Lock coordination
  */
 self.addEventListener('sync', (event: any) => {
   if (event.tag === 'sync-bookmarks') {
-    event.waitUntil(performSync());
+    logInfo('backgroundSync', 'Background sync event triggered');
+
+    // Wrap the sync operation to ensure proper error handling and lock coordination
+    const syncPromise = (async () => {
+      try {
+        await performSync();
+      } catch (error) {
+        logError('backgroundSync', 'Background sync event failed', error);
+
+        // Ensure cleanup on error
+        syncInProgress = false;
+        currentSyncProgress = null;
+        keepaliveManager.stop();
+
+        if (currentLockRelease) {
+          logInfo('backgroundSync', 'Releasing Web Lock after sync event error');
+          currentLockRelease();
+          currentLockRelease = null;
+        }
+
+        // Don't re-throw to prevent endless retries
+      }
+    })();
+
+    event.waitUntil(syncPromise);
   }
 });
 
 /**
- * Handle Periodic Background Sync API events
+ * Handle Periodic Background Sync API events with Web Lock coordination
  */
 self.addEventListener('periodicsync', (event: any) => {
   if (event.tag === 'periodic-sync') {
-    event.waitUntil(performSync());
+    logInfo('periodicSync', 'Periodic sync event triggered');
+
+    // Wrap the sync operation to ensure proper error handling and lock coordination
+    const syncPromise = (async () => {
+      try {
+        await performSync();
+      } catch (error) {
+        logError('periodicSync', 'Periodic sync event failed', error);
+
+        // Ensure cleanup on error
+        syncInProgress = false;
+        currentSyncProgress = null;
+        keepaliveManager.stop();
+
+        if (currentLockRelease) {
+          logInfo('periodicSync', 'Releasing Web Lock after periodic sync error');
+          currentLockRelease();
+          currentLockRelease = null;
+        }
+
+        // Don't re-throw to prevent endless retries
+      }
+    })();
+
+    event.waitUntil(syncPromise);
   }
 });
 
