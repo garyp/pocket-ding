@@ -24,6 +24,7 @@ vi.mock('../services/database', () => ({
       auto_sync: true,
       reading_mode: 'original' as const
     }),
+    setLastSyncError: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
