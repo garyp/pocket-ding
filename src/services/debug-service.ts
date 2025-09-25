@@ -8,6 +8,7 @@ export class DebugService {
   private static maxLogEntries = 1000;
   private static isDebugEnabled = false;
   private static logUpdateCallbacks = new Set<() => void>();
+  private static serviceWorkerMessageHandler: ((event: MessageEvent) => void) | null = null;
 
   static getInstance(): DebugService {
     if (!this.instance) {
@@ -20,9 +21,42 @@ export class DebugService {
     try {
       const settings = await DatabaseService.getSettings();
       this.isDebugEnabled = settings?.debug_mode ?? false;
+
+      // Setup service worker message handler for logging
+      this.setupServiceWorkerListener();
     } catch (error) {
       console.error('Failed to initialize debug service:', error);
     }
+  }
+
+  static setupServiceWorkerListener(): void {
+    if (!('serviceWorker' in navigator)) return;
+
+    // Remove existing handler if any
+    if (this.serviceWorkerMessageHandler) {
+      navigator.serviceWorker.removeEventListener('message', this.serviceWorkerMessageHandler);
+    }
+
+    // Add new message handler
+    this.serviceWorkerMessageHandler = (event: MessageEvent) => {
+      const message = event.data as SyncMessage;
+      if (message.type === 'SW_LOG') {
+        // Forward service worker logs to DebugService
+        switch (message.level) {
+          case 'info':
+            this.logInfo('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
+            break;
+          case 'warn':
+            this.logWarning('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
+            break;
+          case 'error':
+            this.logError(new Error(`[SW] ${message.operation}: ${message.message}`), 'sync', 'Service worker error', { details: message.error || message.details });
+            break;
+        }
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', this.serviceWorkerMessageHandler);
   }
 
   static setDebugMode(enabled: boolean): void {

@@ -398,16 +398,11 @@ describe('Background Sync Enhanced Workflow Tests', () => {
       // User Journey: User toggles auto-sync setting and it affects periodic sync
       const realSyncController = (settingsPanel as any).syncController;
 
-      if (realSyncController && typeof realSyncController.refreshPeriodicSyncState === 'function') {
-        // User modifies settings that affect periodic sync
-        await expect(realSyncController.refreshPeriodicSyncState()).resolves.not.toThrow();
-
-        // Multiple calls should not cause issues
-        await expect(realSyncController.refreshPeriodicSyncState()).resolves.not.toThrow();
-
+      if (realSyncController) {
+        // Service worker now handles periodic sync based on visibility messages
         // The actual registration/unregistration is handled by service worker based on settings
-        // This tests that the coordination API works correctly
-        expect(realSyncController.refreshPeriodicSyncState).toBeDefined();
+        expect(realSyncController).toBeDefined();
+        expect(settingsPanel).toBeTruthy();
       } else {
         // If sync controller not available, verify component exists
         expect(settingsPanel).toBeTruthy();

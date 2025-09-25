@@ -200,10 +200,10 @@ describe('PWA Service Worker Integration', () => {
     });
 
     it('should enable periodic sync when auto_sync is configured', async () => {
-      // Test that periodic sync registration is delegated to PageVisibilityService
-      await component.syncController.refreshPeriodicSyncState();
+      // Service worker now handles periodic sync based on visibility messages
+      // No longer using refreshPeriodicSyncState method
 
-      // Should NOT post directly to service worker (demonstrates delegation)
+      // Should NOT post directly to service worker
       expect(mockServiceWorkerRegistration.active.postMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'REGISTER_PERIODIC_SYNC'
@@ -212,9 +212,10 @@ describe('PWA Service Worker Integration', () => {
     });
 
     it('should disable periodic sync when auto_sync is turned off', async () => {
-      await component.syncController.refreshPeriodicSyncState();
+      // Service worker now handles periodic sync based on visibility messages and settings
+      // No longer using refreshPeriodicSyncState method
 
-      // Should NOT post directly to service worker (demonstrates delegation)
+      // Should NOT post directly to service worker
       expect(mockServiceWorkerRegistration.active.postMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'REGISTER_PERIODIC_SYNC'

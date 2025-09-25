@@ -435,10 +435,7 @@ export class SettingsPanel extends LitElement {
         ThemeService.setThemeFromSettings(settings.theme_mode);
       }
       
-      // Refresh periodic sync coordination based on updated settings
-      if (this.#syncController) {
-        await this.#syncController.refreshPeriodicSyncState();
-      }
+      // Service worker now handles periodic sync based on visibility messages
       
       this.dispatchEvent(new CustomEvent('settings-saved', {
         detail: { settings }

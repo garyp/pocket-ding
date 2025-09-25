@@ -5,7 +5,6 @@ import { ReactiveQueryController } from './reactive-query-controller';
 import type { SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
 import { SyncWorkerManager } from '../services/sync-worker-manager';
-import { pageVisibilityService } from '../services/page-visibility-service';
 import { WebLockCoordinator } from '../services/web-lock-coordinator';
 import type { AppSettings, SyncState, SyncControllerOptions } from '../types';
 import { detectCapabilities } from '../utils/pwa-capabilities';
@@ -180,9 +179,6 @@ export class SyncController implements ReactiveController {
       // Only register background sync if sync is currently in progress
       if (this._syncState.isSyncing && this.#serviceWorkerReady) {
         try {
-          // Phase 1.2: Preserve sync state for service worker resume
-          this.#preserveSyncStateForBackgroundResume();
-
           // Phase 1.3: Register background sync only if API is available
           if (this.#pwaCapabilities.backgroundSync) {
             this.#registerBackgroundSync();
@@ -221,34 +217,6 @@ export class SyncController implements ReactiveController {
     }
   }
 
-  /**
-   * Preserve sync state for service worker background resume
-   */
-  #preserveSyncStateForBackgroundResume(): void {
-    if (!this.#serviceWorkerReady || !('serviceWorker' in navigator)) {
-      return;
-    }
-
-    try {
-      // Send current sync state to service worker for background resume
-      if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'PRESERVE_SYNC_STATE',
-          syncState: {
-            phase: this._syncState.syncPhase,
-            progress: this._syncState.syncProgress,
-            total: this._syncState.syncTotal,
-            status: this._syncState.syncStatus
-          },
-          settings: this.settings,
-          timestamp: Date.now()
-        });
-        DebugService.logInfo('sync', 'Sync state preserved for background resume');
-      }
-    } catch (error) {
-      DebugService.logWarning('sync', 'Failed to preserve sync state', { error });
-    }
-  }
 
   /**
    * Register background sync when app is about to be closed
@@ -338,15 +306,6 @@ export class SyncController implements ReactiveController {
   }
 
   private async checkSyncStatus() {
-    // Check if there are pending sync operations that need to be resumed
-    DebugService.logInfo('sync', 'Checking if sync needs to resume after app startup');
-    this.#checkAndResumeSync();
-  }
-
-  /**
-   * Check if there are bookmarks that still need syncing and resume if necessary
-   */
-  async #checkAndResumeSync() {
     try {
       // Check if there are bookmarks that still need asset sync
       const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
@@ -375,24 +334,12 @@ export class SyncController implements ReactiveController {
     }
 
     try {
-      // Wait for settings to be available
-      if (this.isSettingsLoading) {
-        // Listen for settings to become available
-        const settings = await new Promise<AppSettings | null>((resolve) => {
-          const checkSettings = () => {
-            if (!this.isSettingsLoading) {
-              resolve(this.settings);
-            } else {
-              setTimeout(checkSettings, 100);
-            }
-          };
-          checkSettings();
-        });
-
-        if (!settings) {
-          DebugService.logInfo('sync', 'No settings available - periodic background sync not registered');
-          return;
-        }
+      // Wait for settings to be available through reactive query
+      if (this.isSettingsLoading || !this.settings) {
+        DebugService.logInfo('sync', 'Settings not yet available for periodic sync registration');
+        // The reactive query will trigger an update when settings become available
+        // Since this method is called during initialization, we'll rely on settings reactivity
+        return;
       }
 
       const settings = this.settings;
@@ -421,18 +368,8 @@ export class SyncController implements ReactiveController {
   private handleServiceWorkerMessage(message: SyncMessage) {
     switch (message.type) {
       case 'SW_LOG':
-        // Forward service worker logs to DebugService for debugging
-        switch (message.level) {
-          case 'info':
-            DebugService.logInfo('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
-            break;
-          case 'warn':
-            DebugService.logWarning('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
-            break;
-          case 'error':
-            DebugService.logError(new Error(`[SW] ${message.operation}: ${message.message}`), 'sync', 'Service worker error', { details: message.error || message.details });
-            break;
-        }
+        // Service worker logs now go directly to DebugService
+        // This case can be removed once all components are updated
         break;
 
       case 'SYNC_STATUS':
@@ -441,7 +378,7 @@ export class SyncController implements ReactiveController {
 
         if (message.status === 'interrupted') {
           DebugService.logInfo('sync', 'Interrupted sync detected - resuming');
-          this.#checkAndResumeSync();
+          this.checkSyncStatus();
         } else if (message.status === 'starting' && !this._syncState.isSyncing) {
           // Service worker starting background sync while app is in foreground
           // Update UI to show that sync is happening in background
@@ -677,20 +614,6 @@ export class SyncController implements ReactiveController {
     this.#syncWorkerManager.cancelSync();
   }
 
-  /**
-   * Refresh periodic sync state coordination
-   * Triggers PageVisibilityService to re-evaluate periodic sync state based on current settings and page visibility
-   */
-  async refreshPeriodicSyncState(): Promise<void> {
-    // Trigger coordination update which will read current settings and apply visibility-based logic
-    try {
-      await pageVisibilityService.updatePeriodicSyncState();
-    } catch (error) {
-      // Log error for debugging but re-throw to let callers handle failures appropriately
-      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to refresh periodic sync state');
-      throw error;
-    }
-  }
 
   /**
    * Check if sync is currently in progress

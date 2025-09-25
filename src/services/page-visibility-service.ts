@@ -1,5 +1,4 @@
 import { DebugService } from './debug-service';
-import { SettingsService } from './settings-service';
 import { SyncMessages } from '../types/sync-messages';
 
 /**
@@ -53,7 +52,7 @@ export class PageVisibilityService {
   /**
    * Setup service worker ready state
    */
-  #setupServiceWorker = async (): Promise<void> => {
+  async #setupServiceWorker(): Promise<void> {
     if (!('serviceWorker' in navigator)) {
       DebugService.logWarning('app', 'Service Worker not supported');
       return;
@@ -64,9 +63,8 @@ export class PageVisibilityService {
       this.#serviceWorkerReady = true;
       DebugService.logInfo('app', 'Service worker ready for page visibility coordination');
 
-      // Send initial visibility state and set periodic sync
+      // Send initial visibility state
       this.#sendVisibilityMessage();
-      await this.updatePeriodicSyncState();
     } catch (error) {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to setup service worker');
     }
@@ -75,7 +73,7 @@ export class PageVisibilityService {
   /**
    * Setup page visibility change handler
    */
-  #setupPageVisibilityHandler = (): void => {
+  #setupPageVisibilityHandler(): void {
     this.#visibilityHandler = () => {
       const wasVisible = this.#isPageVisible;
       this.#isPageVisible = !document.hidden;
@@ -85,48 +83,17 @@ export class PageVisibilityService {
 
         // Send visibility message to service worker
         this.#sendVisibilityMessage();
-
-        // Update periodic sync state
-        this.updatePeriodicSyncState();
       }
     };
 
     document.addEventListener('visibilitychange', this.#visibilityHandler);
   };
 
-  /**
-   * Update periodic sync state based on page visibility and settings
-   */
-  async updatePeriodicSyncState(): Promise<void> {
-    if (!this.#serviceWorkerReady) {
-      return;
-    }
-
-    try {
-      const settings = await SettingsService.getSettings();
-
-      if (!settings?.auto_sync) {
-        // Auto sync is disabled, ensure periodic sync is off
-        await this.#postToServiceWorker(SyncMessages.registerPeriodicSync(false));
-        DebugService.logInfo('app', 'Periodic sync disabled (auto_sync=false)');
-        return;
-      }
-
-      // Enable periodic sync only when page is hidden (background)
-      // When page is visible (foreground), disable it to prevent service worker blocking
-      const enablePeriodicSync = !this.#isPageVisible;
-      await this.#postToServiceWorker(SyncMessages.registerPeriodicSync(enablePeriodicSync));
-
-      DebugService.logInfo('app', `Periodic sync ${enablePeriodicSync ? 'enabled' : 'disabled'} (page ${this.#isPageVisible ? 'visible' : 'hidden'})`);
-    } catch (error) {
-      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'app', 'Failed to update periodic sync state');
-    }
-  }
 
   /**
    * Send visibility message to service worker
    */
-  #sendVisibilityMessage = (): void => {
+  #sendVisibilityMessage(): void {
     if (!this.#serviceWorkerReady) {
       return;
     }
@@ -146,7 +113,7 @@ export class PageVisibilityService {
   /**
    * Post message to service worker
    */
-  #postToServiceWorker = async (message: any): Promise<void> => {
+  async #postToServiceWorker(message: any): Promise<void> {
     if (!this.#serviceWorkerReady) {
       DebugService.logWarning('app', 'Service worker not ready for message posting');
       return;
@@ -162,19 +129,6 @@ export class PageVisibilityService {
     }
   };
 
-  /**
-   * Test-specific interface that provides safe access to internal methods
-   * without creating memory leaks through `this` references
-   */
-  get testInterface() {
-    if (process.env['NODE_ENV'] === 'test') {
-      return {
-        setupPageVisibilityHandler: () => this.#setupPageVisibilityHandler(),
-        postToServiceWorker: (message: any) => this.#postToServiceWorker(message),
-      };
-    }
-    return null;
-  }
 }
 
 // Global singleton instance

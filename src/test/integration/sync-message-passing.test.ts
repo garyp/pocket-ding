@@ -186,11 +186,11 @@ describe('Sync Message Passing Integration', () => {
       expect(state.syncStatus).toBe('idle'); // Should remain in idle state
     });
 
-    it('should delegate periodic sync to PageVisibilityService', async () => {
-      // refreshPeriodicSyncState delegates to PageVisibilityService
-      await component.syncController.refreshPeriodicSyncState();
+    it('should delegate periodic sync to service worker visibility handling', async () => {
+      // Service worker now handles periodic sync based on visibility messages
+      // No longer using refreshPeriodicSyncState method
 
-      // Should NOT post directly to service worker (demonstrates delegation)
+      // Should NOT post directly to service worker
       expect(mockPostMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: 'REGISTER_PERIODIC_SYNC' })
       );
