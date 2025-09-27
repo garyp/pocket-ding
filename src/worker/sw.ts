@@ -713,17 +713,10 @@ self.addEventListener('message', async (event) => {
     case 'REGISTER_PERIODIC_SYNC':
       if (PWA_CAPABILITIES.periodicBackgroundSync) {
         try {
-          if (message.enabled) {
-            // Register periodic sync (browser will decide actual frequency)
-            await (self.registration as any).periodicSync.register('periodic-sync');
-            logInfo('periodicSync', 'Periodic sync registered');
-          } else {
-            // Unregister periodic sync
-            await (self.registration as any).periodicSync.unregister('periodic-sync');
-            logInfo('periodicSync', 'Periodic sync unregistered');
-            // Also stop fallback timer if it's running
-            stopPeriodicSyncFallback();
-          }
+          // Register periodic sync (browser will decide actual frequency)
+          // Browser handles duplicate registrations of the same tag gracefully
+          await (self.registration as any).periodicSync.register('periodic-sync');
+          logInfo('periodicSync', 'Periodic sync registered');
         } catch (error) {
           logError('periodicSync', 'Failed to register periodic sync', error);
           await broadcastToClients(SyncMessages.syncError(
@@ -734,11 +727,26 @@ self.addEventListener('message', async (event) => {
       } else {
         // Use fallback timer-based approach
         logInfo('periodicSync', 'Periodic Background Sync API not available - using timer fallback');
-        if (message.enabled) {
-          await startPeriodicSyncFallback();
-        } else {
+        // startPeriodicSyncFallback handles duplicate calls internally
+        await startPeriodicSyncFallback();
+      }
+      break;
+
+    case 'UNREGISTER_PERIODIC_SYNC':
+      if (PWA_CAPABILITIES.periodicBackgroundSync) {
+        try {
+          // Unregister periodic sync
+          await (self.registration as any).periodicSync.unregister('periodic-sync');
+          logInfo('periodicSync', 'Periodic sync unregistered');
+          // Also stop fallback timer if it's running
           stopPeriodicSyncFallback();
+        } catch (error) {
+          logError('periodicSync', 'Failed to unregister periodic sync', error);
         }
+      } else {
+        // Stop fallback timer-based approach
+        logInfo('periodicSync', 'Stopping periodic sync fallback timer');
+        stopPeriodicSyncFallback();
       }
       break;
       

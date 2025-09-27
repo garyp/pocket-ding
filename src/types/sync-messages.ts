@@ -12,6 +12,7 @@ export type SyncMessageType =
   | 'SYNC_COMPLETE'
   | 'SYNC_ERROR'
   | 'REGISTER_PERIODIC_SYNC'
+  | 'UNREGISTER_PERIODIC_SYNC'
   | 'CHECK_SYNC_PERMISSION'
   | 'REQUEST_VERSION'
   | 'VERSION_INFO'
@@ -63,7 +64,10 @@ export interface SyncErrorMessage {
 
 export interface RegisterPeriodicSyncMessage {
   type: 'REGISTER_PERIODIC_SYNC';
-  enabled: boolean;
+}
+
+export interface UnregisterPeriodicSyncMessage {
+  type: 'UNREGISTER_PERIODIC_SYNC';
 }
 
 export interface CheckSyncPermissionMessage {
@@ -106,6 +110,7 @@ export type SyncMessage =
   | SyncCompleteMessage
   | SyncErrorMessage
   | RegisterPeriodicSyncMessage
+  | UnregisterPeriodicSyncMessage
   | CheckSyncPermissionMessage
   | RequestVersionMessage
   | VersionInfoMessage
@@ -174,10 +179,15 @@ export const SyncMessages = {
     };
   },
   
-  registerPeriodicSync(enabled: boolean): RegisterPeriodicSyncMessage {
+  registerPeriodicSync(): RegisterPeriodicSyncMessage {
     return {
-      type: 'REGISTER_PERIODIC_SYNC',
-      enabled
+      type: 'REGISTER_PERIODIC_SYNC'
+    };
+  },
+
+  unregisterPeriodicSync(): UnregisterPeriodicSyncMessage {
+    return {
+      type: 'UNREGISTER_PERIODIC_SYNC'
     };
   },
   

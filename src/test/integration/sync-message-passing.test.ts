@@ -26,7 +26,10 @@ vi.mock('../../services/database', () => ({
     getBookmarksNeedingAssetSync: vi.fn().mockResolvedValue([]),
     getBookmarksNeedingReadSync: vi.fn().mockResolvedValue([]),
     setLastSyncError: vi.fn().mockResolvedValue(undefined),
-    resetSyncRetryCount: vi.fn().mockResolvedValue(undefined)
+    resetSyncRetryCount: vi.fn().mockResolvedValue(undefined),
+    getLastSyncTimestamp: vi.fn().mockResolvedValue(null),
+    getUnarchivedOffset: vi.fn().mockResolvedValue(0),
+    getArchivedOffset: vi.fn().mockResolvedValue(0)
   }
 }));
 
@@ -200,6 +203,9 @@ describe('Sync Message Passing Integration', () => {
       // Mock database to return bookmarks needing sync (for interrupted sync scenario)
       (DatabaseService.getBookmarksNeedingAssetSync as any).mockResolvedValue([{ id: 1 }]);
       (DatabaseService.getBookmarksNeedingReadSync as any).mockResolvedValue([{ id: 2 }]);
+      (DatabaseService.getLastSyncTimestamp as any).mockResolvedValue(null);
+      (DatabaseService.getUnarchivedOffset as any).mockResolvedValue(0);
+      (DatabaseService.getArchivedOffset as any).mockResolvedValue(0);
 
       // Create a fresh component to avoid state pollution
       const testComponent = document.createElement('test-sync-component') as TestSyncComponent;

@@ -330,9 +330,11 @@ describe('Visibility-Service-Worker Coordination', () => {
       expect(backgroundMessage.type).toBe('APP_BACKGROUND');
       expect(backgroundMessage.timestamp).toBeTypeOf('number');
 
-      const periodicSyncMessage = SyncMessages.registerPeriodicSync(true);
+      const periodicSyncMessage = SyncMessages.registerPeriodicSync();
       expect(periodicSyncMessage.type).toBe('REGISTER_PERIODIC_SYNC');
-      expect(periodicSyncMessage.enabled).toBe(true);
+
+      const unregisterPeriodicSyncMessage = SyncMessages.unregisterPeriodicSync();
+      expect(unregisterPeriodicSyncMessage.type).toBe('UNREGISTER_PERIODIC_SYNC');
     });
   });
 

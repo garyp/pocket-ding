@@ -141,14 +141,23 @@ export class SyncController implements ReactiveController {
   }
 
   hostUpdate(): void {
-    // Check if settings just became available and we haven't checked sync status yet
+    // Check if settings just became available or have changed
     if (!this.#settingsQuery.loading && this.#settingsQuery.value) {
-      // Check if we need to register periodic sync now that settings are available
-      this.#registerPeriodicBackgroundSyncIfAvailable();
+      const settings = this.#settingsQuery.value;
+
+      // Handle periodic sync registration based on auto_sync setting
+      if (settings.auto_sync) {
+        // Register periodic sync if auto_sync is enabled
+        this.#registerPeriodicBackgroundSyncIfAvailable();
+      } else {
+        // Unregister periodic sync if auto_sync is disabled
+        this.#unregisterPeriodicBackgroundSync();
+      }
 
       // Check if we need to resume an interrupted sync
-      if (!this._syncState.isSyncing && this.#serviceWorkerReady) {
-        this.checkSyncStatus();
+      // Note: Does not depend on service worker since sync uses sync worker
+      if (!this._syncState.isSyncing) {
+        this.#checkAndResumeSync();
       }
     }
   }
@@ -161,9 +170,8 @@ export class SyncController implements ReactiveController {
     this.#startLockPolling();
 
     // Check for ongoing sync status
-    if (this.#serviceWorkerReady) {
-      await this.checkSyncStatus();
-    }
+    // Note: Does not depend on service worker since sync uses sync worker
+    await this.#checkAndResumeSync();
 
     // Phase 1.3: Register periodic background sync if capabilities available and settings allow
     await this.#registerPeriodicBackgroundSyncIfAvailable();
@@ -318,14 +326,55 @@ export class SyncController implements ReactiveController {
     }
   }
 
-  private async checkSyncStatus() {
+  /**
+   * Check if a sync was interrupted and resume it if necessary
+   * Handles all sync phases, not just assets and read status
+   */
+  async #checkAndResumeSync() {
     try {
-      // Check if there are bookmarks that still need asset sync
-      const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
-      const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
+      // Check multiple conditions that indicate an interrupted sync:
+      // 1. Last sync timestamp vs current time (incomplete incremental sync)
+      // 2. Bookmarks needing asset sync (phase 3)
+      // 3. Bookmarks needing read sync (phase 4)
+      // 4. Sync state in database indicating interruption
 
+      const [lastSyncTimestamp, bookmarksNeedingAssetSync, bookmarksNeedingReadSync] = await Promise.all([
+        DatabaseService.getLastSyncTimestamp(),
+        DatabaseService.getBookmarksNeedingAssetSync(),
+        DatabaseService.getBookmarksNeedingReadSync()
+      ]);
+
+      // Determine if sync was interrupted based on various indicators
+      let needsResume = false;
+      let resumeReason = '';
+
+      // Check for incomplete sync phases 3-4
       if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
-        DebugService.logInfo('sync', `Resuming sync: ${bookmarksNeedingAssetSync.length} assets, ${bookmarksNeedingReadSync.length} read status`);
+        needsResume = true;
+        resumeReason = `${bookmarksNeedingAssetSync.length} assets, ${bookmarksNeedingReadSync.length} read status`;
+      }
+
+      // Check for very recent sync timestamp that might indicate interruption during phases 1-2
+      // If last sync was within the last 5 minutes but we still have pending items, likely interrupted
+      if (lastSyncTimestamp) {
+        const timeSinceLastSync = Date.now() - new Date(lastSyncTimestamp).getTime();
+        const fiveMinutesMs = 5 * 60 * 1000;
+
+        if (timeSinceLastSync < fiveMinutesMs && !needsResume) {
+          // Recent sync but check if there are any sync state indicators
+          const [unarchivedOffset, archivedOffset] = await Promise.all([
+            DatabaseService.getUnarchivedOffset(),
+            DatabaseService.getArchivedOffset()
+          ]);
+          if (unarchivedOffset > 0 || archivedOffset > 0) {
+            needsResume = true;
+            resumeReason = `Incomplete bookmark sync (offsets: unarchived=${unarchivedOffset}, archived=${archivedOffset})`;
+          }
+        }
+      }
+
+      if (needsResume) {
+        DebugService.logInfo('sync', `Resuming interrupted sync: ${resumeReason}`);
         await this.requestSync(false);
       }
     } catch (error) {
@@ -338,9 +387,12 @@ export class SyncController implements ReactiveController {
   /**
    * Register periodic background sync if capabilities are available and settings allow
    * Phase 1.3: App initialization periodic sync registration
+   * Note: Service worker handles duplicate registrations gracefully
    */
   async #registerPeriodicBackgroundSyncIfAvailable(): Promise<void> {
-    // Avoid duplicate registrations
+    // Track registration state to avoid unnecessary messages
+    // Note: The service worker will handle duplicate registrations gracefully,
+    // but we track state here to reduce unnecessary message passing
     if (this.#periodicSyncRegistered) {
       return;
     }
@@ -384,6 +436,33 @@ export class SyncController implements ReactiveController {
     }
   }
 
+  /**
+   * Unregister periodic background sync when auto_sync is disabled
+   */
+  #unregisterPeriodicBackgroundSync(): void {
+    // Only proceed if we previously registered periodic sync
+    if (!this.#periodicSyncRegistered) {
+      return;
+    }
+
+    // Only proceed if service worker is available
+    if (!this.#serviceWorkerReady || !this.#pwaCapabilities.periodicBackgroundSync) {
+      return;
+    }
+
+    try {
+      // Send message to service worker to unregister periodic background sync
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'UNREGISTER_PERIODIC_SYNC'
+        });
+        DebugService.logInfo('sync', 'Periodic background sync unregistration requested');
+        this.#periodicSyncRegistered = false;
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to unregister periodic background sync', { error });
+    }
+  }
 
   private handleServiceWorkerMessage(message: SyncMessage) {
     switch (message.type) {
@@ -398,7 +477,7 @@ export class SyncController implements ReactiveController {
 
         if (message.status === 'interrupted') {
           DebugService.logInfo('sync', 'Interrupted sync detected - resuming');
-          this.checkSyncStatus();
+          this.#checkAndResumeSync();
         } else if (message.status === 'starting' && !this._syncState.isSyncing) {
           // Service worker starting background sync while app is in foreground
           // Update UI to show that sync is happening in background
