@@ -140,6 +140,19 @@ export class SyncController implements ReactiveController {
     this.#cleanupBeforeUnloadHandler();
   }
 
+  hostUpdate(): void {
+    // Check if settings just became available and we haven't checked sync status yet
+    if (!this.#settingsQuery.loading && this.#settingsQuery.value) {
+      // Check if we need to register periodic sync now that settings are available
+      this.#registerPeriodicBackgroundSyncIfAvailable();
+
+      // Check if we need to resume an interrupted sync
+      if (!this._syncState.isSyncing && this.#serviceWorkerReady) {
+        this.checkSyncStatus();
+      }
+    }
+  }
+
   private async initializeSync() {
     // Setup service worker message handler
     await this.setupServiceWorker();
@@ -320,11 +333,18 @@ export class SyncController implements ReactiveController {
     }
   }
 
+  #periodicSyncRegistered = false;
+
   /**
    * Register periodic background sync if capabilities are available and settings allow
    * Phase 1.3: App initialization periodic sync registration
    */
   async #registerPeriodicBackgroundSyncIfAvailable(): Promise<void> {
+    // Avoid duplicate registrations
+    if (this.#periodicSyncRegistered) {
+      return;
+    }
+
     // Only proceed if we have both service worker and periodic background sync APIs
     if (!this.#serviceWorkerReady || !this.#pwaCapabilities.periodicBackgroundSync) {
       if (this.#serviceWorkerReady) {
@@ -337,8 +357,7 @@ export class SyncController implements ReactiveController {
       // Wait for settings to be available through reactive query
       if (this.isSettingsLoading || !this.settings) {
         DebugService.logInfo('sync', 'Settings not yet available for periodic sync registration');
-        // The reactive query will trigger an update when settings become available
-        // Since this method is called during initialization, we'll rely on settings reactivity
+        // The hostUpdate() method will call this again when settings become available
         return;
       }
 
@@ -358,6 +377,7 @@ export class SyncController implements ReactiveController {
           type: 'REGISTER_PERIODIC_SYNC'
         });
         DebugService.logInfo('sync', 'Periodic background sync registration requested');
+        this.#periodicSyncRegistered = true;
       }
     } catch (error) {
       DebugService.logWarning('sync', 'Failed to register periodic background sync', { error });

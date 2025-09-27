@@ -17,8 +17,7 @@ export type SyncMessageType =
   | 'VERSION_INFO'
   | 'SW_LOG'
   | 'APP_FOREGROUND'
-  | 'APP_BACKGROUND'
-  | 'PRESERVE_SYNC_STATE';
+  | 'APP_BACKGROUND';
 
 export interface SyncRequestMessage {
   type: 'REQUEST_SYNC';
@@ -99,18 +98,6 @@ export interface AppBackgroundMessage {
   timestamp: number;
 }
 
-export interface PreserveSyncStateMessage {
-  type: 'PRESERVE_SYNC_STATE';
-  syncState: {
-    phase?: string;
-    progress: number;
-    total: number;
-    status: string;
-  };
-  settings: any; // AppSettings
-  timestamp: number;
-}
-
 export type SyncMessage =
   | SyncRequestMessage
   | CancelSyncMessage
@@ -124,8 +111,7 @@ export type SyncMessage =
   | VersionInfoMessage
   | ServiceWorkerLogMessage
   | AppForegroundMessage
-  | AppBackgroundMessage
-  | PreserveSyncStateMessage;
+  | AppBackgroundMessage;
 
 /**
  * Helper functions for message creation
