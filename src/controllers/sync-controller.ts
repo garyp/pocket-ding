@@ -333,13 +333,11 @@ export class SyncController implements ReactiveController {
   async #checkAndResumeSync() {
     try {
       // Check multiple conditions that indicate an interrupted sync:
-      // 1. Last sync timestamp vs current time (incomplete incremental sync)
+      // 1. Sync offsets (incomplete bookmark sync phases 1-2)
       // 2. Bookmarks needing asset sync (phase 3)
       // 3. Bookmarks needing read sync (phase 4)
-      // 4. Sync state in database indicating interruption
 
-      const [lastSyncTimestamp, bookmarksNeedingAssetSync, bookmarksNeedingReadSync] = await Promise.all([
-        DatabaseService.getLastSyncTimestamp(),
+      const [bookmarksNeedingAssetSync, bookmarksNeedingReadSync] = await Promise.all([
         DatabaseService.getBookmarksNeedingAssetSync(),
         DatabaseService.getBookmarksNeedingReadSync()
       ]);
@@ -354,22 +352,16 @@ export class SyncController implements ReactiveController {
         resumeReason = `${bookmarksNeedingAssetSync.length} assets, ${bookmarksNeedingReadSync.length} read status`;
       }
 
-      // Check for very recent sync timestamp that might indicate interruption during phases 1-2
-      // If last sync was within the last 5 minutes but we still have pending items, likely interrupted
-      if (lastSyncTimestamp) {
-        const timeSinceLastSync = Date.now() - new Date(lastSyncTimestamp).getTime();
-        const fiveMinutesMs = 5 * 60 * 1000;
-
-        if (timeSinceLastSync < fiveMinutesMs && !needsResume) {
-          // Recent sync but check if there are any sync state indicators
-          const [unarchivedOffset, archivedOffset] = await Promise.all([
-            DatabaseService.getUnarchivedOffset(),
-            DatabaseService.getArchivedOffset()
-          ]);
-          if (unarchivedOffset > 0 || archivedOffset > 0) {
-            needsResume = true;
-            resumeReason = `Incomplete bookmark sync (offsets: unarchived=${unarchivedOffset}, archived=${archivedOffset})`;
-          }
+      // Check for interruption during phases 1-2 by examining sync offsets
+      // Non-zero offsets indicate incomplete bookmark sync that should be resumed
+      if (!needsResume) {
+        const [unarchivedOffset, archivedOffset] = await Promise.all([
+          DatabaseService.getUnarchivedOffset(),
+          DatabaseService.getArchivedOffset()
+        ]);
+        if (unarchivedOffset > 0 || archivedOffset > 0) {
+          needsResume = true;
+          resumeReason = `Incomplete bookmark sync (offsets: unarchived=${unarchivedOffset}, archived=${archivedOffset})`;
         }
       }
 
@@ -382,21 +374,12 @@ export class SyncController implements ReactiveController {
     }
   }
 
-  #periodicSyncRegistered = false;
-
   /**
    * Register periodic background sync if capabilities are available and settings allow
    * Phase 1.3: App initialization periodic sync registration
    * Note: Service worker handles duplicate registrations gracefully
    */
   async #registerPeriodicBackgroundSyncIfAvailable(): Promise<void> {
-    // Track registration state to avoid unnecessary messages
-    // Note: The service worker will handle duplicate registrations gracefully,
-    // but we track state here to reduce unnecessary message passing
-    if (this.#periodicSyncRegistered) {
-      return;
-    }
-
     // Only proceed if we have both service worker and periodic background sync APIs
     if (!this.#serviceWorkerReady || !this.#pwaCapabilities.periodicBackgroundSync) {
       if (this.#serviceWorkerReady) {
@@ -429,7 +412,6 @@ export class SyncController implements ReactiveController {
           type: 'REGISTER_PERIODIC_SYNC'
         });
         DebugService.logInfo('sync', 'Periodic background sync registration requested');
-        this.#periodicSyncRegistered = true;
       }
     } catch (error) {
       DebugService.logWarning('sync', 'Failed to register periodic background sync', { error });
@@ -440,11 +422,6 @@ export class SyncController implements ReactiveController {
    * Unregister periodic background sync when auto_sync is disabled
    */
   #unregisterPeriodicBackgroundSync(): void {
-    // Only proceed if we previously registered periodic sync
-    if (!this.#periodicSyncRegistered) {
-      return;
-    }
-
     // Only proceed if service worker is available
     if (!this.#serviceWorkerReady || !this.#pwaCapabilities.periodicBackgroundSync) {
       return;
@@ -457,7 +434,6 @@ export class SyncController implements ReactiveController {
           type: 'UNREGISTER_PERIODIC_SYNC'
         });
         DebugService.logInfo('sync', 'Periodic background sync unregistration requested');
-        this.#periodicSyncRegistered = false;
       }
     } catch (error) {
       DebugService.logWarning('sync', 'Failed to unregister periodic background sync', { error });
