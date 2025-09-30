@@ -95,8 +95,14 @@ export class SyncProgress extends LitElement {
       `;
     }
 
-    // Don't show sync progress if sync failed - let error notification handle it
-    if (!this.syncState || !this.syncState.isSyncing || this.syncState.syncStatus === 'failed') {
+    // Show progress for syncing or paused states
+    if (!this.syncState || this.syncState.syncStatus === 'failed') {
+      return html``;
+    }
+
+    // Show UI for manually paused state even when not syncing
+    const isPaused = this.syncState.syncStatus === 'paused';
+    if (!this.syncState.isSyncing && !isPaused) {
       return html``;
     }
 
