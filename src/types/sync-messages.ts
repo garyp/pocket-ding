@@ -12,10 +12,13 @@ export type SyncMessageType =
   | 'SYNC_COMPLETE'
   | 'SYNC_ERROR'
   | 'REGISTER_PERIODIC_SYNC'
+  | 'UNREGISTER_PERIODIC_SYNC'
   | 'CHECK_SYNC_PERMISSION'
   | 'REQUEST_VERSION'
   | 'VERSION_INFO'
-  | 'SW_LOG';
+  | 'SW_LOG'
+  | 'APP_FOREGROUND'
+  | 'APP_BACKGROUND';
 
 export interface SyncRequestMessage {
   type: 'REQUEST_SYNC';
@@ -61,7 +64,10 @@ export interface SyncErrorMessage {
 
 export interface RegisterPeriodicSyncMessage {
   type: 'REGISTER_PERIODIC_SYNC';
-  enabled: boolean;
+}
+
+export interface UnregisterPeriodicSyncMessage {
+  type: 'UNREGISTER_PERIODIC_SYNC';
 }
 
 export interface CheckSyncPermissionMessage {
@@ -86,6 +92,16 @@ export interface VersionInfoMessage {
   version: import('./version').VersionInfo;
 }
 
+export interface AppForegroundMessage {
+  type: 'APP_FOREGROUND';
+  timestamp: number;
+}
+
+export interface AppBackgroundMessage {
+  type: 'APP_BACKGROUND';
+  timestamp: number;
+}
+
 export type SyncMessage =
   | SyncRequestMessage
   | CancelSyncMessage
@@ -94,10 +110,13 @@ export type SyncMessage =
   | SyncCompleteMessage
   | SyncErrorMessage
   | RegisterPeriodicSyncMessage
+  | UnregisterPeriodicSyncMessage
   | CheckSyncPermissionMessage
   | RequestVersionMessage
   | VersionInfoMessage
-  | ServiceWorkerLogMessage;
+  | ServiceWorkerLogMessage
+  | AppForegroundMessage
+  | AppBackgroundMessage;
 
 /**
  * Helper functions for message creation
@@ -160,16 +179,35 @@ export const SyncMessages = {
     };
   },
   
-  registerPeriodicSync(enabled: boolean): RegisterPeriodicSyncMessage {
+  registerPeriodicSync(): RegisterPeriodicSyncMessage {
     return {
-      type: 'REGISTER_PERIODIC_SYNC',
-      enabled
+      type: 'REGISTER_PERIODIC_SYNC'
+    };
+  },
+
+  unregisterPeriodicSync(): UnregisterPeriodicSyncMessage {
+    return {
+      type: 'UNREGISTER_PERIODIC_SYNC'
     };
   },
   
   checkSyncPermission(): CheckSyncPermissionMessage {
     return {
       type: 'CHECK_SYNC_PERMISSION'
+    };
+  },
+
+  appForeground(): AppForegroundMessage {
+    return {
+      type: 'APP_FOREGROUND',
+      timestamp: Date.now()
+    };
+  },
+
+  appBackground(): AppBackgroundMessage {
+    return {
+      type: 'APP_BACKGROUND',
+      timestamp: Date.now()
     };
   }
 };

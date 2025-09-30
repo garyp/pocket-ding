@@ -2,9 +2,12 @@ import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { SettingsService } from '../services/settings-service';
 import { DatabaseService } from '../services/database';
 import { ReactiveQueryController } from './reactive-query-controller';
-import { SyncMessages, type SyncMessage } from '../types/sync-messages';
+import type { SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
+import { SyncWorkerManager } from '../services/sync-worker-manager';
+import { WebLockCoordinator } from '../services/web-lock-coordinator';
 import type { AppSettings, SyncState, SyncControllerOptions } from '../types';
+import { detectCapabilities } from '../utils/pwa-capabilities';
 
 
 /**
@@ -20,6 +23,12 @@ export class SyncController implements ReactiveController {
   #settingsQuery: ReactiveQueryController<AppSettings | undefined>;
   #syncErrorQuery: ReactiveQueryController<string | null>;
   #syncRetryCountQuery: ReactiveQueryController<number>;
+  #syncWorkerManager: SyncWorkerManager;
+  #webLockCoordinator: WebLockCoordinator;
+  #syncLockStatus: boolean = true; // Assume available until checked
+  #lockPollingInterval: number | null = null;
+  #beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
+  #pwaCapabilities = detectCapabilities();
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -53,39 +62,242 @@ export class SyncController implements ReactiveController {
       () => DatabaseService.getSyncRetryCount()
     );
 
+    // Initialize web lock coordinator for multi-tab safety
+    this.#webLockCoordinator = new WebLockCoordinator();
+
+    // Initialize sync worker manager with typed callbacks
+    this.#syncWorkerManager = new SyncWorkerManager({
+      onProgress: (current, total, phase) => {
+        this._syncState = {
+          ...this._syncState,
+          syncProgress: current,
+          syncTotal: total,
+          syncPhase: phase,
+          syncStatus: 'syncing'
+        };
+        this.#host.requestUpdate();
+      },
+      onComplete: (processed) => {
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: false,
+          syncProgress: processed || this._syncState.syncProgress,
+          syncTotal: processed || this._syncState.syncTotal,
+          syncPhase: 'complete',
+          syncStatus: 'completed'
+        };
+        this.#host.requestUpdate();
+
+        if (this.#options.onSyncCompleted) {
+          this.#options.onSyncCompleted();
+        }
+
+        // Clear synced highlights after delay
+        setTimeout(() => {
+          this.clearSyncedHighlights();
+        }, 3000);
+      },
+      onError: (error) => {
+        DebugService.logSyncError(new Error(error), { phase: this._syncState.syncPhase });
+        this.#notifyError('Unable to sync your bookmarks. Please check your connection and try again.');
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: false,
+          syncProgress: 0,
+          syncTotal: 0,
+          syncStatus: 'failed',
+          syncPhase: undefined,
+        };
+        this.#host.requestUpdate();
+
+        if (this.#options.onSyncError) {
+          this.#options.onSyncError(new Error(error));
+        }
+      },
+      onCancelled: (processed) => {
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: false,
+          syncProgress: processed || 0,
+          syncTotal: processed || 0,
+          syncStatus: 'idle',
+          syncPhase: undefined,
+        };
+        this.#host.requestUpdate();
+      }
+    });
+
     host.addController(this);
   }
 
   hostConnected(): void {
     this.initializeSync();
+    this.#setupBeforeUnloadHandler();
   }
 
   hostDisconnected(): void {
     this.cleanupSync();
+    this.#cleanupBeforeUnloadHandler();
+  }
+
+  hostUpdate(): void {
+    // Check if settings just became available or have changed
+    if (!this.#settingsQuery.loading && this.#settingsQuery.value) {
+      const settings = this.#settingsQuery.value;
+
+      // Handle periodic sync registration based on auto_sync setting
+      if (settings.auto_sync) {
+        // Register periodic sync if auto_sync is enabled
+        this.#registerPeriodicBackgroundSyncIfAvailable();
+      } else {
+        // Unregister periodic sync if auto_sync is disabled
+        this.#unregisterPeriodicBackgroundSync();
+      }
+
+      // Check if we need to resume an interrupted sync
+      // Note: Does not depend on service worker since sync uses sync worker
+      if (!this._syncState.isSyncing) {
+        this.#checkAndResumeSync();
+      }
+    }
   }
 
   private async initializeSync() {
     // Setup service worker message handler
     await this.setupServiceWorker();
-    
+
+    // Start lock status polling for multi-tab coordination
+    this.#startLockPolling();
+
     // Check for ongoing sync status
-    if (this.#serviceWorkerReady) {
-      await this.checkSyncStatus();
-    }
+    // Note: Does not depend on service worker since sync uses sync worker
+    await this.#checkAndResumeSync();
+
+    // Phase 1.3: Register periodic background sync if capabilities available and settings allow
+    await this.#registerPeriodicBackgroundSyncIfAvailable();
   }
 
   private cleanupSync() {
+    // Stop lock polling
+    this.#stopLockPolling();
+
     // Clean up message handler
     if (this.#messageHandler && 'serviceWorker' in navigator && navigator.serviceWorker?.removeEventListener) {
       navigator.serviceWorker.removeEventListener('message', this.#messageHandler);
       this.#messageHandler = null;
     }
+
+    // Clean up sync worker manager
+    this.#syncWorkerManager.cleanup();
+  }
+
+  /**
+   * Setup beforeunload handler to register background sync when sync is in progress
+   * Enhanced for Phase 1.3 with capability detection and graceful degradation
+   */
+  #setupBeforeUnloadHandler(): void {
+    this.#beforeUnloadHandler = (event: BeforeUnloadEvent) => {
+      // Only register background sync if sync is currently in progress
+      if (this._syncState.isSyncing && this.#serviceWorkerReady) {
+        try {
+          // Phase 1.3: Register background sync only if API is available
+          if (this.#pwaCapabilities.backgroundSync) {
+            this.#registerBackgroundSync();
+            DebugService.logInfo('sync', 'Background sync registered for sync continuation');
+          } else {
+            DebugService.logInfo('sync', 'Background sync API not available - sync will not continue after closing app');
+          }
+
+          // Phase 1.2: Handle sync worker graceful termination
+          this.#gracefullyTerminateSyncWorker();
+
+          // Show browser warning that work may be lost
+          const message = this.#pwaCapabilities.backgroundSync
+            ? 'Sync is in progress. Closing now may interrupt the sync operation.'
+            : 'Sync is in progress. Closing now will interrupt the sync as background sync is not supported in your browser.';
+
+          event.preventDefault();
+          event.returnValue = message;
+          return event.returnValue;
+        } catch (error) {
+          DebugService.logWarning('sync', 'Failed to handle beforeunload sync coordination', { error });
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', this.#beforeUnloadHandler);
+  }
+
+  /**
+   * Cleanup beforeunload handler
+   */
+  #cleanupBeforeUnloadHandler(): void {
+    if (this.#beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.#beforeUnloadHandler);
+      this.#beforeUnloadHandler = null;
+    }
+  }
+
+
+  /**
+   * Register background sync when app is about to be closed
+   * Enhanced for Phase 1.3 with capability detection
+   */
+  #registerBackgroundSync(): void {
+    if (!this.#serviceWorkerReady || !this.#pwaCapabilities.serviceWorker || !this.#pwaCapabilities.backgroundSync) {
+      DebugService.logWarning('sync', 'Cannot register background sync - required APIs not available', {
+        serviceWorkerReady: this.#serviceWorkerReady,
+        serviceWorkerSupported: this.#pwaCapabilities.serviceWorker,
+        backgroundSyncSupported: this.#pwaCapabilities.backgroundSync
+      });
+      return;
+    }
+
+    try {
+      // Use REQUEST_SYNC message for background sync registration
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'REQUEST_SYNC',
+          immediate: false, // Background sync, not immediate
+          priority: 'normal',
+          fullSync: false // Resume current sync, not full sync
+        });
+        DebugService.logInfo('sync', 'Background sync registered for continuation');
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to register background sync', { error });
+    }
+  }
+
+  /**
+   * Handle sync worker graceful termination when app is closing
+   */
+  #gracefullyTerminateSyncWorker(): void {
+    try {
+      // Cancel sync worker gracefully to release resources
+      // The service worker will take over with background sync
+      if (this._syncState.isSyncing) {
+        DebugService.logInfo('sync', 'Gracefully terminating sync worker for background handoff');
+        this.#syncWorkerManager.cancelSync();
+
+        // Update state to indicate interrupted status
+        this._syncState = {
+          ...this._syncState,
+          syncStatus: 'interrupted', // Service worker can detect this and resume
+          syncPhase: this._syncState.syncPhase // Preserve current phase
+        };
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to gracefully terminate sync worker', { error });
+    }
   }
 
   private async setupServiceWorker() {
-    if (!('serviceWorker' in navigator)) {
+    // Phase 1.3: Enhanced capability detection and user messaging
+    if (!this.#pwaCapabilities.serviceWorker) {
+      const message = 'Background sync is not supported in your browser. Sync will only work while the app is open.';
       DebugService.logWarning('sync', 'Service Worker not supported');
-      this.#notifyError('Background sync is not supported in your browser');
+      this.#notifyError(message);
       return;
     }
 
@@ -99,43 +311,62 @@ export class SyncController implements ReactiveController {
       };
       navigator.serviceWorker.addEventListener('message', this.#messageHandler);
 
-      // Check if periodic sync should be enabled based on settings
-      const settings = this.settings;
-      if (settings?.auto_sync) {
-        this.postToServiceWorker(SyncMessages.registerPeriodicSync(true));
-      }
+      // Phase 1.3: Log capability status for debugging
+      DebugService.logInfo('sync', 'Service worker ready with capabilities', {
+        backgroundSync: this.#pwaCapabilities.backgroundSync,
+        periodicBackgroundSync: this.#pwaCapabilities.periodicBackgroundSync,
+        webLocks: this.#pwaCapabilities.webLocks
+      });
+
+      // Note: Periodic sync state is now managed globally by PageVisibilityService
+      // based on page visibility to prevent service worker blocking when app is visible
     } catch (error) {
       DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { context: 'Service worker setup failed' });
-      this.#notifyError('Failed to initialize sync service');
+      this.#notifyError('Unable to set up background sync. Please refresh the page and try again.');
     }
   }
 
-  private async checkSyncStatus() {
-    // Request current sync status from service worker
-    this.postToServiceWorker(SyncMessages.checkSyncPermission());
-
-    // Give the service worker a brief moment to respond with current state
-    // If no response comes within 100ms, check if we need to resume sync
-    setTimeout(() => {
-      // Only update if we haven't received any sync status updates yet
-      if (this._syncState.syncStatus === 'idle' && !this._syncState.isSyncing) {
-        DebugService.logInfo('sync', 'No sync status response from service worker - checking if sync needs to resume');
-        this.#checkAndResumeSync();
-      }
-    }, 100);
-  }
-
   /**
-   * Check if there are bookmarks that still need syncing and resume if necessary
+   * Check if a sync was interrupted and resume it if necessary
+   * Handles all sync phases, not just assets and read status
    */
   async #checkAndResumeSync() {
     try {
-      // Check if there are bookmarks that still need asset sync
-      const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
-      const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
+      // Check multiple conditions that indicate an interrupted sync:
+      // 1. Sync offsets (incomplete bookmark sync phases 1-2)
+      // 2. Bookmarks needing asset sync (phase 3)
+      // 3. Bookmarks needing read sync (phase 4)
 
+      const [bookmarksNeedingAssetSync, bookmarksNeedingReadSync] = await Promise.all([
+        DatabaseService.getBookmarksNeedingAssetSync(),
+        DatabaseService.getBookmarksNeedingReadSync()
+      ]);
+
+      // Determine if sync was interrupted based on various indicators
+      let needsResume = false;
+      let resumeReason = '';
+
+      // Check for incomplete sync phases 3-4
       if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
-        DebugService.logInfo('sync', `Resuming sync: ${bookmarksNeedingAssetSync.length} assets, ${bookmarksNeedingReadSync.length} read status`);
+        needsResume = true;
+        resumeReason = `${bookmarksNeedingAssetSync.length} assets, ${bookmarksNeedingReadSync.length} read status`;
+      }
+
+      // Check for interruption during phases 1-2 by examining sync offsets
+      // Non-zero offsets indicate incomplete bookmark sync that should be resumed
+      if (!needsResume) {
+        const [unarchivedOffset, archivedOffset] = await Promise.all([
+          DatabaseService.getUnarchivedOffset(),
+          DatabaseService.getArchivedOffset()
+        ]);
+        if (unarchivedOffset > 0 || archivedOffset > 0) {
+          needsResume = true;
+          resumeReason = `Incomplete bookmark sync (offsets: unarchived=${unarchivedOffset}, archived=${archivedOffset})`;
+        }
+      }
+
+      if (needsResume) {
+        DebugService.logInfo('sync', `Resuming interrupted sync: ${resumeReason}`);
         await this.requestSync(false);
       }
     } catch (error) {
@@ -143,113 +374,176 @@ export class SyncController implements ReactiveController {
     }
   }
 
-  private handleServiceWorkerMessage(message: SyncMessage) {
-    switch (message.type) {
-      case 'SW_LOG':
-        // Forward service worker logs to DebugService
-        switch (message.level) {
-          case 'info':
-            DebugService.logInfo('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
-            break;
-          case 'warn':
-            DebugService.logWarning('sync', `[SW] ${message.operation}: ${message.message}`, message.details);
-            break;
-          case 'error':
-            DebugService.logError(new Error(`[SW] ${message.operation}: ${message.message}`), 'sync', 'Service worker error', { details: message.error || message.details });
-            break;
-        }
-        break;
-
-      case 'SYNC_STATUS':
-        this._syncState = {
-          ...this._syncState,
-          syncStatus: message.status,
-          isSyncing: message.status === 'starting' || message.status === 'syncing'
-        };
-
-        // Handle special sync statuses
-        if (message.status === 'interrupted') {
-          DebugService.logInfo('sync', 'Interrupted sync detected - resuming');
-          this.#checkAndResumeSync();
-        }
-
-        this.#host.requestUpdate();
-        break;
-
-      case 'SYNC_PROGRESS':
-        this._syncState = {
-          ...this._syncState,
-          isSyncing: true,
-          syncProgress: message.current,
-          syncTotal: message.total,
-          syncPhase: message.phase,
-          syncStatus: 'syncing'
-        };
-
-        // Log progress restoration for debugging
-        DebugService.logInfo('sync', `Sync progress restored: ${message.current}/${message.total} (${message.phase})`);
-
-        this.#host.requestUpdate();
-        break;
-
-      case 'SYNC_COMPLETE':
-        // Reset phase tracking on completion
-        this._syncState = {
-          ...this._syncState,
-          isSyncing: false,
-          syncProgress: 0,
-          syncTotal: 0,
-          syncPhase: 'complete',
-          syncStatus: message.success ? 'completed' : 'failed'
-        };
-        this.#host.requestUpdate();
-
-        if (message.success && this.#options.onSyncCompleted) {
-          this.#options.onSyncCompleted();
-        }
-
-        // Clear synced highlights after delay
-        setTimeout(() => {
-          this.clearSyncedHighlights();
-        }, 3000);
-        break;
-
-      case 'SYNC_ERROR':
-        DebugService.logSyncError(new Error(message.error || 'Unknown sync error'), { phase: this._syncState.syncPhase });
-        this.#notifyError(`Sync failed: ${message.error || 'Unknown error'}`);
-        // Reset phase tracking on error
-        this._syncState = {
-          ...this._syncState,
-          isSyncing: false,
-          syncProgress: 0,
-          syncTotal: 0,
-          syncStatus: 'failed',
-          syncPhase: undefined,
-        };
-        this.#host.requestUpdate();
-
-        if (this.#options.onSyncError) {
-          this.#options.onSyncError(new Error(message.error));
-        }
-        break;
-    }
-  }
-
-  private async postToServiceWorker(message: SyncMessage) {
-    if (!this.#serviceWorkerReady) {
-      DebugService.logWarning('sync', 'Service worker not ready for message posting');
+  /**
+   * Register periodic background sync if capabilities are available and settings allow
+   * Phase 1.3: App initialization periodic sync registration
+   * Note: Service worker handles duplicate registrations gracefully
+   */
+  async #registerPeriodicBackgroundSyncIfAvailable(): Promise<void> {
+    // Only proceed if we have both service worker and periodic background sync APIs
+    if (!this.#serviceWorkerReady || !this.#pwaCapabilities.periodicBackgroundSync) {
+      if (this.#serviceWorkerReady) {
+        DebugService.logInfo('sync', 'Periodic background sync API not available - falling back to timer-based sync when app is visible');
+      }
       return;
     }
 
     try {
-      const registration = await navigator.serviceWorker.ready;
-      if (registration.active) {
-        registration.active.postMessage(message);
+      // Wait for settings to be available through reactive query
+      if (this.isSettingsLoading || !this.settings) {
+        DebugService.logInfo('sync', 'Settings not yet available for periodic sync registration');
+        // The hostUpdate() method will call this again when settings become available
+        return;
+      }
+
+      const settings = this.settings;
+      if (!settings || !settings.auto_sync) {
+        DebugService.logInfo('sync', 'Auto-sync not enabled in settings - periodic background sync not registered');
+        return;
+      }
+
+      // TODO: Add user permission and PWA installation checks
+      // For now, register if API is available and auto-sync is enabled
+
+      // Send message to service worker to register periodic background sync
+      // Note: Sync interval will be handled by service worker default (30 minutes)
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'REGISTER_PERIODIC_SYNC'
+        });
+        DebugService.logInfo('sync', 'Periodic background sync registration requested');
       }
     } catch (error) {
-      DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'sync', 'Failed to post message to service worker');
+      DebugService.logWarning('sync', 'Failed to register periodic background sync', { error });
     }
   }
+
+  /**
+   * Unregister periodic background sync when auto_sync is disabled
+   */
+  #unregisterPeriodicBackgroundSync(): void {
+    // Only proceed if service worker is available
+    if (!this.#serviceWorkerReady || !this.#pwaCapabilities.periodicBackgroundSync) {
+      return;
+    }
+
+    try {
+      // Send message to service worker to unregister periodic background sync
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'UNREGISTER_PERIODIC_SYNC'
+        });
+        DebugService.logInfo('sync', 'Periodic background sync unregistration requested');
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to unregister periodic background sync', { error });
+    }
+  }
+
+  private handleServiceWorkerMessage(message: SyncMessage) {
+    switch (message.type) {
+      case 'SW_LOG':
+        // Service worker logs now go directly to DebugService
+        // This case can be removed once all components are updated
+        break;
+
+      case 'SYNC_STATUS':
+        // Phase 1.2: Enhanced status handling for better coordination
+        DebugService.logInfo('sync', `Service worker sync status: ${message.status}`);
+
+        if (message.status === 'interrupted') {
+          DebugService.logInfo('sync', 'Interrupted sync detected - resuming');
+          this.#checkAndResumeSync();
+        } else if (message.status === 'starting' && !this._syncState.isSyncing) {
+          // Service worker starting background sync while app is in foreground
+          // Update UI to show that sync is happening in background
+          DebugService.logInfo('sync', 'Background sync starting while app is in foreground');
+          this.#updateSyncLockStatus();
+        }
+        break;
+
+      case 'SYNC_PROGRESS':
+        // Phase 1.2: Handle background sync progress for better user awareness
+        if (message.current !== undefined && message.total !== undefined) {
+          DebugService.logInfo('sync', `Background sync progress: ${message.current}/${message.total} (${message.phase})`);
+          // Update lock status to reflect ongoing background sync
+          this.#updateSyncLockStatus();
+        }
+        break;
+
+      case 'SYNC_COMPLETE':
+        // Phase 1.2: Enhanced completion handling
+        DebugService.logInfo('sync', `Background sync completed: ${message.success ? 'success' : 'failure'}`, {
+          processed: message.processed,
+          duration: message.duration,
+          error: message.error
+        });
+
+        if (message.success) {
+          // Trigger UI refresh to show new synced data
+          this.#host.requestUpdate();
+
+          // Notify completion callback if provided
+          if (this.#options.onSyncCompleted) {
+            this.#options.onSyncCompleted();
+          }
+        } else {
+          // Handle background sync failure
+          this.#handleBackgroundSyncError(message.error || 'Unknown background sync error');
+        }
+
+        // Update lock status after completion
+        setTimeout(() => {
+          this.#updateSyncLockStatus();
+        }, 1000); // Brief delay to allow lock release
+        break;
+
+      case 'SYNC_ERROR':
+        // Phase 1.2: Enhanced error handling
+        DebugService.logError(new Error(`Background sync error: ${message.error}`), 'sync', 'Service worker sync error', {
+          recoverable: message.recoverable,
+          timestamp: message.timestamp
+        });
+
+        this.#handleBackgroundSyncError(message.error, message.recoverable);
+        break;
+    }
+  }
+
+  /**
+   * Handle background sync errors from service worker
+   */
+  #handleBackgroundSyncError(errorMessage: string, recoverable = false): void {
+    // Only show error if not recoverable or if user needs to know
+    if (!recoverable || errorMessage.includes('settings') || errorMessage.includes('permission')) {
+      this.#notifyError(`Background sync failed: ${errorMessage}`);
+    }
+
+    // Save error to database for persistence
+    DatabaseService.setLastSyncError(errorMessage).catch(err => {
+      DebugService.logError(err instanceof Error ? err : new Error(String(err)), 'sync', 'Failed to save background sync error');
+    });
+
+    // Update UI
+    this.#host.requestUpdate();
+  }
+
+  /**
+   * Update sync lock status for UI display
+   */
+  async #updateSyncLockStatus(): Promise<void> {
+    try {
+      const isAvailable = await this.#webLockCoordinator.isLockAvailable();
+      if (this.#syncLockStatus !== isAvailable) {
+        this.#syncLockStatus = isAvailable;
+        this.#host.requestUpdate();
+        DebugService.logInfo('sync', `Sync lock status updated: ${isAvailable ? 'available' : 'locked'}`);
+      }
+    } catch (error) {
+      DebugService.logWarning('sync', 'Failed to update sync lock status', { error });
+    }
+  }
+
 
   // Public API methods
 
@@ -287,7 +581,35 @@ export class SyncController implements ReactiveController {
   }
 
   /**
-   * Request a sync operation
+   * Start periodic lock status polling for UI updates
+   */
+  #startLockPolling(): void {
+    // Poll lock status every 5 seconds for UI updates
+    this.#lockPollingInterval = setInterval(async () => {
+      try {
+        const isAvailable = await this.#webLockCoordinator.isLockAvailable();
+        if (this.#syncLockStatus !== isAvailable) {
+          this.#syncLockStatus = isAvailable;
+          this.#host.requestUpdate();
+        }
+      } catch (error) {
+        DebugService.logWarning('sync', 'Failed to check lock status during polling', { error });
+      }
+    }, 5000) as unknown as number;
+  }
+
+  /**
+   * Stop lock status polling
+   */
+  #stopLockPolling(): void {
+    if (this.#lockPollingInterval !== null) {
+      clearInterval(this.#lockPollingInterval);
+      this.#lockPollingInterval = null;
+    }
+  }
+
+  /**
+   * Request a sync operation (directly via sync worker, bypassing service worker)
    */
   async requestSync(fullSync = false): Promise<void> {
     if (this._syncState.isSyncing) return;
@@ -300,10 +622,22 @@ export class SyncController implements ReactiveController {
         return;
       }
 
-      // Check if service worker is ready
-      if (!this.#serviceWorkerReady) {
-        DebugService.logWarning('sync', 'Service worker not ready for sync request');
-        this.#notifyError('Sync service is not ready. Please try again.');
+      // Phase 1.2: Wait for service worker to release Web Lock before starting foreground sync
+      DebugService.logInfo('sync', 'Waiting for service worker to release Web Lock before starting foreground sync');
+      try {
+        await this.#webLockCoordinator.waitForLockRelease({ timeout: 30000 }); // 30 second timeout
+        DebugService.logInfo('sync', 'Web Lock is now available for foreground sync');
+      } catch (error) {
+        DebugService.logWarning('sync', 'Timeout waiting for Web Lock release - sync may be blocked by another tab', { error });
+        this.#notifyError('Sync is blocked by another tab or background process. Please wait and try again.');
+        return;
+      }
+
+      // Double-check lock is still available after waiting
+      const lockAvailable = await this.#webLockCoordinator.isLockAvailable();
+      if (!lockAvailable) {
+        DebugService.logInfo('sync', 'Sync lock not available after waiting - sync in progress in another tab');
+        this.#notifyError('Sync is already running in another tab. Please wait for it to complete.');
         return;
       }
 
@@ -322,15 +656,16 @@ export class SyncController implements ReactiveController {
         };
         this.#host.requestUpdate();
 
-        // Request sync from service worker
-        await this.postToServiceWorker(SyncMessages.requestSync(true, fullSync));
+        // Start sync directly via sync worker manager (bypasses service worker)
+        DebugService.logInfo('sync', 'Starting manual sync directly via worker', { fullSync });
+        await this.#syncWorkerManager.startSync(settings, fullSync);
       } else {
         DebugService.logWarning('sync', 'Cannot sync without valid Linkding settings');
         this.#notifyError('Please configure your Linkding settings first');
       }
     } catch (error) {
       DebugService.logSyncError(error instanceof Error ? error : new Error(String(error)), { fullSync });
-      this.#notifyError('Failed to start sync');
+      this.#notifyError('Unable to start sync. Please check your connection and settings.');
       // Reset sync state on error
       this._syncState = {
         ...this._syncState,
@@ -349,21 +684,32 @@ export class SyncController implements ReactiveController {
   async cancelSync(): Promise<void> {
     if (!this._syncState.isSyncing) return;
 
-    await this.postToServiceWorker(SyncMessages.cancelSync('User requested cancellation'));
+    // Cancel sync directly via worker manager
+    DebugService.logInfo('sync', 'Cancelling manual sync via worker');
+    this.#syncWorkerManager.cancelSync();
   }
 
-  /**
-   * Enable or disable periodic background sync
-   */
-  async setPeriodicSync(enabled: boolean): Promise<void> {
-    await this.postToServiceWorker(SyncMessages.registerPeriodicSync(enabled));
-  }
 
   /**
    * Check if sync is currently in progress
    */
   isSyncing(): boolean {
     return this._syncState.isSyncing;
+  }
+
+  /**
+   * Check if sync lock is currently available (not held by another tab)
+   */
+  isSyncLockAvailable(): boolean {
+    return this.#syncLockStatus;
+  }
+
+  /**
+   * Get PWA capabilities for the current browser
+   * Phase 1.3: Expose capabilities for user messaging and feature adaptation
+   */
+  getPWACapabilities() {
+    return { ...this.#pwaCapabilities };
   }
 
 

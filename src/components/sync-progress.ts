@@ -7,11 +7,13 @@ import '@material/web/progress/linear-progress.js';
 /**
  * Shared sync progress component that displays phase-aware sync progress.
  * Shows current phase name and progress with cycling 0-100% per phase.
+ * Also displays multi-tab coordination status.
  */
 @customElement('sync-progress')
 export class SyncProgress extends LitElement {
   @property({ type: Object }) syncState?: SyncState;
   @property({ type: Boolean }) showIcon = true;
+  @property({ type: Boolean }) syncLockAvailable = true;
 
   static override styles = css`
     :host {
@@ -45,6 +47,18 @@ export class SyncProgress extends LitElement {
       animation: pulse 2s infinite;
     }
 
+    .multi-tab-message {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--md-sys-color-on-primary-container);
+    }
+
+    .multi-tab-message md-icon {
+      color: var(--md-sys-color-primary);
+    }
+
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
@@ -69,6 +83,18 @@ export class SyncProgress extends LitElement {
   }
 
   override render() {
+    // Show multi-tab message if sync lock is not available (sync running in another tab)
+    if (!this.syncLockAvailable && (!this.syncState || !this.syncState.isSyncing)) {
+      return html`
+        <div class="sync-progress-container">
+          <div class="multi-tab-message">
+            <md-icon>sync</md-icon>
+            <span>Sync in progress in another tab</span>
+          </div>
+        </div>
+      `;
+    }
+
     // Don't show sync progress if sync failed - let error notification handle it
     if (!this.syncState || !this.syncState.isSyncing || this.syncState.syncStatus === 'failed') {
       return html``;
