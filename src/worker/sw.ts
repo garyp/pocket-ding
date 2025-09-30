@@ -471,11 +471,15 @@ self.addEventListener('message', async (event) => {
       break;
 
     case 'PAUSE_SYNC':
+      // Handle pause as cancellation with manual pause flag
       if (syncWorker && currentSyncId) {
         logInfo('sync', `Received PAUSE_SYNC message: ${message.reason || 'User requested pause'}`);
+        // Set manual pause flag in database
+        await DatabaseService.setManualPauseState(true);
+        // Cancel the sync
         syncWorker.postMessage({
-          type: 'PAUSE_SYNC',
-          payload: { reason: message.reason },
+          type: 'CANCEL_SYNC',
+          payload: { reason: message.reason || 'User requested pause' },
           id: currentSyncId
         });
         await broadcastToClients(SyncMessages.syncStatus('paused'));
@@ -485,16 +489,15 @@ self.addEventListener('message', async (event) => {
       break;
 
     case 'RESUME_SYNC':
-      if (syncWorker && currentSyncId) {
-        logInfo('sync', 'Received RESUME_SYNC message');
-        syncWorker.postMessage({
-          type: 'RESUME_SYNC',
-          payload: {},
-          id: currentSyncId
-        });
-        await broadcastToClients(SyncMessages.syncStatus('syncing'));
+      // Handle resume as clearing manual pause flag and starting new sync
+      logInfo('sync', 'Received RESUME_SYNC message');
+      const wasManuallyPaused = await DatabaseService.getManualPauseState();
+      if (wasManuallyPaused) {
+        await DatabaseService.clearManualPauseState();
+        // Start a new sync
+        await performSync(false);
       } else {
-        logInfo('sync', 'Received RESUME_SYNC but no sync is currently active or paused');
+        logInfo('sync', 'Received RESUME_SYNC but sync was not manually paused');
       }
       break;
 
@@ -538,35 +541,42 @@ self.addEventListener('message', async (event) => {
           ));
         }
       } else {
-        // Check if there are bookmarks that still need syncing (interrupted sync recovery)
-        try {
-          const { DatabaseService } = await import('../services/database');
-          const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
-          const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
-
-          if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
-            logInfo('sync', `Detected interrupted sync: ${bookmarksNeedingAssetSync.length} bookmarks need asset sync, ${bookmarksNeedingReadSync.length} need read sync`);
-            // Don't auto-resume here, let the UI decide
-            await broadcastToClients(SyncMessages.syncStatus('interrupted'));
-          }
-        } catch (error) {
-          logError('sync', 'Failed to check for interrupted sync', error);
-        }
-        // Check if periodic sync is available and permitted
-        if ('periodicSync' in self.registration && 'permissions' in self) {
+        // Check if sync was manually paused
+        const isManuallyPaused = await DatabaseService.getManualPauseState();
+        if (isManuallyPaused) {
+          logInfo('sync', 'Sync is manually paused');
+          await broadcastToClients(SyncMessages.syncStatus('paused'));
+        } else {
+          // Check if there are bookmarks that still need syncing (interrupted sync recovery)
           try {
-            const permission = await (self as any).permissions.query({ name: 'periodic-background-sync' });
-            await broadcastToClients({
-              type: 'SYNC_STATUS',
-              status: permission.state === 'granted' ? 'idle' : 'failed',
-              timestamp: Date.now()
-            });
-          } catch {
-            // Permission API not available for periodic-background-sync
+            const { DatabaseService } = await import('../services/database');
+            const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
+            const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
+
+            if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
+              logInfo('sync', `Detected interrupted sync: ${bookmarksNeedingAssetSync.length} bookmarks need asset sync, ${bookmarksNeedingReadSync.length} need read sync`);
+              // Don't auto-resume here, let the UI decide
+              await broadcastToClients(SyncMessages.syncStatus('interrupted'));
+            }
+          } catch (error) {
+            logError('sync', 'Failed to check for interrupted sync', error);
+          }
+          // Check if periodic sync is available and permitted
+          if ('periodicSync' in self.registration && 'permissions' in self) {
+            try {
+              const permission = await (self as any).permissions.query({ name: 'periodic-background-sync' });
+              await broadcastToClients({
+                type: 'SYNC_STATUS',
+                status: permission.state === 'granted' ? 'idle' : 'failed',
+                timestamp: Date.now()
+              });
+            } catch {
+              // Permission API not available for periodic-background-sync
+              await broadcastToClients(SyncMessages.syncStatus('idle'));
+            }
+          } else {
             await broadcastToClients(SyncMessages.syncStatus('idle'));
           }
-        } else {
-          await broadcastToClients(SyncMessages.syncStatus('idle'));
         }
       }
       break;

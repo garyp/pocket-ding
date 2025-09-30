@@ -54,7 +54,7 @@ describe('SyncProgress Pause/Resume UI', () => {
 
   it('should show resume button when sync is paused', async () => {
     const syncState: SyncState = {
-      isSyncing: true,
+      isSyncing: false,  // Not currently syncing when manually paused
       syncProgress: 50,
       syncTotal: 100,
       syncPhase: 'bookmarks',
@@ -104,7 +104,7 @@ describe('SyncProgress Pause/Resume UI', () => {
 
   it('should call resume callback when resume button is clicked', async () => {
     const syncState: SyncState = {
-      isSyncing: true,
+      isSyncing: false,  // Not currently syncing when manually paused
       syncProgress: 50,
       syncTotal: 100,
       syncPhase: 'bookmarks',
@@ -146,7 +146,7 @@ describe('SyncProgress Pause/Resume UI', () => {
 
   it('should stop progress bar animation when paused', async () => {
     const syncState: SyncState = {
-      isSyncing: true,
+      isSyncing: false,  // Not currently syncing when manually paused
       syncProgress: 0,
       syncTotal: 0, // Indeterminate progress
       syncPhase: 'bookmarks',
@@ -162,5 +162,33 @@ describe('SyncProgress Pause/Resume UI', () => {
     const progressBar = element.shadowRoot?.querySelector('md-linear-progress');
     // When paused and no progress, bar should not be indeterminate
     expect(progressBar?.getAttribute('indeterminate')).toBeFalsy();
+  });
+
+  it('should show UI for manually paused state even when not syncing', async () => {
+    const syncState: SyncState = {
+      isSyncing: false,  // Not actively syncing
+      syncProgress: 0,
+      syncTotal: 0,
+      syncPhase: undefined,
+      syncStatus: 'paused',  // Manually paused
+      syncedBookmarkIds: new Set(),
+      getPercentage() {
+        return 0;
+      }
+    };
+
+    element = await createSyncProgress(syncState);
+
+    // Should show the sync progress container for manual pause
+    const container = element.shadowRoot?.querySelector('.sync-progress-container');
+    expect(container).toBeTruthy();
+
+    // Should show resume button
+    const resumeButton = element.shadowRoot?.querySelector('md-text-button');
+    expect(resumeButton).toBeTruthy();
+
+    // Should show play icon
+    const resumeIcon = resumeButton?.querySelector('md-icon');
+    expect(resumeIcon?.textContent).toBe('play_arrow');
   });
 });

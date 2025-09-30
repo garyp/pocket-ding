@@ -9,6 +9,7 @@ interface SyncMetadata {
   archived_offset?: number;
   retry_count?: number;
   last_error?: string;
+  is_manual_pause?: boolean;  // Track if last interruption was manual pause
 }
 
 
@@ -73,7 +74,7 @@ export class PocketDingDatabase extends Dexie {
       bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync, needs_asset_sync',
       readProgress: '++id, bookmark_id, last_read_at, dark_mode_override',
       settings: '++id, linkding_url, linkding_token',
-      syncMetadata: '++id, last_sync_timestamp, unarchived_offset, archived_offset, retry_count, last_error',
+      syncMetadata: '++id, last_sync_timestamp, unarchived_offset, archived_offset, retry_count, last_error, is_manual_pause',
       assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at'
     }).upgrade(async (trans) => {
       // Convert boolean sync flags to numeric values (0=false, 1=true)
@@ -471,5 +472,29 @@ export class DatabaseService {
     }
   }
 
+  // Manual pause state management
+  static async setManualPauseState(isManualPause: boolean): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { is_manual_pause: isManualPause });
+    } else {
+      await db.syncMetadata.add({
+        last_sync_timestamp: '',
+        is_manual_pause: isManualPause
+      });
+    }
+  }
+
+  static async getManualPauseState(): Promise<boolean> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    return metadata?.is_manual_pause || false;
+  }
+
+  static async clearManualPauseState(): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { is_manual_pause: undefined } as any);
+    }
+  }
 
 }

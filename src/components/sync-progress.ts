@@ -84,14 +84,19 @@ export class SyncProgress extends LitElement {
   }
 
   override render() {
-    // Don't show sync progress if sync failed - let error notification handle it
-    if (!this.syncState || !this.syncState.isSyncing || this.syncState.syncStatus === 'failed') {
+    // Show progress for syncing or paused states
+    if (!this.syncState || this.syncState.syncStatus === 'failed') {
+      return html``;
+    }
+
+    // Show UI for manually paused state even when not syncing
+    const isPaused = this.syncState.syncStatus === 'paused';
+    if (!this.syncState.isSyncing && !isPaused) {
       return html``;
     }
 
     const phaseText = this.#getPhaseDisplayText(this.syncState.syncPhase);
     const hasProgress = this.syncState.syncTotal > 0;
-    const isPaused = this.syncState.syncStatus === 'paused';
 
     return html`
       <div class="sync-progress-container">

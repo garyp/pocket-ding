@@ -7,7 +7,7 @@ import { logInfo, logError } from './sw-logger';
 declare const self: DedicatedWorkerGlobalScope;
 
 interface SyncWorkerMessage {
-  type: 'START_SYNC' | 'CANCEL_SYNC' | 'PAUSE_SYNC' | 'RESUME_SYNC';
+  type: 'START_SYNC' | 'CANCEL_SYNC';
   payload?: {
     settings?: AppSettings;
     fullSync?: boolean;
@@ -17,7 +17,7 @@ interface SyncWorkerMessage {
 }
 
 interface SyncWorkerResponse {
-  type: 'SYNC_PROGRESS' | 'SYNC_COMPLETE' | 'SYNC_ERROR' | 'SYNC_CANCELLED' | 'SYNC_PAUSED' | 'SYNC_RESUMED';
+  type: 'SYNC_PROGRESS' | 'SYNC_COMPLETE' | 'SYNC_ERROR' | 'SYNC_CANCELLED';
   payload: any;
   id: string;
 }
@@ -151,48 +151,6 @@ self.addEventListener('message', async (event: MessageEvent<SyncWorkerMessage>) 
       }
       break;
 
-    case 'PAUSE_SYNC':
-      if (currentSyncService && currentSyncId === id) {
-        logInfo('syncWorker', 'Pausing sync operation', { id, reason: payload?.reason });
-        currentSyncService.pauseSync();
-
-        self.postMessage({
-          type: 'SYNC_PAUSED',
-          payload: {
-            processed: currentSyncService.getProcessedCount(),
-            reason: payload?.reason
-          },
-          id
-        } as SyncWorkerResponse);
-      } else {
-        self.postMessage({
-          type: 'SYNC_ERROR',
-          payload: { error: 'No matching sync operation to pause' },
-          id
-        } as SyncWorkerResponse);
-      }
-      break;
-
-    case 'RESUME_SYNC':
-      if (currentSyncService && currentSyncId === id && currentSyncService.isPaused()) {
-        logInfo('syncWorker', 'Resuming sync operation', { id });
-        currentSyncService.resumeSync();
-
-        self.postMessage({
-          type: 'SYNC_RESUMED',
-          payload: {
-            processed: currentSyncService.getProcessedCount()
-          },
-          id
-        } as SyncWorkerResponse);
-      } else {
-        self.postMessage({
-          type: 'SYNC_ERROR',
-          payload: { error: 'No matching paused sync operation to resume' },
-          id
-        } as SyncWorkerResponse);
-      }
-      break;
 
     default:
       self.postMessage({

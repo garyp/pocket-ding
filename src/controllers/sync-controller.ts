@@ -20,6 +20,7 @@ export class SyncController implements ReactiveController {
   #settingsQuery: ReactiveQueryController<AppSettings | undefined>;
   #syncErrorQuery: ReactiveQueryController<string | null>;
   #syncRetryCountQuery: ReactiveQueryController<number>;
+  #manualPauseQuery: ReactiveQueryController<boolean>;
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -53,6 +54,11 @@ export class SyncController implements ReactiveController {
       () => DatabaseService.getSyncRetryCount()
     );
 
+    this.#manualPauseQuery = new ReactiveQueryController(
+      host,
+      () => DatabaseService.getManualPauseState()
+    );
+
     host.addController(this);
   }
 
@@ -67,10 +73,20 @@ export class SyncController implements ReactiveController {
   private async initializeSync() {
     // Setup service worker message handler
     await this.setupServiceWorker();
-    
+
     // Check for ongoing sync status
     if (this.#serviceWorkerReady) {
       await this.checkSyncStatus();
+    }
+
+    // Check if sync was manually paused
+    const isManuallyPaused = this.#manualPauseQuery.value;
+    if (isManuallyPaused) {
+      this._syncState = {
+        ...this._syncState,
+        syncStatus: 'paused'
+      };
+      this.#host.requestUpdate();
     }
   }
 
@@ -164,7 +180,7 @@ export class SyncController implements ReactiveController {
         this._syncState = {
           ...this._syncState,
           syncStatus: message.status,
-          isSyncing: message.status === 'starting' || message.status === 'syncing' || message.status === 'paused'
+          isSyncing: message.status === 'starting' || message.status === 'syncing'
         };
 
         // Handle special sync statuses
@@ -283,6 +299,12 @@ export class SyncController implements ReactiveController {
       state.retryCount = retryCount;
     }
 
+    // Include manual pause state
+    const isManuallyPaused = this.#manualPauseQuery.value;
+    if (isManuallyPaused) {
+      state.syncStatus = 'paused';
+    }
+
     return state;
   }
 
@@ -353,10 +375,18 @@ export class SyncController implements ReactiveController {
   }
 
   /**
-   * Pause ongoing sync operation
+   * Pause ongoing sync operation (treat as manual cancellation)
    */
   async pauseSync(): Promise<void> {
-    if (!this._syncState.isSyncing || this._syncState.syncStatus === 'paused') return;
+    if (!this._syncState.isSyncing) return;
+
+    // Mark as manual pause before cancelling
+    await DatabaseService.setManualPauseState(true);
+    this._syncState = {
+      ...this._syncState,
+      syncStatus: 'paused'
+    };
+    this.#host.requestUpdate();
 
     await this.postToServiceWorker(SyncMessages.pauseSync('User requested pause'));
   }
@@ -365,7 +395,8 @@ export class SyncController implements ReactiveController {
    * Resume paused sync operation
    */
   async resumeSync(): Promise<void> {
-    if (this._syncState.syncStatus !== 'paused') return;
+    const isManuallyPaused = this.#manualPauseQuery.value;
+    if (!isManuallyPaused && this._syncState.syncStatus !== 'paused') return;
 
     await this.postToServiceWorker(SyncMessages.resumeSync());
   }

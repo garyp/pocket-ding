@@ -9,7 +9,7 @@ vi.mock('../../services/database');
 vi.mock('../../services/linkding-api');
 vi.mock('../../services/favicon-service');
 
-describe('SyncService Pause/Resume', () => {
+describe('SyncService Interruption Handling', () => {
   let syncService: SyncService;
   let mockProgressCallback: ReturnType<typeof vi.fn>;
   let mockSettings: AppSettings;
@@ -58,26 +58,49 @@ describe('SyncService Pause/Resume', () => {
     vi.mocked(DatabaseService.saveBookmark).mockResolvedValue(undefined);
     vi.mocked(DatabaseService.getBookmarksNeedingAssetSync).mockResolvedValue([]);
     vi.mocked(DatabaseService.getBookmarksNeedingReadSync).mockResolvedValue([]);
+    // Mock manual pause state methods
+    vi.mocked(DatabaseService.setManualPauseState).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.getManualPauseState).mockResolvedValue(false);
+    vi.mocked(DatabaseService.clearManualPauseState).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('should pause sync operation when pauseSync is called', () => {
-    syncService.pauseSync();
-    expect(syncService.isPaused()).toBe(false); // Should not be paused initially without active sync
+  it('should cancel sync operation when cancelSync is called', async () => {
+    // Start a sync operation
+    const syncPromise = syncService.performSync(mockSettings);
 
-    // Start a sync operation (fire and forget)
-    void syncService.performSync(mockSettings);
+    // Cancel the sync
+    syncService.cancelSync();
 
-    // Now pause should work
-    syncService.pauseSync();
-    expect(syncService.isPaused()).toBe(true);
+    // The sync should complete with cancellation
+    const result = await syncPromise;
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain('cancelled');
   });
 
-  it('should resume sync operation when resumeSync is called', async () => {
+  it('should handle manual pause state in database', async () => {
     vi.useRealTimers(); // Use real timers for this async test
+
+    // Set manual pause state
+    await DatabaseService.setManualPauseState(true);
+    expect(vi.mocked(DatabaseService.setManualPauseState)).toHaveBeenCalledWith(true);
+
+    // Mock that manual pause state is persisted
+    vi.mocked(DatabaseService.getManualPauseState).mockResolvedValueOnce(true);
+    const isPaused = await DatabaseService.getManualPauseState();
+    expect(isPaused).toBe(true);
+
+    // Clear manual pause state
+    await DatabaseService.clearManualPauseState();
+    expect(vi.mocked(DatabaseService.clearManualPauseState)).toHaveBeenCalled();
+
+    // Mock that it's cleared
+    vi.mocked(DatabaseService.getManualPauseState).mockResolvedValueOnce(false);
+    const isCleared = await DatabaseService.getManualPauseState();
+    expect(isCleared).toBe(false);
 
     // Set up bookmarks to sync
     const mockBookmarks = [
@@ -95,23 +118,14 @@ describe('SyncService Pause/Resume', () => {
     // Start sync
     const syncPromise = syncService.performSync(mockSettings);
 
-    // Immediately pause (sync should handle this gracefully)
-    syncService.pauseSync();
-    const wasPaused = syncService.isPaused();
-
-    // Resume quickly
-    syncService.resumeSync();
-
     // Wait for sync to complete
     const result = await syncPromise;
 
     // Verify sync completed successfully
     expect(result.success).toBe(true);
-    expect(wasPaused).toBe(true); // Should have been paused at some point
-    expect(syncService.isPaused()).toBe(false); // Should not be paused after completion
   });
 
-  it('should report paused status in progress callback', async () => {
+  it('should continue sync after interruption and restart', async () => {
     vi.useRealTimers(); // Use real timers for this async test
 
     // Set up simple bookmarks
@@ -129,17 +143,20 @@ describe('SyncService Pause/Resume', () => {
     // Start sync
     const syncPromise = syncService.performSync(mockSettings);
 
-    // Quick pause and resume
-    syncService.pauseSync();
-    await new Promise(resolve => setTimeout(resolve, 10));
-    syncService.resumeSync();
+    // Cancel the sync (simulating manual pause)
+    syncService.cancelSync();
 
-    // Wait for completion
+    // Wait for cancellation
     const result = await syncPromise;
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+
+    // Start a new sync (simulating resume)
+    const secondSyncPromise = syncService.performSync(mockSettings);
+    const secondResult = await secondSyncPromise;
+    expect(secondResult.success).toBe(true);
   });
 
-  it('should handle pause/resume during asset sync phase', async () => {
+  it('should handle interruption during asset sync phase', async () => {
     vi.useRealTimers(); // Use real timers for this async test
 
     const mockBookmarksNeedingAssets = [
@@ -167,12 +184,17 @@ describe('SyncService Pause/Resume', () => {
       }
     ] as any[];
 
-    // Quick bookmark phases
-    mockAPI.getBookmarks.mockResolvedValue({
-      results: [],
-      count: 0,
-      next: null
-    });
+    // Quick bookmark phases - simulate slow processing to allow cancellation
+    mockAPI.getBookmarks.mockImplementation(() =>
+      new Promise((resolve) => {
+        setTimeout(() => resolve({
+          results: [],
+          count: 0,
+          next: null
+        }), 100);
+      })
+    );
+
     mockAPI.getArchivedBookmarks.mockResolvedValue({
       results: [],
       count: 0,
@@ -193,29 +215,23 @@ describe('SyncService Pause/Resume', () => {
     // Start sync
     const syncPromise = syncService.performSync(mockSettings);
 
-    // Quick pause/resume during execution
+    // Cancel quickly during the bookmark fetch phase
     await new Promise(resolve => setTimeout(resolve, 10));
-    syncService.pauseSync();
-    syncService.resumeSync();
+    syncService.cancelSync();
 
-    // Wait for completion
+    // Wait for cancellation
     const result = await syncPromise;
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
-  it('should cancel properly when paused', async () => {
+  it('should cancel properly during sync operation', async () => {
     vi.useRealTimers(); // Use real timers for this async test
 
     // Start sync
     const syncPromise = syncService.performSync(mockSettings);
 
-    // Pause
-    syncService.pauseSync();
-    expect(syncService.isPaused()).toBe(true);
-
-    // Cancel while paused
+    // Cancel immediately
     syncService.cancelSync();
-    expect(syncService.isPaused()).toBe(false); // Should unpause when cancelled
 
     // Sync should fail with cancellation
     const result = await syncPromise;
