@@ -22,43 +22,68 @@ import '@material/web/dialog/dialog.js';
 
 @customElement('bookmark-reader')
 export class BookmarkReader extends LitElement {
-  @property({ type: Number }) bookmarkId!: number;
+  @property({ type: Number }) bookmarkId: number | null = null;
 
-  // Reactive query for bookmark data  
+  // Reactive query for bookmark data
   #bookmarkQuery = new ReactiveQueryController(
     this,
-    (bookmarkId: number) => DatabaseService.getBookmark(bookmarkId),
-    (): [number] => [this.bookmarkId]
+    (bookmarkId: number | null) => {
+      if (bookmarkId === null || bookmarkId === undefined) {
+        return Promise.resolve(undefined);
+      }
+      return DatabaseService.getBookmark(bookmarkId);
+    },
+    (): [number | null] => [this.bookmarkId]
   );
 
   // Reactive query for read progress
   #readProgressQuery = new ReactiveQueryController(
     this,
-    (bookmarkId: number) => DatabaseService.getReadProgress(bookmarkId),
-    (): [number] => [this.bookmarkId]
+    (bookmarkId: number | null) => {
+      if (bookmarkId === null || bookmarkId === undefined) {
+        return Promise.resolve(undefined);
+      }
+      return DatabaseService.getReadProgress(bookmarkId);
+    },
+    (): [number | null] => [this.bookmarkId]
   );
 
   // Reactive query for available content sources (assets)
   #assetsQuery = new ReactiveQueryController(
     this,
-    (bookmarkId: number) => DatabaseService.getCompletedAssetsByBookmarkId(bookmarkId),
-    (): [number] => [this.bookmarkId]
+    (bookmarkId: number | null) => {
+      if (bookmarkId === null || bookmarkId === undefined) {
+        return Promise.resolve([]);
+      }
+      return DatabaseService.getCompletedAssetsByBookmarkId(bookmarkId);
+    },
+    (): [number | null] => [this.bookmarkId]
   );
 
 
 
   // Task for loading content based on selected source
+  // We use primitive values (bookmarkId, sourceType, assetId, assetsLength) as dependencies
+  // instead of object references to ensure Task only re-runs when actual values change
   #contentTask = new Task(this, {
-    task: async ([bookmark, source]: [LocalBookmark | undefined, ContentSourceOption | null]) => {
-      if (!bookmark || !source) return null;
+    task: async ([bookmarkId, sourceType, assetId, _assetsLength]: [number | null, 'asset' | 'readability' | 'url' | null, number | undefined, number]) => {
+      if (!bookmarkId || !sourceType) return null;
+
+      const bookmark = this.bookmark;
+      if (!bookmark) return null;
 
       return await ContentFetcher.fetchBookmarkContent(
         bookmark,
-        source.type,
-        source.assetId
+        sourceType,
+        assetId
       );
     },
-    args: (): [LocalBookmark | undefined, ContentSourceOption | null] => [this.bookmark, this.selectedContentSource]
+    args: (): [number | null, 'asset' | 'readability' | 'url' | null, number | undefined, number] => [
+      this.bookmark?.id ?? null,
+      this.selectedContentSource?.type ?? null,
+      this.selectedContentSource?.assetId,
+      this.assets.length
+    ]
   });
 
   // Getter methods for reactive data
@@ -612,19 +637,20 @@ export class BookmarkReader extends LitElement {
 
   override async connectedCallback() {
     super.connectedCallback();
-    
+
     // Create a theme change listener function and store reference for cleanup
     this.#themeChangeListener = (theme: 'light' | 'dark') => {
       this.systemTheme = theme;
       this.updateReaderTheme();
     };
-    
+
     // Listen for system theme changes
     ThemeService.addThemeChangeListener(this.#themeChangeListener);
   }
 
 
   override updated(changedProperties: Map<string, any>) {
+
     // Get reference to secure iframe after render
     if (!this.secureIframe) {
       this.secureIframe = this.shadowRoot?.querySelector('secure-iframe');
@@ -635,14 +661,21 @@ export class BookmarkReader extends LitElement {
       this.manuallySelectedSource = null;
     }
 
-    // Initialize state from reactive read progress data when available
-    this.#initializeFromProgress();
+    // Initialize state when bookmark query completes (loading → loaded transition)
+    const bookmarkJustLoaded = this.#lastBookmarkLoading && !this.#bookmarkQuery.loading;
+    if (bookmarkJustLoaded) {
+      this.#initializeFromProgress();
+    }
+    this.#lastBookmarkLoading = this.#bookmarkQuery.loading;
 
     // Handle content-dependent logic
     this.#handleContentChanges(changedProperties);
 
-    // Ensure select value is set after rendering
-    this.updateSelectValue();
+    // Only update select value when necessary (when source changes or assets load)
+    if (changedProperties.has('manuallySelectedSource') ||
+        this.#bookmarkQuery.loading === false && changedProperties.size > 0) {
+      this.updateSelectValue();
+    }
 
     // Manual Task trigger: if data is ready but Task hasn't run, trigger it
     if (!this.isDataLoading && this.selectedContentSource && !this.contentResult && !this.isLoadingContent) {
@@ -650,19 +683,15 @@ export class BookmarkReader extends LitElement {
     }
   }
 
+  #lastBookmarkLoading = true;
+
   /**
-   * Initialize state from reactive read progress data when available
+   * Initialize state from reactive read progress data when available.
+   * Called only when bookmark query completes (loading → loaded transition).
    */
   #initializeFromProgress() {
-    // Only initialize once we have bookmark data and no manual user selection is active
-    // Skip initialization if progress values have been manually set (not at defaults)
+    // Skip if no bookmark data or user has manually selected a source
     if (!this.bookmark || this.manuallySelectedSource) {
-      return;
-    }
-    
-    // Don't override if progress values have been manually modified from defaults
-    const hasManualProgress = this.readProgress !== 0 || this.scrollPosition !== 0;
-    if (hasManualProgress) {
       return;
     }
 
@@ -683,7 +712,7 @@ export class BookmarkReader extends LitElement {
 
     // Update theme immediately after setting dark mode override
     this.updateReaderTheme();
-    
+
     // Set up read marking when we have a selected content source
     if (this.selectedContentSource) {
       this.setupReadMarking();
@@ -973,7 +1002,7 @@ export class BookmarkReader extends LitElement {
 
     try {
       await DatabaseService.saveReadProgress(progress);
-      
+
       // Update bookmark with progress info - reactive queries will update UI automatically
       const bookmarkUpdate = { ...this.bookmark };
       bookmarkUpdate.read_progress = this.readProgress;
@@ -1410,6 +1439,7 @@ export class BookmarkReader extends LitElement {
         ${this.renderInfoModal()}
       `;
     }
+
 
 
     return html`

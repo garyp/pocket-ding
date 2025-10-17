@@ -209,9 +209,29 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
     if (a === b) return true;
     if (!a || !b) return false;
     if (a.length !== b.length) return false;
-    
+
     for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) return false;
+      const aVal = a[i];
+      const bVal = b[i];
+
+      // For arrays, compare by content (each element)
+      if (Array.isArray(aVal) && Array.isArray(bVal)) {
+        // If it's the same array object, they're equal
+        if (aVal === bVal) continue;
+
+        // If lengths differ, arrays are different
+        if (aVal.length !== bVal.length) return false;
+
+        // Compare each element in the array
+        for (let j = 0; j < aVal.length; j++) {
+          if (aVal[j] !== bVal[j]) return false;
+        }
+        // All elements match, arrays are equal
+        continue;
+      }
+
+      // For other values, use strict equality
+      if (aVal !== bVal) return false;
     }
     return true;
   }

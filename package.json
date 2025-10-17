@@ -15,7 +15,10 @@
     "test:integration": "vitest run src/test/integration",
     "test:watch": "vitest",
     "test:playwright": "playwright test",
-    "test:playwright:debug": "playwright test --debug"
+    "test:playwright:debug": "playwright test --debug",
+    "test:e2e": "playwright test --config=playwright.e2e.config.ts",
+    "test:e2e:quick": "playwright test --config=playwright.e2e.config.ts --project=chromium",
+    "test:e2e:debug": "playwright test --config=playwright.e2e.config.ts --debug"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.2",
@@ -28,6 +31,7 @@
     "fake-indexeddb": "^6.2.2",
     "glob": "^11.0.3",
     "happy-dom": "^18.0.1",
+    "testcontainers": "^11.7.1",
     "typescript": "^5.5.3",
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^1.0.1",

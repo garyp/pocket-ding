@@ -271,13 +271,36 @@ export class AppRoot extends LitElement {
     }
   }
 
+  /**
+   * Detects if we're running in a Vitest unit test environment (Happy DOM).
+   * E2E tests in real browsers (Playwright) should NOT be detected as unit tests.
+   *
+   * Detection strategy:
+   * - Check for window.__VITEST__ (set by Vitest)
+   * - Check for Happy DOM navigator signature
+   * - Do NOT rely on process.env which doesn't exist in real browsers
+   */
+  #isUnitTestEnvironment(): boolean {
+    // Check if running in Vitest
+    if (typeof window !== 'undefined' && (window as any).__VITEST__) {
+      return true;
+    }
+
+    // Check for Happy DOM (used by Vitest unit tests)
+    if (typeof navigator !== 'undefined' && navigator.userAgent?.includes('happy-dom')) {
+      return true;
+    }
+
+    // Real browsers (including E2E tests) should return false
+    return false;
+  }
+
   private setupRouting() {
-    // Skip routing in test environments
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
-    if (isTestEnvironment) {
+    // Only skip routing in Vitest unit tests, not E2E tests in real browsers
+    if (this.#isUnitTestEnvironment()) {
       return;
     }
-    
+
     // Handle initial route
     this.handleRoute();
     // Listen for browser back/forward buttons
@@ -337,12 +360,11 @@ export class AppRoot extends LitElement {
   }
 
   private updateUrl(view: string, bookmarkId?: number) {
-    // Skip URL updates in test environments
-    const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
-    if (isTestEnvironment) {
+    // Only skip URL updates in Vitest unit tests, not E2E tests in real browsers
+    if (this.#isUnitTestEnvironment()) {
       return;
     }
-    
+
     const basePath = getBasePath();
     let route = '/';
     let title = 'Pocket Ding';
@@ -396,9 +418,14 @@ export class AppRoot extends LitElement {
   }
 
   private handleBookmarkSelect(e: CustomEvent) {
-    this.selectedBookmarkId = e.detail.bookmarkId;
+    const bookmarkId = e.detail.bookmarkId;
+    if (!bookmarkId) {
+      console.error('Invalid bookmark ID in handleBookmarkSelect');
+      return;
+    }
+    this.selectedBookmarkId = bookmarkId;
     this.currentView = 'reader';
-    this.updateUrl('reader', this.selectedBookmarkId || undefined);
+    this.updateUrl('reader', bookmarkId);
   }
 
   private async handleSettingsSave(e: CustomEvent) {
@@ -520,6 +547,14 @@ export class AppRoot extends LitElement {
           ></bookmark-list-container>
         `;
       case 'reader':
+        if (!this.selectedBookmarkId) {
+          return html`
+            <div class="error-message">
+              <h3>No bookmark selected</h3>
+              <p>Please select a bookmark to read.</p>
+            </div>
+          `;
+        }
         return html`
           <bookmark-reader
             .bookmarkId=${this.selectedBookmarkId}

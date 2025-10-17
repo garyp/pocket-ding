@@ -18,10 +18,10 @@ export class BookmarkList extends LitElement {
   @property({ type: Boolean }) isLoading = false;
 
   // Assets query - uses bookmarks data to determine which bookmarks to check
+  // No dependency function - liveQuery will observe database changes naturally
   #assetsQuery = new ReactiveQueryController(
     this,
-    (bookmarks: LocalBookmark[]) => DatabaseService.getBookmarksWithAssetCounts(bookmarks.map(b => b.id)),
-    (): [LocalBookmark[]] => [this.bookmarks]
+    () => DatabaseService.getBookmarksWithAssetCounts(this.bookmarks.map(b => b.id))
   );
   
   // Favicon props
