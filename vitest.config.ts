@@ -10,6 +10,7 @@ export default defineConfig({
       '**/dist/**',
       '**/playwright/**',
       '**/src/test/playwright/**',
+      '**/src/test/e2e/**',
       '**/tests/**'
     ],
     deps: {

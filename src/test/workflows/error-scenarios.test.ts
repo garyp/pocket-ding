@@ -147,6 +147,11 @@ describe('Error Scenarios - Failure Handling', () => {
   });
 
   afterEach(() => {
+    // Restore fetch mock to prevent pollution across tests
+    if (global.fetch && vi.isMockFunction(global.fetch)) {
+      vi.mocked(global.fetch).mockReset();
+    }
+
     document.body.innerHTML = '';
   });
 

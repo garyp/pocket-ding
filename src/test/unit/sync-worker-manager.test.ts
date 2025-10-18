@@ -265,7 +265,7 @@ describe('SyncWorkerManager', () => {
 
       errorHandler(errorEvent);
 
-      expect(consoleSpy).toHaveBeenCalledWith('Sync worker error:', errorEvent);
+      expect(consoleSpy).toHaveBeenCalledWith('[SyncWorkerManager] Sync worker error:', errorEvent);
 
       consoleSpy.mockRestore();
     });

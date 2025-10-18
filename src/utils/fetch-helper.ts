@@ -16,10 +16,19 @@ export function configureFetchHelper(baseUrl: string) {
 
 /**
  * Determines if we're running in development mode
+ * Works in both main thread and worker contexts
  */
 function isDevelopmentMode(): boolean {
   const isTestEnvironment = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test';
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+  // In worker context, use self.location instead of window.location
+  const globalLocation = typeof window !== 'undefined' ? window.location : (typeof self !== 'undefined' && self.location) || null;
+
+  if (!globalLocation) {
+    return false; // If we can't determine location, assume production
+  }
+
+  const isLocalhost = globalLocation.hostname === 'localhost' || globalLocation.hostname === '127.0.0.1';
   return isLocalhost && !isTestEnvironment;
 }
 
@@ -54,7 +63,7 @@ function transformUrlForProxy(url: string): string {
  */
 export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let url: string;
-  
+
   if (input instanceof URL) {
     url = input.toString();
   } else if (typeof input === 'string') {
@@ -65,12 +74,12 @@ export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
 
   const transformedUrl = transformUrlForProxy(url);
-  
+
   // Merge headers with default User-Agent
   const defaultHeaders = {
     'User-Agent': 'PocketDing/1.0 (Progressive Web App)'
   };
-  
+
   const mergedInit = {
     ...init,
     headers: {
@@ -78,29 +87,39 @@ export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       ...init?.headers
     }
   };
-  
-  // If input was a Request object, we need to create a new one with the transformed URL
-  if (typeof input === 'object' && 'url' in input) {
-    const newRequest = new Request(transformedUrl, {
-      method: input.method,
-      headers: {
-        ...defaultHeaders,
-        ...Object.fromEntries(input.headers.entries()),
-        ...init?.headers
-      },
-      body: input.body,
-      mode: input.mode,
-      credentials: input.credentials,
-      cache: input.cache,
-      redirect: input.redirect,
-      referrer: input.referrer,
-      integrity: input.integrity,
-      ...init // Allow overrides (excluding headers which we handled above)
-    });
-    return fetch(newRequest);
-  }
 
-  return fetch(transformedUrl, mergedInit);
+  try {
+    // If input was a Request object, we need to create a new one with the transformed URL
+    if (typeof input === 'object' && 'url' in input) {
+      const newRequest = new Request(transformedUrl, {
+        method: input.method,
+        headers: {
+          ...defaultHeaders,
+          ...Object.fromEntries(input.headers.entries()),
+          ...init?.headers
+        },
+        body: input.body,
+        mode: input.mode,
+        credentials: input.credentials,
+        cache: input.cache,
+        redirect: input.redirect,
+        referrer: input.referrer,
+        integrity: input.integrity,
+        ...init // Allow overrides (excluding headers which we handled above)
+      });
+      return fetch(newRequest);
+    }
+
+    return fetch(transformedUrl, mergedInit);
+  } catch (error) {
+    console.error('[fetch-helper] Fetch failed:', {
+      url: transformedUrl,
+      originalUrl: url,
+      error: error instanceof Error ? error.message : String(error),
+      errorType: error?.constructor?.name
+    });
+    throw error;
+  }
 }
 
 /**
