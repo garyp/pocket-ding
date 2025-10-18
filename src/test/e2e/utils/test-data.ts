@@ -302,16 +302,137 @@ export function generateRealisticBookmarks(): BookmarkData[] {
 }
 
 /**
+ * Upload an asset (HTML snapshot) for a bookmark
+ *
+ * @param client - Linkding API client
+ * @param bookmarkId - ID of the bookmark to upload asset for
+ * @param htmlContent - HTML content to upload
+ * @param fileName - File name for the asset (default: snapshot.html)
+ * @returns Created asset object from API
+ */
+export async function uploadAsset(
+  client: LinkdingAPIClient,
+  bookmarkId: number,
+  htmlContent: string,
+  fileName: string = 'snapshot.html'
+): Promise<any> {
+  // Create form data with the HTML file
+  const formData = new FormData();
+  const blob = new Blob([htmlContent], { type: 'text/html' });
+  formData.append('file', blob, fileName);
+
+  const response = await fetch(
+    `${client.baseUrl}/api/bookmarks/${bookmarkId}/assets/upload/`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${client.apiToken}`,
+        // Don't set Content-Type - let browser set it with boundary for multipart/form-data
+      },
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Failed to upload asset: ${response.status} ${response.statusText}\n${text}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Generate a simple HTML snapshot for testing
+ *
+ * @param title - Page title
+ * @param content - Page content
+ * @returns HTML string
+ */
+export function generateSimpleHtmlSnapshot(
+  title: string,
+  content: string
+): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 0.5rem;
+        }
+        p {
+            color: #666;
+            margin: 1rem 0;
+        }
+        .metadata {
+            color: #999;
+            font-size: 0.9rem;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>${title}</h1>
+    <div class="content">
+        ${content}
+    </div>
+    <div class="metadata">
+        <p>This is a test snapshot created for E2E testing.</p>
+    </div>
+</body>
+</html>`;
+}
+
+/**
+ * Generate mock HTML content with multiple paragraphs for testing
+ */
+export function generateMockArticleHtml(title: string, paragraphCount = 5): string {
+  const paragraphs = [];
+  for (let i = 1; i <= paragraphCount; i++) {
+    paragraphs.push(
+      `<p>This is paragraph ${i} of the article "${title}". ` +
+      `It contains some sample content to test the reader functionality. ` +
+      `The content should be long enough to test scrolling and reading progress tracking.</p>`
+    );
+  }
+  return generateSimpleHtmlSnapshot(title, paragraphs.join('\n'));
+}
+
+/**
  * Populate a Linkding instance with test data
  *
  * @param client - Linkding API client
  * @param preset - Preset type ('minimal' | 'realistic' | 'large')
+ * @param options - Additional options
  * @returns Array of created bookmarks
  */
 export async function populateTestData(
   client: LinkdingAPIClient,
-  preset: 'minimal' | 'realistic' | 'large' = 'realistic'
+  preset: 'minimal' | 'realistic' | 'large' = 'realistic',
+  options: {
+    /** Whether to create HTML snapshot assets for bookmarks (default: true) */
+    createAssets?: boolean;
+    /** Number of bookmarks to create assets for (default: all for minimal/realistic, 10 for large) */
+    assetsCount?: number;
+  } = {}
 ): Promise<any[]> {
+  const { createAssets = true, assetsCount } = options;
+
   let bookmarks: BookmarkData[];
 
   switch (preset) {
@@ -329,6 +450,31 @@ export async function populateTestData(
   console.log(`Populating Linkding with ${bookmarks.length} test bookmarks...`);
   const results = await createBookmarksBatch(client, bookmarks);
   console.log(`✓ Created ${results.length} bookmarks`);
+
+  // Create assets for bookmarks if requested
+  if (createAssets) {
+    const numAssetsToCreate = assetsCount ?? (preset === 'large' ? 10 : results.length);
+    const bookmarksForAssets = results.slice(0, numAssetsToCreate);
+
+    console.log(`Creating HTML snapshot assets for ${bookmarksForAssets.length} bookmarks...`);
+    let assetsCreated = 0;
+
+    for (const bookmark of bookmarksForAssets) {
+      try {
+        const html = generateMockArticleHtml(bookmark.title || `Bookmark ${bookmark.id}`, 8);
+        await uploadAsset(client, bookmark.id, html, 'snapshot.html');
+        assetsCreated++;
+
+        // Small delay to avoid overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(`Failed to create asset for bookmark ${bookmark.id}:`, error);
+        // Continue with other bookmarks even if one fails
+      }
+    }
+
+    console.log(`✓ Created ${assetsCreated} HTML snapshot assets`);
+  }
 
   return results;
 }

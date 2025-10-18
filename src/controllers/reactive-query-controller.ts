@@ -71,10 +71,10 @@ export class ReactiveQueryController<T, Args extends readonly unknown[] = []> im
       const currentDependencies = this.#dependencyFn();
       if (!this.#areDependenciesEqual(currentDependencies, this.#lastDependencies)) {
         this.#lastDependencies = currentDependencies;
-        if (this.#subscription) {
-          this.#unsubscribe();
-          this.#subscribe();
-        }
+        // Always re-subscribe when dependencies change, even if no active subscription
+        // This handles the case where initial subscribe was skipped due to null dependencies
+        this.#unsubscribe();
+        this.#subscribe();
       }
     }
   }

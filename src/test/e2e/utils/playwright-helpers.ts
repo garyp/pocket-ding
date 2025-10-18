@@ -724,3 +724,182 @@ export async function waitForElementWithRetry(
 
   throw lastError || new Error(`Element ${selector} not found within ${timeout}ms`);
 }
+
+/**
+ * Scroll iframe content to simulate reading progress
+ *
+ * When content is displayed in a secure-iframe (sandboxed iframe with srcdoc),
+ * the scrolling happens inside the iframe. This helper accesses the iframe's
+ * content document and scrolls it to a specific position or percentage.
+ *
+ * @param page - Playwright page object
+ * @param options - Scroll options
+ * @param options.scrollPercentage - Scroll to percentage of content (0-100)
+ * @param options.scrollPosition - Scroll to specific pixel position
+ * @returns Object with scroll information
+ */
+export async function scrollIframeContent(
+  page: Page,
+  options: { scrollPercentage?: number; scrollPosition?: number }
+): Promise<{ scrollTop: number; scrollHeight: number; progress: number }> {
+  const { scrollPercentage, scrollPosition } = options;
+
+  if (scrollPercentage === undefined && scrollPosition === undefined) {
+    throw new Error('Must specify either scrollPercentage or scrollPosition');
+  }
+
+  return await page.evaluate((opts) => {
+    const appRoot = document.querySelector('app-root');
+    if (!appRoot?.shadowRoot) throw new Error('app-root not found');
+
+    const bookmarkReader = appRoot.shadowRoot.querySelector('bookmark-reader');
+    if (!bookmarkReader?.shadowRoot) throw new Error('bookmark-reader not found');
+
+    const secureIframe = bookmarkReader.shadowRoot.querySelector('secure-iframe');
+    if (!secureIframe?.shadowRoot) throw new Error('secure-iframe not found');
+
+    const iframe = secureIframe.shadowRoot.querySelector('iframe') as HTMLIFrameElement | null;
+    if (!iframe) throw new Error('iframe element not found');
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) throw new Error('Cannot access iframe document');
+
+    const scrollHeight = iframeDoc.documentElement.scrollHeight;
+    const clientHeight = iframeDoc.documentElement.clientHeight;
+    const maxScroll = scrollHeight - clientHeight;
+
+    let targetScroll: number;
+    if (opts.scrollPercentage !== undefined) {
+      // Calculate target scroll position from percentage
+      targetScroll = Math.floor((opts.scrollPercentage / 100) * maxScroll);
+    } else {
+      targetScroll = opts.scrollPosition!;
+    }
+
+    // Clamp to valid range
+    targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+
+    // Perform the scroll
+    iframeDoc.documentElement.scrollTop = targetScroll;
+    iframeDoc.body.scrollTop = targetScroll; // Fallback for some browsers
+
+    // Trigger scroll event to activate progress tracking
+    const scrollEvent = new Event('scroll', { bubbles: true });
+    iframeDoc.dispatchEvent(scrollEvent);
+
+    // Calculate progress
+    const progress = maxScroll > 0 ? (targetScroll / maxScroll) * 100 : 100;
+
+    return {
+      scrollTop: targetScroll,
+      scrollHeight: scrollHeight,
+      progress: Math.min(100, Math.max(0, progress))
+    };
+  }, { scrollPercentage, scrollPosition });
+}
+
+/**
+ * Get current reading progress from IndexedDB
+ *
+ * This helper retrieves the saved reading progress for a bookmark from IndexedDB.
+ * Useful for verifying that progress tracking is working correctly.
+ *
+ * @param page - Playwright page object
+ * @param bookmarkId - Bookmark ID to get progress for
+ * @returns Reading progress data
+ */
+export async function getReadingProgress(
+  page: Page,
+  bookmarkId: number
+): Promise<{ scrollPosition: number; progress: number } | null> {
+  return await page.evaluate((bmId) => {
+    return new Promise<{ scrollPosition: number; progress: number } | null>((resolve) => {
+      const request = indexedDB.open('PocketDingDB');
+
+      request.onsuccess = () => {
+        const db = request.result;
+
+        if (!db.objectStoreNames.contains('readProgress')) {
+          db.close();
+          resolve(null);
+          return;
+        }
+
+        const tx = db.transaction('readProgress', 'readonly');
+        const store = tx.objectStore('readProgress');
+        const index = store.index('bookmark_id');
+        const getRequest = index.get(bmId);
+
+        getRequest.onsuccess = () => {
+          const record = getRequest.result;
+          db.close();
+
+          if (!record) {
+            resolve(null);
+            return;
+          }
+
+          resolve({
+            scrollPosition: record.scroll_position || 0,
+            progress: record.progress || 0
+          });
+        };
+
+        getRequest.onerror = () => {
+          db.close();
+          resolve(null);
+        };
+      };
+
+      request.onerror = () => resolve(null);
+    });
+  }, bookmarkId);
+}
+
+/**
+ * Find a bookmark with assets and click it
+ *
+ * This helper finds a bookmark that has assets (cached status icon) and clicks it.
+ * Useful for tests that need to interact with bookmarks that have cached content.
+ *
+ * @param page - Playwright page object
+ * @returns Bookmark ID of the clicked bookmark
+ */
+export async function clickBookmarkWithAssets(page: Page): Promise<number> {
+  // First, find a bookmark with assets by looking for the cached icon
+  const bookmarkWithAssets = await page.evaluate(() => {
+    const appRoot = document.querySelector('app-root');
+    if (!appRoot?.shadowRoot) throw new Error('app-root not found');
+
+    const bookmarkListContainer = appRoot.shadowRoot.querySelector('bookmark-list-container');
+    if (!bookmarkListContainer?.shadowRoot) throw new Error('bookmark-list-container not found');
+
+    const bookmarkList = bookmarkListContainer.shadowRoot.querySelector('bookmark-list');
+    if (!bookmarkList?.shadowRoot) throw new Error('bookmark-list not found');
+
+    const bookmarkCards = bookmarkList.shadowRoot.querySelectorAll('.bookmark-card[data-bookmark-id]');
+
+    // Find first bookmark with cached icon
+    for (let i = 0; i < bookmarkCards.length; i++) {
+      const card = bookmarkCards[i];
+      if (!card) continue;
+
+      const cachedIcon = card.querySelector('.status-icon.cached');
+      if (cachedIcon) {
+        const id = card.getAttribute('data-bookmark-id');
+        return { index: i, id: id ? parseInt(id, 10) : null };
+      }
+    }
+
+    throw new Error('No bookmarks with assets found');
+  });
+
+  if (!bookmarkWithAssets.id) {
+    throw new Error('Failed to find bookmark with assets');
+  }
+
+  // Click the bookmark
+  await clickBookmark(page, bookmarkWithAssets.index);
+
+  return bookmarkWithAssets.id;
+}

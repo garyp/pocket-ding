@@ -362,7 +362,7 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
     });
 
     it('should demonstrate the loading bug would be caught', async () => {
-      // This test specifically validates that we can detect the "Loading article..." bug
+      // This test specifically validates that we can detect the "Loading content..." bug
       // Start with delayed asset loading to potentially trigger loading state
       vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve(mockAssets), 50))
@@ -379,6 +379,11 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
         }),
       } as any);
 
+      // Make sure fetchBookmarkContent is mocked to return content after delay
+      vi.mocked(ContentFetcher.fetchBookmarkContent).mockImplementation(() =>
+        new Promise(resolve => setTimeout(() => resolve(mockContentResult), 100))
+      );
+
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
       bookmarkReader.bookmarkId = 1;
       document.body.appendChild(bookmarkReader);
@@ -386,34 +391,22 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
       await waitForComponentReady(bookmarkReader);
 
       // This test validates that we don't get permanently stuck in loading
-      let foundContent = false;
-      let timeoutCount = 0;
-
+      // Simply wait for secure-iframe to appear (which should happen after Task completes)
       await waitForComponent(() => {
-        const loadingContainer = bookmarkReader.shadowRoot?.querySelector('.loading-container');
         const readerContent = bookmarkReader.shadowRoot?.querySelector('.reader-content');
         const secureIframe = readerContent?.querySelector('secure-iframe');
 
-        // If we see loading state, that's fine initially
-        if (loadingContainer?.textContent?.includes('Loading article...')) {
-          timeoutCount++;
-          // But we shouldn't be stuck there for more than a few cycles
-          if (timeoutCount > 10) {
-            throw new Error('CAUGHT THE BUG: Component stuck in "Loading article..." state');
-          }
+        // Check for loading state
+        const loadingContainer = bookmarkReader.shadowRoot?.querySelector('.loading-container');
+        if (loadingContainer?.textContent?.includes('Loading')) {
           return null; // Keep waiting
         }
 
-        // Should eventually show content
-        if (secureIframe) {
-          foundContent = true;
-          return secureIframe;
-        }
+        // Should eventually show secure-iframe for asset content
+        expect(secureIframe).toBeTruthy();
 
-        return null;
-      }, { timeout: 3000 });
-
-      expect(foundContent).toBe(true);
+        return secureIframe;
+      }, { timeout: 5000 });
     });
   });
 

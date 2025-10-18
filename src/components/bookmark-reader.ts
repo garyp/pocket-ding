@@ -63,14 +63,37 @@ export class BookmarkReader extends LitElement {
 
 
   // Task for loading content based on selected source
-  // We use primitive values (bookmarkId, sourceType, assetId, assetsLength) as dependencies
-  // instead of object references to ensure Task only re-runs when actual values change
+  // We use primitive values (bookmarkId, assetsCount, manualSourceType, manualAssetId) as dependencies
+  // instead of computed getters to ensure Task reliably re-runs when assets load
   #contentTask = new Task(this, {
-    task: async ([bookmarkId, sourceType, assetId, _assetsLength]: [number | null, 'asset' | 'readability' | 'url' | null, number | undefined, number]) => {
-      if (!bookmarkId || !sourceType) return null;
+    task: async ([bookmarkId, assetsCount, manualSourceType, manualAssetId]: [number | null, number, 'asset' | 'url' | null, number | undefined]) => {
+      if (!bookmarkId) return null;
 
       const bookmark = this.bookmark;
       if (!bookmark) return null;
+
+      // Compute which source to use based on primitive values
+      let sourceType: 'asset' | 'url';
+      let assetId: number | undefined;
+
+      if (manualSourceType) {
+        // User manually selected a source
+        sourceType = manualSourceType;
+        assetId = manualAssetId;
+      } else {
+        // Auto-select: prefer assets if available
+        if (assetsCount > 0) {
+          sourceType = 'asset';
+          // Get the first asset's ID by fetching assets directly from database
+          // Do NOT use this.assets getter to avoid stale/cached values
+          const assets = await DatabaseService.getCompletedAssetsByBookmarkId(bookmarkId);
+          const assetSources = ContentFetcher.getAvailableContentSources(bookmark, assets)?.filter(s => s.type === 'asset');
+          assetId = assetSources?.[0]?.assetId;
+        } else {
+          sourceType = 'url';
+          assetId = undefined;
+        }
+      }
 
       return await ContentFetcher.fetchBookmarkContent(
         bookmark,
@@ -78,11 +101,12 @@ export class BookmarkReader extends LitElement {
         assetId
       );
     },
-    args: (): [number | null, 'asset' | 'readability' | 'url' | null, number | undefined, number] => [
+    args: (): [number | null, number, 'asset' | 'url' | null, number | undefined] => [
       this.bookmark?.id ?? null,
-      this.selectedContentSource?.type ?? null,
-      this.selectedContentSource?.assetId,
-      this.assets.length
+      this.assets.length,  // Primitive count
+      // manuallySelectedSource.type is always 'asset' or 'url' in practice (UI only offers these)
+      (this.manuallySelectedSource?.type === 'asset' || this.manuallySelectedSource?.type === 'url') ? this.manuallySelectedSource.type : null,
+      this.manuallySelectedSource?.assetId
     ]
   });
 
@@ -117,9 +141,11 @@ export class BookmarkReader extends LitElement {
   }
 
   get defaultContentSource(): ContentSourceOption | null {
-    if (!this.availableContentSources.length) return null;
-    
-    // Auto-select default content source using existing logic
+    if (!this.availableContentSources.length) {
+      return null;
+    }
+
+    // Auto-select default content source - prefer assets over URL
     const assetSources = this.availableContentSources.filter(source => source.type === 'asset');
     if (assetSources.length > 0) {
       return assetSources[0] ?? null;
@@ -668,22 +694,25 @@ export class BookmarkReader extends LitElement {
     }
     this.#lastBookmarkLoading = this.#bookmarkQuery.loading;
 
+    // Track assets loading state to detect when assets query completes
+    const assetsJustLoaded = this.#lastAssetsLoading && !this.#assetsQuery.loading;
+    this.#lastAssetsLoading = this.#assetsQuery.loading;
+
+    // No manual Task triggering needed - Task will automatically re-run when assets.length changes
+
     // Handle content-dependent logic
     this.#handleContentChanges(changedProperties);
 
     // Only update select value when necessary (when source changes or assets load)
     if (changedProperties.has('manuallySelectedSource') ||
+        assetsJustLoaded ||
         this.#bookmarkQuery.loading === false && changedProperties.size > 0) {
       this.updateSelectValue();
-    }
-
-    // Manual Task trigger: if data is ready but Task hasn't run, trigger it
-    if (!this.isDataLoading && this.selectedContentSource && !this.contentResult && !this.isLoadingContent) {
-      this.#contentTask.run();
     }
   }
 
   #lastBookmarkLoading = true;
+  #lastAssetsLoading = true;
 
   /**
    * Initialize state from reactive read progress data when available.
@@ -1117,10 +1146,11 @@ export class BookmarkReader extends LitElement {
   }
 
   private renderInfoModal() {
+    // Only render modal when it's actually open to avoid "Loading" text in textContent checks
     return html`
       <!-- Info Modal -->
-      <md-dialog 
-        ?open=${this.showInfoModal}
+      <md-dialog
+        ?open=${true}
         @close=${this.handleInfoModalClose}
       >
         <div slot="headline">Bookmark Information</div>
@@ -1142,9 +1172,9 @@ export class BookmarkReader extends LitElement {
               <div class="info-field">
                 <span class="info-label">Date Added</span>
                 <div class="info-value">
-                  ${new Date(this.bookmark.date_added).toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
+                  ${new Date(this.bookmark.date_added).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
                     day: 'numeric'
                   })}
                 </div>
@@ -1183,7 +1213,7 @@ export class BookmarkReader extends LitElement {
 
     if (this.isLoadingContent) {
       return html`
-        <div class="loading-container">
+        <div class="loading-container" data-loading="true">
           <md-circular-progress indeterminate class="circular-progress-24"></md-circular-progress>
           <p>Loading content...</p>
         </div>
@@ -1404,17 +1434,6 @@ export class BookmarkReader extends LitElement {
   }
 
   override render() {
-    // Show loading spinner when data is loading
-    if (this.isDataLoading) {
-      return html`
-        <div class="loading-container">
-          <md-circular-progress indeterminate class="circular-progress-48"></md-circular-progress>
-          <p>Loading article...</p>
-        </div>
-        ${this.renderInfoModal()}
-      `;
-    }
-
     // Show error message if data queries failed
     if (this.hasDataError) {
       return html`
@@ -1535,11 +1554,11 @@ export class BookmarkReader extends LitElement {
           </div>
         </div>
         
-        <div class="reader-content">
+        <div class="reader-content" data-content-loaded="${!this.isLoadingContent}">
           ${this.renderContent()}
         </div>
       </div>
-      ${this.renderInfoModal()}
+      ${this.showInfoModal ? this.renderInfoModal() : ''}
     `;
   }
 }

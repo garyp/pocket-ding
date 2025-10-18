@@ -222,9 +222,9 @@ describe('Reader Scrolling Experience', () => {
       return toolbar !== null;
     }, { timeout: 3000 });
 
-    // Should have mode switching controls
-    const modeButtons = element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button');
-    expect(modeButtons?.length).toBeGreaterThan(0);
+    // Should have mode switching controls (using processing-mode-button class)
+    const modeButton = element.shadowRoot?.querySelector('.processing-mode-button');
+    expect(modeButton).toBeTruthy();
   });
 
   it('handles reading progress without UI disruption', async () => {
