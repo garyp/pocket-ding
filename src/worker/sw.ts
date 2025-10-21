@@ -331,11 +331,13 @@ async function startPeriodicSyncFallback(): Promise<void> {
     const intervalMs = intervalMinutes * 60 * 1000;
 
     periodicSyncTimer = setInterval(() => {
-      if (backgroundSyncEnabled) {
+      if (backgroundSyncEnabled && navigator.onLine) {
         logInfo('periodicSyncFallback', `Triggering periodic sync (fallback timer, ${intervalMinutes} min interval)`);
         performSync().catch(error => {
           logError('periodicSyncFallback', 'Periodic sync fallback failed', error);
         });
+      } else if (backgroundSyncEnabled && !navigator.onLine) {
+        logInfo('periodicSyncFallback', 'Skipping periodic sync - device is offline');
       }
     }, intervalMs) as unknown as number;
 
@@ -454,8 +456,8 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
     await broadcastToClients(SyncMessages.syncError(errorMessage, isNetworkError));
     await broadcastToClients(SyncMessages.syncStatus('failed'));
 
-    // Schedule retry for recoverable errors (only if background sync still enabled)
-    if (isNetworkError && backgroundSyncEnabled) {
+    // Schedule retry for recoverable errors (only if background sync still enabled and device is online)
+    if (isNetworkError && backgroundSyncEnabled && navigator.onLine) {
       const retryCount = await DatabaseService.getSyncRetryCount();
       if (retryCount < SYNC_RETRY_DELAYS.length) {
         const delay = SYNC_RETRY_DELAYS[retryCount];
@@ -463,7 +465,7 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
         logInfo('scheduleRetry', `Scheduling sync retry in ${delay}ms (attempt ${retryCount + 1})`);
 
         setTimeout(() => {
-          if (backgroundSyncEnabled) {
+          if (backgroundSyncEnabled && navigator.onLine) {
             if (PWA_CAPABILITIES.backgroundSync) {
               // Use native Background Sync API
               (self.registration as any).sync?.register('sync-bookmarks');
@@ -526,6 +528,12 @@ async function performSync(fullSync = false): Promise<void> {
   if (!backgroundSyncEnabled) {
     logInfo('performSync', 'Background sync is disabled - app is in foreground');
     await broadcastToClients(SyncMessages.syncStatus('cancelled'));
+    return;
+  }
+
+  // Check if device is online before attempting sync
+  if (!navigator.onLine) {
+    logInfo('performSync', 'Device is offline - skipping sync attempt');
     return;
   }
 
