@@ -2,8 +2,7 @@
 /// <reference path="../types/service-worker.d.ts" />
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { NetworkFirst, CacheFirst } from 'workbox-strategies';
-import { ExpirationPlugin } from 'workbox-expiration';
+import { NetworkFirst } from 'workbox-strategies';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
 import { SyncService } from './sync-service';
@@ -30,20 +29,6 @@ registerRoute(
       networkTimeoutSeconds: 3
     })
   )
-);
-
-// Cache Google Fonts with cache-first strategy
-registerRoute(
-  ({ url }) => url.origin === 'https://fonts.googleapis.com',
-  new CacheFirst({
-    cacheName: 'google-fonts-cache',
-    plugins: [
-      new ExpirationPlugin({
-        maxEntries: 10,
-        maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-      }) as any,
-    ],
-  })
 );
 
 // Force network-first for main app JavaScript files to ensure updates

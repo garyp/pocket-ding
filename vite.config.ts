@@ -34,7 +34,7 @@ export default defineConfig(({ command }) => {
         srcDir: 'src/worker',
         filename: 'sw.ts',
         injectManifest: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           injectionPoint: 'self.__WB_MANIFEST',
           // Configure Rollup options for service worker build
           rollupFormat: 'iife',
