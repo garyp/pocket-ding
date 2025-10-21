@@ -29,6 +29,7 @@ export class SyncController implements ReactiveController {
   #lockPollingInterval: number | null = null;
   #beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
   #pwaCapabilities = detectCapabilities();
+  #periodicSyncRegistered: boolean = false; // Track periodic sync registration state
 
   // Reactive sync state
   private _syncState: SyncState = {
@@ -146,11 +147,12 @@ export class SyncController implements ReactiveController {
       const settings = this.#settingsQuery.value;
 
       // Handle periodic sync registration based on auto_sync setting
-      if (settings.auto_sync) {
-        // Register periodic sync if auto_sync is enabled
+      // Only send register/unregister messages when the state actually changes
+      if (settings.auto_sync && !this.#periodicSyncRegistered) {
+        // Register periodic sync if auto_sync is enabled and not already registered
         this.#registerPeriodicBackgroundSyncIfAvailable();
-      } else {
-        // Unregister periodic sync if auto_sync is disabled
+      } else if (!settings.auto_sync && this.#periodicSyncRegistered) {
+        // Unregister periodic sync if auto_sync is disabled and currently registered
         this.#unregisterPeriodicBackgroundSync();
       }
 
@@ -189,6 +191,9 @@ export class SyncController implements ReactiveController {
 
     // Clean up sync worker manager
     this.#syncWorkerManager.cleanup();
+
+    // Reset periodic sync registration state
+    this.#periodicSyncRegistered = false;
   }
 
   /**
@@ -411,6 +416,7 @@ export class SyncController implements ReactiveController {
         navigator.serviceWorker.controller.postMessage({
           type: 'REGISTER_PERIODIC_SYNC'
         });
+        this.#periodicSyncRegistered = true;
         DebugService.logInfo('sync', 'Periodic background sync registration requested');
       }
     } catch (error) {
@@ -433,6 +439,7 @@ export class SyncController implements ReactiveController {
         navigator.serviceWorker.controller.postMessage({
           type: 'UNREGISTER_PERIODIC_SYNC'
         });
+        this.#periodicSyncRegistered = false;
         DebugService.logInfo('sync', 'Periodic background sync unregistration requested');
       }
     } catch (error) {
