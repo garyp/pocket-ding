@@ -614,21 +614,37 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
-  // Use CDP (Chrome DevTools Protocol) to emulate offline network conditions
-  // This sets navigator.onLine to false in all contexts (page + service worker)
-  // and blocks network requests at the network layer, but still allows the
-  // service worker to intercept fetch events and serve cached content
-  const context = page.context();
-  const cdpSession = await context.newCDPSession(page);
-  await cdpSession.send('Network.emulateNetworkConditions', {
-    offline: true,
-    downloadThroughput: 0,
-    uploadThroughput: 0,
-    latency: 0,
+  // Strategy: Override navigator.onLine in page context and block external network requests
+  // But allow localhost requests so service worker can serve from cache
+
+  // Block external network requests (not localhost) using route
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    // Allow localhost requests (for SW to serve cached content)
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      route.continue();
+    } else {
+      // Block external requests
+      route.abort('internetdisconnected');
+    }
   });
 
-  // Dispatch offline event to trigger any online/offline listeners
+  // Override navigator.onLine in the page context
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'onLine', {
+      writable: true,
+      configurable: true,
+      value: false
+    });
+  });
+
+  // Set it for the current page as well
   await page.evaluate(() => {
+    Object.defineProperty(navigator, 'onLine', {
+      writable: true,
+      configurable: true,
+      value: false
+    });
     window.dispatchEvent(new Event('offline'));
   });
 }
@@ -639,18 +655,17 @@ export async function goOffline(page: Page): Promise<void> {
  * @param page - Playwright page object
  */
 export async function goOnline(page: Page): Promise<void> {
-  // Restore network conditions via CDP
-  const context = page.context();
-  const cdpSession = await context.newCDPSession(page);
-  await cdpSession.send('Network.emulateNetworkConditions', {
-    offline: false,
-    downloadThroughput: -1,
-    uploadThroughput: -1,
-    latency: 0,
-  });
+  // Remove all routes to allow network requests again
+  await page.unroute('**/*');
 
-  // Dispatch online event
+  // Restore navigator.onLine and dispatch online event
   await page.evaluate(() => {
+    // Restore navigator.onLine
+    Object.defineProperty(navigator, 'onLine', {
+      writable: true,
+      configurable: true,
+      value: true
+    });
     window.dispatchEvent(new Event('online'));
   });
 }
