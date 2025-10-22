@@ -911,9 +911,8 @@ export async function clickBookmarkWithAssets(page: Page): Promise<number> {
  * Route handler for offline mode with service worker support
  *
  * This handler uses Playwright's experimental service worker network events
- * to properly simulate offline mode. When a request is made by the service worker,
- * it aborts with "internetdisconnected" error, while allowing the service worker
- * to access the Cache API.
+ * to properly simulate offline mode. It blocks external network requests made
+ * by the service worker while allowing localhost requests to be served from cache.
  *
  * IMPORTANT: Requires PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1 to be set
  * and serviceWorkers: 'allow' in playwright.config.ts
@@ -922,13 +921,21 @@ export async function clickBookmarkWithAssets(page: Page): Promise<number> {
  * @see https://playwright.dev/docs/service-workers-experimental
  */
 function serviceWorkerOfflineRouteHandler(route: Route) {
-  if (route.request().serviceWorker()) {
-    // Abort service worker network requests with offline error
-    return route.abort('internetdisconnected');
-  } else {
-    // Allow non-service-worker requests to continue
+  const url = route.request().url();
+  const isServiceWorkerRequest = route.request().serviceWorker();
+
+  // Allow localhost/127.0.0.1 requests (for service worker to serve from cache)
+  if (url.includes('localhost') || url.includes('127.0.0.1')) {
     return route.continue();
   }
+
+  // Block external service worker requests (simulate no internet)
+  if (isServiceWorkerRequest) {
+    return route.abort('internetdisconnected');
+  }
+
+  // Block other external requests
+  return route.abort('internetdisconnected');
 }
 
 /**
@@ -936,18 +943,21 @@ function serviceWorkerOfflineRouteHandler(route: Route) {
  *
  * This properly simulates offline mode by:
  * 1. Setting context offline (sets navigator.onLine = false)
- * 2. Routing service worker network requests to abort with "internetdisconnected"
+ * 2. Routing requests to allow localhost while blocking external requests
  *
  * This allows the service worker to:
  * - Detect offline state via navigator.onLine
  * - Access Cache API for serving cached content
- * - Fail network requests as expected in offline mode
+ * - Serve localhost requests from cache
+ * - Fail external network requests as expected in offline mode
  *
  * @param context - Playwright browser context
  */
 export async function setBrowserOffline(context: BrowserContext): Promise<void> {
-  await context.setOffline(true);
+  // First, add routing to selectively allow localhost
   await context.route('**', serviceWorkerOfflineRouteHandler);
+  // Then set offline mode to make navigator.onLine = false
+  await context.setOffline(true);
 }
 
 /**
