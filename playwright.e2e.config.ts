@@ -17,7 +17,12 @@ const securityDisabledLaunchOptions = {
  * These tests run against a real Linkding Docker instance and test the complete
  * application stack including service workers, sync, and offline functionality.
  *
+ * IMPORTANT: Service worker network events are enabled via the experimental feature
+ * PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1. This allows proper offline testing
+ * where the service worker can access Cache API while network requests are blocked.
+ *
  * @see https://playwright.dev/docs/test-configuration
+ * @see https://playwright.dev/docs/service-workers-experimental
  */
 export default defineConfig({
   testDir: './src/test/e2e',
@@ -48,6 +53,9 @@ export default defineConfig({
 
     /* Take screenshot on failure */
     screenshot: 'only-on-failure',
+
+    /* Allow service workers for offline testing with experimental network events */
+    serviceWorkers: 'allow',
   },
 
   /* Configure projects for major browsers */

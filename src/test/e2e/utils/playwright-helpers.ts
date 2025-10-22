@@ -3,7 +3,7 @@
  */
 
 import { expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Page, BrowserContext, Route } from '@playwright/test';
 
 export interface PocketDingSettings {
   linkding_url: string;
@@ -605,71 +605,24 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
 }
 
 /**
- * Simulate offline mode in a service-worker-aware way
+ * Simulate offline mode with service worker support
  *
- * Uses page.route() to fail network requests while still allowing
- * the service worker to intercept and serve from cache.
- * This is necessary because context.setOffline() bypasses service workers entirely.
+ * This uses the new offline helpers that properly support service workers
+ * by enabling them to access the Cache API while blocking network requests.
  *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
-  // Strategy: Use CDP offline mode to set navigator.onLine globally,
-  // then unblock localhost with routing AFTER offline mode is set
-
-  const context = page.context();
-  const cdpSession = await context.newCDPSession(page);
-
-  // First, set offline mode to make navigator.onLine false everywhere (including SW)
-  await cdpSession.send('Network.emulateNetworkConditions', {
-    offline: true,
-    downloadThroughput: 0,
-    uploadThroughput: 0,
-    latency: 0,
-  });
-
-  // Then use routing to allow localhost requests to go through
-  // This allows SW to serve from cache while navigator.onLine stays false
-  await page.route('**/*', (route) => {
-    const url = route.request().url();
-    // Allow localhost requests (for SW to serve cached content)
-    if (url.includes('localhost') || url.includes('127.0.0.1')) {
-      route.continue();
-    } else {
-      // Block external requests
-      route.abort('internetdisconnected');
-    }
-  });
-
-  // Dispatch offline event
-  await page.evaluate(() => {
-    window.dispatchEvent(new Event('offline'));
-  });
+  await setBrowserOffline(page.context());
 }
 
 /**
- * Restore online mode
+ * Simulate online mode (restores from offline)
  *
  * @param page - Playwright page object
  */
 export async function goOnline(page: Page): Promise<void> {
-  // Remove all routes first
-  await page.unroute('**/*');
-
-  // Restore network conditions via CDP
-  const context = page.context();
-  const cdpSession = await context.newCDPSession(page);
-  await cdpSession.send('Network.emulateNetworkConditions', {
-    offline: false,
-    downloadThroughput: -1,
-    uploadThroughput: -1,
-    latency: 0,
-  });
-
-  // Dispatch online event
-  await page.evaluate(() => {
-    window.dispatchEvent(new Event('online'));
-  });
+  await setBrowserOnline(page.context());
 }
 
 /**
@@ -952,4 +905,61 @@ export async function clickBookmarkWithAssets(page: Page): Promise<number> {
   await clickBookmark(page, bookmarkWithAssets.index);
 
   return bookmarkWithAssets.id;
+}
+
+/**
+ * Route handler for offline mode with service worker support
+ *
+ * This handler uses Playwright's experimental service worker network events
+ * to properly simulate offline mode. When a request is made by the service worker,
+ * it aborts with "internetdisconnected" error, while allowing the service worker
+ * to access the Cache API.
+ *
+ * IMPORTANT: Requires PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1 to be set
+ * and serviceWorkers: 'allow' in playwright.config.ts
+ *
+ * @param route - Playwright route object
+ * @see https://playwright.dev/docs/service-workers-experimental
+ */
+function serviceWorkerOfflineRouteHandler(route: Route) {
+  if (route.request().serviceWorker()) {
+    // Abort service worker network requests with offline error
+    return route.abort('internetdisconnected');
+  } else {
+    // Allow non-service-worker requests to continue
+    return route.continue();
+  }
+}
+
+/**
+ * Set browser to offline mode with service worker support
+ *
+ * This properly simulates offline mode by:
+ * 1. Setting context offline (sets navigator.onLine = false)
+ * 2. Routing service worker network requests to abort with "internetdisconnected"
+ *
+ * This allows the service worker to:
+ * - Detect offline state via navigator.onLine
+ * - Access Cache API for serving cached content
+ * - Fail network requests as expected in offline mode
+ *
+ * @param context - Playwright browser context
+ */
+export async function setBrowserOffline(context: BrowserContext): Promise<void> {
+  await context.setOffline(true);
+  await context.route('**', serviceWorkerOfflineRouteHandler);
+}
+
+/**
+ * Set browser to online mode (restores from offline)
+ *
+ * This restores the browser to online mode by:
+ * 1. Removing the offline route handler
+ * 2. Setting context online (sets navigator.onLine = true)
+ *
+ * @param context - Playwright browser context
+ */
+export async function setBrowserOnline(context: BrowserContext): Promise<void> {
+  await context.unroute('**', serviceWorkerOfflineRouteHandler);
+  await context.setOffline(false);
 }

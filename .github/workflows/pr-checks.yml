@@ -53,6 +53,7 @@ jobs:
       run: npm run test:e2e:quick
       env:
         CI: true
+        PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: 1
 
     - name: Upload test artifacts on failure
       if: failure()
