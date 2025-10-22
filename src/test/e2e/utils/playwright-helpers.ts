@@ -605,21 +605,62 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
 }
 
 /**
- * Simulate offline mode
+ * Simulate offline mode in a service-worker-aware way
+ *
+ * Uses page.route() to fail network requests while still allowing
+ * the service worker to intercept and serve from cache.
+ * This is necessary because context.setOffline() bypasses service workers entirely.
  *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
-  await page.context().setOffline(true);
+  // Route all network requests to fail with ERR_FAILED
+  // But this happens AFTER the service worker has a chance to intercept
+  await page.route('**/*', (route) => {
+    // Abort the request if it gets past the service worker
+    route.abort('failed');
+  });
+
+  // Set navigator.onLine to false via CDP (Chrome DevTools Protocol)
+  // This ensures navigator.onLine returns false in the page context
+  const context = page.context();
+  const cdpSession = await context.newCDPSession(page);
+  await cdpSession.send('Network.emulateNetworkConditions', {
+    offline: true,
+    downloadThroughput: 0,
+    uploadThroughput: 0,
+    latency: 0,
+  });
+
+  // Dispatch offline event to trigger any online/offline listeners
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('offline'));
+  });
 }
 
 /**
- * Simulate online mode
+ * Restore online mode
  *
  * @param page - Playwright page object
  */
 export async function goOnline(page: Page): Promise<void> {
-  await page.context().setOffline(false);
+  // Remove all routes
+  await page.unroute('**/*');
+
+  // Restore network conditions via CDP
+  const context = page.context();
+  const cdpSession = await context.newCDPSession(page);
+  await cdpSession.send('Network.emulateNetworkConditions', {
+    offline: false,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+    latency: 0,
+  });
+
+  // Dispatch online event
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('online'));
+  });
 }
 
 /**

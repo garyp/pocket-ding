@@ -15,6 +15,8 @@ import {
   clickBookmarkWithAssets,
   scrollIframeContent,
   getReadingProgress,
+  goOffline,
+  goOnline,
 } from './utils/playwright-helpers';
 import {
   createLinkdingClient,
@@ -1192,7 +1194,7 @@ test.describe('Sync Workflow E2E Tests', () => {
     expect(restoredProgressPercentage).toBeGreaterThan(35); // Generous tolerance for E2E variability
   });
 
-  test('should work offline with cached assets', async ({ page, context }) => {
+  test('should work offline with cached assets', async ({ page }) => {
     test.setTimeout(90000);
 
     const config = getLinkdingConfig();
@@ -1253,7 +1255,7 @@ test.describe('Sync Workflow E2E Tests', () => {
     expect(cacheStatus.assetCount).toBeGreaterThan(0);
 
     // Go offline
-    await context.setOffline(true);
+    await goOffline(page);
     console.log('Browser is now offline');
 
     // Reload page to ensure we're truly offline
@@ -1329,7 +1331,7 @@ test.describe('Sync Workflow E2E Tests', () => {
     expect(offlineContentStatus.isLoading).toBe(false);
 
     // Go back online
-    await context.setOffline(false);
+    await goOnline(page);
     console.log('Browser is back online');
   });
 });

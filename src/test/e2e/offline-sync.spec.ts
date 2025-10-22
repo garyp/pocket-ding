@@ -12,6 +12,8 @@ import {
   triggerSync,
   waitForSyncComplete,
   getBookmarkCount,
+  goOffline,
+  goOnline,
 } from './utils/playwright-helpers';
 
 // Skip tests if Docker is not available
@@ -41,7 +43,7 @@ test.describe('Offline Sync Detection E2E Tests', () => {
     });
   });
 
-  test('should skip sync attempts when browser is offline', async ({ page, context }) => {
+  test('should skip sync attempts when browser is offline', async ({ page }) => {
     const config = getLinkdingConfig();
 
     // Configure Pocket Ding to connect to TestContainers Linkding
@@ -76,8 +78,8 @@ test.describe('Offline Sync Detection E2E Tests', () => {
       }
     });
 
-    // Simulate offline mode using Playwright
-    await context.setOffline(true);
+    // Simulate offline mode using service-worker-aware offline simulation
+    await goOffline(page);
 
     // Verify browser is offline
     const isOffline = await page.evaluate(() => !navigator.onLine);
@@ -103,7 +105,7 @@ test.describe('Offline Sync Detection E2E Tests', () => {
     expect(offlineSkipDetected).toBe(true);
 
     // Go back online
-    await context.setOffline(false);
+    await goOnline(page);
 
     // Verify browser is back online
     const isOnline = await page.evaluate(() => navigator.onLine);
@@ -118,7 +120,7 @@ test.describe('Offline Sync Detection E2E Tests', () => {
     expect(finalBookmarkCount).toBe(onlineBookmarkCount);
   });
 
-  test('should not schedule retries when offline', async ({ page, context }) => {
+  test('should not schedule retries when offline', async ({ page }) => {
     const config = getLinkdingConfig();
 
     // Configure with valid settings
@@ -187,7 +189,7 @@ test.describe('Offline Sync Detection E2E Tests', () => {
     });
 
     // Go offline BEFORE attempting the sync
-    await context.setOffline(true);
+    await goOffline(page);
 
     // Verify browser is offline
     const isOffline = await page.evaluate(() => !navigator.onLine);
@@ -215,10 +217,10 @@ test.describe('Offline Sync Detection E2E Tests', () => {
     expect(retryScheduled).toBe(false);
 
     // Go back online
-    await context.setOffline(false);
+    await goOnline(page);
   });
 
-  test('should skip periodic sync when offline', async ({ page, context }) => {
+  test('should skip periodic sync when offline', async ({ page }) => {
     const config = getLinkdingConfig();
 
     // Configure app
@@ -262,7 +264,7 @@ test.describe('Offline Sync Detection E2E Tests', () => {
     await page.waitForTimeout(500);
 
     // Go offline
-    await context.setOffline(true);
+    await goOffline(page);
 
     // Verify browser is offline
     const isOffline = await page.evaluate(() => !navigator.onLine);
@@ -301,6 +303,6 @@ test.describe('Offline Sync Detection E2E Tests', () => {
     expect(periodicSyncSkipped).toBe(true);
 
     // Go back online
-    await context.setOffline(false);
+    await goOnline(page);
   });
 });
