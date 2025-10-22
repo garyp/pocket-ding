@@ -614,15 +614,10 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
-  // Route all network requests to fail with ERR_FAILED
-  // But this happens AFTER the service worker has a chance to intercept
-  await page.route('**/*', (route) => {
-    // Abort the request if it gets past the service worker
-    route.abort('failed');
-  });
-
-  // Set navigator.onLine to false via CDP (Chrome DevTools Protocol)
-  // This ensures navigator.onLine returns false in the page context
+  // Use CDP (Chrome DevTools Protocol) to emulate offline network conditions
+  // This sets navigator.onLine to false in all contexts (page + service worker)
+  // and blocks network requests at the network layer, but still allows the
+  // service worker to intercept fetch events and serve cached content
   const context = page.context();
   const cdpSession = await context.newCDPSession(page);
   await cdpSession.send('Network.emulateNetworkConditions', {
@@ -644,9 +639,6 @@ export async function goOffline(page: Page): Promise<void> {
  * @param page - Playwright page object
  */
 export async function goOnline(page: Page): Promise<void> {
-  // Remove all routes
-  await page.unroute('**/*');
-
   // Restore network conditions via CDP
   const context = page.context();
   const cdpSession = await context.newCDPSession(page);
