@@ -631,11 +631,13 @@ function serviceWorkerOfflineRouteHandler(route: Route) {
 export async function goOffline(page: Page): Promise<void> {
   const context = page.context();
 
-  // Set context offline to make navigator.onLine = false
-  await context.setOffline(true);
-
-  // Route service worker requests to abort (but allow page requests)
+  // IMPORTANT: Set up routing BEFORE calling setOffline()
+  // If setOffline is called first, it blocks requests at the network layer
+  // before routing can intercept them
   await context.route('**', serviceWorkerOfflineRouteHandler);
+
+  // Then set context offline to make navigator.onLine = false
+  await context.setOffline(true);
 }
 
 /**
@@ -646,11 +648,11 @@ export async function goOffline(page: Page): Promise<void> {
 export async function goOnline(page: Page): Promise<void> {
   const context = page.context();
 
-  // Remove routing first
-  await context.unroute('**', serviceWorkerOfflineRouteHandler);
-
-  // Restore online mode
+  // Restore online mode first
   await context.setOffline(false);
+
+  // Then remove routing
+  await context.unroute('**', serviceWorkerOfflineRouteHandler);
 }
 
 /**
