@@ -623,21 +623,38 @@ function serviceWorkerOfflineRouteHandler(route: Route) {
 /**
  * Simulate offline mode with service worker support
  *
- * This uses Playwright's experimental service worker network events feature
- * to properly simulate offline mode.
+ * This uses Playwright's experimental service worker network events feature.
+ * We DON'T use context.setOffline() because it blocks requests at the Chromium
+ * network layer before routing can intercept them. Instead, we use routing only
+ * and manually set navigator.onLine in the page and service worker contexts.
  *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
   const context = page.context();
 
-  // IMPORTANT: Set up routing BEFORE calling setOffline()
-  // If setOffline is called first, it blocks requests at the network layer
-  // before routing can intercept them
+  // Set up routing to block service worker network requests
   await context.route('**', serviceWorkerOfflineRouteHandler);
 
-  // Then set context offline to make navigator.onLine = false
-  await context.setOffline(true);
+  // Manually set navigator.onLine = false in page context
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'onLine', {
+      writable: true,
+      configurable: true,
+      value: false
+    });
+    window.dispatchEvent(new Event('offline'));
+  });
+
+  // Try to set navigator.onLine in service worker context via postMessage
+  await page.evaluate(() => {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'SET_OFFLINE_MODE',
+        offline: true
+      });
+    }
+  });
 }
 
 /**
@@ -648,11 +665,28 @@ export async function goOffline(page: Page): Promise<void> {
 export async function goOnline(page: Page): Promise<void> {
   const context = page.context();
 
-  // Restore online mode first
-  await context.setOffline(false);
-
-  // Then remove routing
+  // Remove routing
   await context.unroute('**', serviceWorkerOfflineRouteHandler);
+
+  // Restore navigator.onLine in page context
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'onLine', {
+      writable: true,
+      configurable: true,
+      value: true
+    });
+    window.dispatchEvent(new Event('online'));
+  });
+
+  // Notify service worker
+  await page.evaluate(() => {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'SET_OFFLINE_MODE',
+        offline: false
+      });
+    }
+  });
 }
 
 /**
