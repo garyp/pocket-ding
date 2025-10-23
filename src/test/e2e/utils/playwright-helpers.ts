@@ -3,7 +3,7 @@
  */
 
 import { expect } from '@playwright/test';
-import type { Page, Route } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 export interface PocketDingSettings {
   linkding_url: string;
@@ -605,56 +605,21 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
 }
 
 /**
- * Route handler for service worker offline mode
- *
- * With the experimental service worker network events enabled, this handler
- * can intercept requests made BY the service worker and abort them to simulate
- * offline mode, while allowing regular page requests to continue.
- */
-function serviceWorkerOfflineRouteHandler(route: Route) {
-  // Only abort requests made BY the service worker
-  if (route.request().serviceWorker()) {
-    return route.abort('internetdisconnected');
-  }
-  // Let all other requests (including page navigation) continue
-  return route.continue();
-}
-
-/**
  * Simulate offline mode with service worker support
  *
- * This uses Playwright's experimental service worker network events feature.
- * We DON'T use context.setOffline() because it blocks requests at the Chromium
- * network layer before routing can intercept them. Instead, we use routing only
- * and manually set navigator.onLine in the page and service worker contexts.
+ * With PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1 and serviceWorkers: 'allow',
+ * we can use context.setOffline() which properly sets navigator.onLine in all contexts
+ * (including service worker), and the experimental feature should allow the service
+ * worker to still access the Cache API.
  *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
   const context = page.context();
 
-  // Set up routing to block service worker network requests
-  await context.route('**', serviceWorkerOfflineRouteHandler);
-
-  // Manually set navigator.onLine = false in page context
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, 'onLine', {
-      writable: true,
-      configurable: true,
-      value: false
-    });
-    window.dispatchEvent(new Event('offline'));
-  });
-
-  // Try to set navigator.onLine in service worker context via postMessage
-  await page.evaluate(() => {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'SET_OFFLINE_MODE',
-        offline: true
-      });
-    }
-  });
+  // With experimental service worker network events enabled,
+  // setOffline should work properly
+  await context.setOffline(true);
 }
 
 /**
@@ -664,29 +629,7 @@ export async function goOffline(page: Page): Promise<void> {
  */
 export async function goOnline(page: Page): Promise<void> {
   const context = page.context();
-
-  // Remove routing
-  await context.unroute('**', serviceWorkerOfflineRouteHandler);
-
-  // Restore navigator.onLine in page context
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, 'onLine', {
-      writable: true,
-      configurable: true,
-      value: true
-    });
-    window.dispatchEvent(new Event('online'));
-  });
-
-  // Notify service worker
-  await page.evaluate(() => {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'SET_OFFLINE_MODE',
-        offline: false
-      });
-    }
-  });
+  await context.setOffline(false);
 }
 
 /**
