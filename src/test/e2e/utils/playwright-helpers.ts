@@ -3,7 +3,7 @@
  */
 
 import { expect } from '@playwright/test';
-import type { Page, BrowserContext, Route } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 
 export interface PocketDingSettings {
   linkding_url: string;
@@ -605,40 +605,37 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
 }
 
 /**
+ * Route handler for service worker offline mode
+ *
+ * With the experimental service worker network events enabled, this handler
+ * can intercept requests made BY the service worker and abort them to simulate
+ * offline mode, while allowing regular page requests to continue.
+ */
+function serviceWorkerOfflineRouteHandler(route: Route) {
+  // Only abort requests made BY the service worker
+  if (route.request().serviceWorker()) {
+    return route.abort('internetdisconnected');
+  }
+  // Let all other requests (including page navigation) continue
+  return route.continue();
+}
+
+/**
  * Simulate offline mode with service worker support
  *
- * Uses CDP offline mode combined with page-level routing to allow the service
- * worker to serve cached content while blocking external requests.
+ * This uses Playwright's experimental service worker network events feature
+ * to properly simulate offline mode.
  *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
   const context = page.context();
-  const cdpSession = await context.newCDPSession(page);
 
-  // Set offline mode via CDP (sets navigator.onLine = false)
-  await cdpSession.send('Network.emulateNetworkConditions', {
-    offline: true,
-    downloadThroughput: 0,
-    uploadThroughput: 0,
-    latency: 0,
-  });
+  // Set context offline to make navigator.onLine = false
+  await context.setOffline(true);
 
-  // Use page-level routing to allow localhost while blocking external requests
-  await page.route('**/*', (route) => {
-    const url = route.request().url();
-    // Allow localhost requests (for SW to serve cached content)
-    if (url.includes('localhost') || url.includes('127.0.0.1')) {
-      return route.continue();
-    }
-    // Block external requests
-    return route.abort('internetdisconnected');
-  });
-
-  // Dispatch offline event
-  await page.evaluate(() => {
-    window.dispatchEvent(new Event('offline'));
-  });
+  // Route service worker requests to abort (but allow page requests)
+  await context.route('**', serviceWorkerOfflineRouteHandler);
 }
 
 /**
@@ -647,23 +644,13 @@ export async function goOffline(page: Page): Promise<void> {
  * @param page - Playwright page object
  */
 export async function goOnline(page: Page): Promise<void> {
-  // Remove all page routes first
-  await page.unroute('**/*');
-
-  // Restore network conditions via CDP
   const context = page.context();
-  const cdpSession = await context.newCDPSession(page);
-  await cdpSession.send('Network.emulateNetworkConditions', {
-    offline: false,
-    downloadThroughput: -1,
-    uploadThroughput: -1,
-    latency: 0,
-  });
 
-  // Dispatch online event
-  await page.evaluate(() => {
-    window.dispatchEvent(new Event('online'));
-  });
+  // Remove routing first
+  await context.unroute('**', serviceWorkerOfflineRouteHandler);
+
+  // Restore online mode
+  await context.setOffline(false);
 }
 
 /**
@@ -946,91 +933,4 @@ export async function clickBookmarkWithAssets(page: Page): Promise<number> {
   await clickBookmark(page, bookmarkWithAssets.index);
 
   return bookmarkWithAssets.id;
-}
-
-/**
- * Route handler for offline mode with service worker support
- *
- * This handler blocks external network requests while allowing localhost requests
- * to enable the service worker to serve content from cache during offline simulation.
- *
- * IMPORTANT: Requires PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1 to be set
- * and serviceWorkers: 'allow' in playwright.config.ts
- *
- * @param route - Playwright route object
- * @see https://playwright.dev/docs/service-workers-experimental
- */
-function serviceWorkerOfflineRouteHandler(route: Route) {
-  const url = route.request().url();
-
-  // Allow localhost/127.0.0.1 requests (for service worker to serve from cache)
-  if (url.includes('localhost') || url.includes('127.0.0.1')) {
-    return route.continue();
-  }
-
-  // Block external requests with offline error
-  return route.abort('internetdisconnected');
-}
-
-/**
- * Set browser to offline mode with service worker support
- *
- * This properly simulates offline mode by:
- * 1. Using CDP to set navigator.onLine = false without blocking requests
- * 2. Routing requests to allow localhost while blocking external requests
- *
- * This allows the service worker to:
- * - Detect offline state via navigator.onLine
- * - Access Cache API for serving cached content
- * - Serve localhost requests from cache
- * - Fail external network requests as expected in offline mode
- *
- * Note: We use CDP instead of context.setOffline() because setOffline blocks
- * ALL requests at the Chromium level before routing can intercept them.
- *
- * @param context - Playwright browser context
- */
-export async function setBrowserOffline(context: BrowserContext): Promise<void> {
-  // Get all pages in the context to set offline via CDP
-  const pages = context.pages();
-
-  // Use CDP to set offline mode (sets navigator.onLine = false without blocking requests)
-  for (const page of pages) {
-    const cdpSession = await context.newCDPSession(page);
-    await cdpSession.send('Network.emulateNetworkConditions', {
-      offline: true,
-      downloadThroughput: 0,
-      uploadThroughput: 0,
-      latency: 0,
-    });
-  }
-
-  // Add routing to block external requests while allowing localhost
-  await context.route('**', serviceWorkerOfflineRouteHandler);
-}
-
-/**
- * Set browser to online mode (restores from offline)
- *
- * This restores the browser to online mode by:
- * 1. Removing the offline route handler
- * 2. Using CDP to restore network conditions
- *
- * @param context - Playwright browser context
- */
-export async function setBrowserOnline(context: BrowserContext): Promise<void> {
-  // Remove routing first
-  await context.unroute('**', serviceWorkerOfflineRouteHandler);
-
-  // Restore network conditions via CDP
-  const pages = context.pages();
-  for (const page of pages) {
-    const cdpSession = await context.newCDPSession(page);
-    await cdpSession.send('Network.emulateNetworkConditions', {
-      offline: false,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-      latency: 0,
-    });
-  }
 }
