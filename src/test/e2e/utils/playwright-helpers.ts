@@ -607,13 +607,38 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
 /**
  * Simulate offline mode with service worker support
  *
- * This uses the new offline helpers that properly support service workers
- * by enabling them to access the Cache API while blocking network requests.
+ * Uses CDP offline mode combined with page-level routing to allow the service
+ * worker to serve cached content while blocking external requests.
  *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
-  await setBrowserOffline(page.context());
+  const context = page.context();
+  const cdpSession = await context.newCDPSession(page);
+
+  // Set offline mode via CDP (sets navigator.onLine = false)
+  await cdpSession.send('Network.emulateNetworkConditions', {
+    offline: true,
+    downloadThroughput: 0,
+    uploadThroughput: 0,
+    latency: 0,
+  });
+
+  // Use page-level routing to allow localhost while blocking external requests
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    // Allow localhost requests (for SW to serve cached content)
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      return route.continue();
+    }
+    // Block external requests
+    return route.abort('internetdisconnected');
+  });
+
+  // Dispatch offline event
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('offline'));
+  });
 }
 
 /**
@@ -622,7 +647,23 @@ export async function goOffline(page: Page): Promise<void> {
  * @param page - Playwright page object
  */
 export async function goOnline(page: Page): Promise<void> {
-  await setBrowserOnline(page.context());
+  // Remove all page routes first
+  await page.unroute('**/*');
+
+  // Restore network conditions via CDP
+  const context = page.context();
+  const cdpSession = await context.newCDPSession(page);
+  await cdpSession.send('Network.emulateNetworkConditions', {
+    offline: false,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+    latency: 0,
+  });
+
+  // Dispatch online event
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('online'));
+  });
 }
 
 /**
