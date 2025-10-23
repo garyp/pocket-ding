@@ -612,14 +612,30 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
  * (including service worker), and the experimental feature should allow the service
  * worker to still access the Cache API.
  *
+ * IMPORTANT: This must be called AFTER the page is loaded and service worker is registered.
+ * It will wait for the service worker to be ready before going offline.
+ *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
+  // First, ensure service worker is registered and active
+  // This prevents race conditions where we go offline before SW is ready
+  await waitForServiceWorker(page);
+
   const context = page.context();
 
   // With experimental service worker network events enabled,
   // setOffline should work properly
   await context.setOffline(true);
+
+  // Verify that offline mode was set correctly in both page and service worker contexts
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+  if (!isOffline) {
+    throw new Error('Failed to set offline mode: navigator.onLine is still true');
+  }
+
+  // Give service worker a moment to process the offline state change
+  await page.waitForTimeout(500);
 }
 
 /**
@@ -630,6 +646,15 @@ export async function goOffline(page: Page): Promise<void> {
 export async function goOnline(page: Page): Promise<void> {
   const context = page.context();
   await context.setOffline(false);
+
+  // Verify that online mode was restored
+  const isOnline = await page.evaluate(() => navigator.onLine);
+  if (!isOnline) {
+    throw new Error('Failed to restore online mode: navigator.onLine is still false');
+  }
+
+  // Give service worker a moment to process the online state change
+  await page.waitForTimeout(500);
 }
 
 /**
