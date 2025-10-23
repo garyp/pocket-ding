@@ -318,7 +318,21 @@ export async function waitForSyncComplete(
  * @param page - Playwright page object
  */
 export async function navigateToBookmarks(page: Page): Promise<void> {
-  await page.goto('/');
+  // Check if we're offline by testing if setOffline was called
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+
+  if (isOffline) {
+    // When offline, use client-side navigation instead of page.goto()
+    // because setOffline() blocks all network requests including navigation
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  } else {
+    // When online, use normal navigation
+    await page.goto('/');
+  }
+
   await page.waitForSelector('app-root');
 
   // Wait for bookmark-list to be rendered and ready
@@ -347,8 +361,51 @@ export async function navigateToReader(
   page: Page,
   bookmarkId: number
 ): Promise<void> {
-  await page.goto(`/read/${bookmarkId}`);
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+
+  if (isOffline) {
+    // Use client-side navigation when offline
+    await page.evaluate((id) => {
+      window.history.pushState({}, '', `/read/${id}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, bookmarkId);
+  } else {
+    await page.goto(`/read/${bookmarkId}`);
+  }
+
   await page.waitForSelector('bookmark-reader');
+}
+
+/**
+ * Navigate to a specific route (offline-safe)
+ *
+ * This helper navigates to a route using page.goto() when online, or
+ * client-side navigation when offline (since context.setOffline() blocks
+ * all network requests including page.goto()).
+ *
+ * @param page - Playwright page object
+ * @param route - Route to navigate to (e.g., '/', '/settings', '/read/123')
+ * @param options - Optional wait options
+ */
+export async function navigateToRoute(page: Page, route: string, options?: { waitForSelector?: string }): Promise<void> {
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+
+  if (isOffline) {
+    // When offline, use client-side navigation via history.pushState
+    // This works because the service worker can serve cached content
+    await page.evaluate((path) => {
+      window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, route);
+  } else {
+    // When online, use normal navigation
+    await page.goto(route);
+  }
+
+  // Wait for the specified selector if provided
+  if (options?.waitForSelector) {
+    await page.waitForSelector(options.waitForSelector, { timeout: 10000 });
+  }
 }
 
 /**
