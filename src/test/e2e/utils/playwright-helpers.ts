@@ -379,9 +379,15 @@ export async function navigateToReader(
 /**
  * Navigate to a specific route (offline-safe)
  *
- * This helper navigates to a route using page.goto() when online, or
- * client-side navigation when offline (since context.setOffline() blocks
- * all network requests including page.goto()).
+ * IMPORTANT: When offline, this uses client-side navigation (history.pushState + popstate)
+ * which does NOT go through the service worker's fetch handler. This tests the app's
+ * client-side routing logic, but NOT the service worker's ability to serve cached pages
+ * during navigation.
+ *
+ * The service worker's offline caching IS tested separately via page.reload() in other tests.
+ * This limitation exists because context.setOffline() blocks ALL navigation requests
+ * (including page.goto() and link clicks) at the Chromium network layer, even with
+ * PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS enabled.
  *
  * @param page - Playwright page object
  * @param route - Route to navigate to (e.g., '/', '/settings', '/read/123')
@@ -391,14 +397,14 @@ export async function navigateToRoute(page: Page, route: string, options?: { wai
   const isOffline = await page.evaluate(() => !navigator.onLine);
 
   if (isOffline) {
-    // When offline, use client-side navigation via history.pushState
-    // This works because the service worker can serve cached content
+    // When offline, use client-side navigation to avoid ERR_INTERNET_DISCONNECTED
+    // This tests client-side routing but bypasses service worker fetch handlers
     await page.evaluate((path) => {
       window.history.pushState({}, '', path);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }, route);
   } else {
-    // When online, use normal navigation
+    // When online, use normal navigation which goes through service worker
     await page.goto(route);
   }
 
