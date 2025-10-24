@@ -17,7 +17,12 @@ const securityDisabledLaunchOptions = {
  * These tests run against a real Linkding Docker instance and test the complete
  * application stack including service workers, sync, and offline functionality.
  *
+ * IMPORTANT: Service worker network events are enabled via the experimental feature
+ * PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1. This allows proper offline testing
+ * where the service worker can access Cache API while network requests are blocked.
+ *
  * @see https://playwright.dev/docs/test-configuration
+ * @see https://playwright.dev/docs/service-workers-experimental
  */
 export default defineConfig({
   testDir: './src/test/e2e',
@@ -33,7 +38,11 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'list',
+  reporter: process.env.CI
+    ? [['github'], ['list']] // GitHub Actions annotations + list output
+    : 'list',
+  /* Global timeout for each test (increase for CI due to container startup) */
+  timeout: process.env.CI ? 60000 : 30000,
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
@@ -44,6 +53,9 @@ export default defineConfig({
 
     /* Take screenshot on failure */
     screenshot: 'only-on-failure',
+
+    /* Allow service workers for offline testing with experimental network events */
+    serviceWorkers: 'allow',
   },
 
   /* Configure projects for major browsers */

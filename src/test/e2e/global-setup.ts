@@ -23,15 +23,27 @@ let linkdingContainer: LinkdingContainerInfo | null = null;
 export default async function globalSetup(_config: FullConfig) {
   console.log('\n🚀 Starting E2E test environment setup...\n');
 
-  // Configure TestContainers to work with rootless Podman
-  if (!process.env['DOCKER_HOST']) {
-    // Use Podman socket path (rootless)
-    const uid = process.getuid?.() || 1000;
-    process.env['DOCKER_HOST'] = `unix:///run/user/${uid}/podman/podman.sock`;
-  }
+  // Configure TestContainers based on environment
+  // GitHub Actions has Docker available by default, local dev may use Podman
+  const isCI = process.env['CI'] === 'true';
 
-  // Disable Ryuk for rootless Podman (required for compatibility)
-  process.env['TESTCONTAINERS_RYUK_DISABLED'] = 'true';
+  if (isCI) {
+    // GitHub Actions environment - use default Docker setup
+    console.log('Running in CI environment - using GitHub Actions Docker');
+    // GitHub Actions has Docker daemon available at the default socket
+    // No need to set DOCKER_HOST
+  } else {
+    // Local development - configure for rootless Podman if DOCKER_HOST not set
+    if (!process.env['DOCKER_HOST']) {
+      // Use Podman socket path (rootless)
+      const uid = process.getuid?.() || 1000;
+      process.env['DOCKER_HOST'] = `unix:///run/user/${uid}/podman/podman.sock`;
+      console.log(`Configuring for rootless Podman (UID: ${uid})`);
+    }
+
+    // Disable Ryuk for rootless Podman (required for compatibility)
+    process.env['TESTCONTAINERS_RYUK_DISABLED'] = 'true';
+  }
 
   // Check if Docker is available
   const dockerAvailable = await isDockerAvailable();

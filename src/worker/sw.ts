@@ -1,8 +1,6 @@
 /// <reference lib="webworker" />
 /// <reference path="../types/service-worker.d.ts" />
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
-import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { NetworkFirst } from 'workbox-strategies';
 import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DatabaseService } from '../services/database';
 import { SyncService } from './sync-service';
@@ -21,24 +19,11 @@ logInfo('serviceWorker', 'Workbox precaching configured');
 logInfo('serviceWorker', 'Cleaning up outdated caches...');
 cleanupOutdatedCaches();
 
-// Handle navigation requests with network first strategy
-registerRoute(
-  new NavigationRoute(
-    new NetworkFirst({
-      cacheName: 'navigations',
-      networkTimeoutSeconds: 3
-    })
-  )
-);
-
-// Force network-first for main app JavaScript files to ensure updates
-registerRoute(
-  ({ url }) => /\/main-[a-zA-Z0-9_-]+\.js$/.test(url.pathname),
-  new NetworkFirst({
-    cacheName: 'app-js-cache',
-    networkTimeoutSeconds: 3,
-  })
-);
+// Navigation requests: precacheAndRoute already handles these with CacheFirst
+// No additional routing needed - precached assets are served instantly from cache
+// and updated when a new service worker is installed (via the update prompt).
+//
+// REMOVED: NetworkFirst navigation route that was causing 3-second delays offline
 
 // PWA capability detection (detected once at startup)
 const PWA_CAPABILITIES = {
