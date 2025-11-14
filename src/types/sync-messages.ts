@@ -7,6 +7,8 @@ import type { SyncPhase } from './index.js';
 export type SyncMessageType =
   | 'REQUEST_SYNC'
   | 'CANCEL_SYNC'
+  | 'PAUSE_SYNC'
+  | 'RESUME_SYNC'
   | 'SYNC_STATUS'
   | 'SYNC_PROGRESS'
   | 'SYNC_COMPLETE'
@@ -32,9 +34,18 @@ export interface CancelSyncMessage {
   reason: string;
 }
 
+export interface PauseSyncMessage {
+  type: 'PAUSE_SYNC';
+  reason?: string;
+}
+
+export interface ResumeSyncMessage {
+  type: 'RESUME_SYNC';
+}
+
 export interface SyncStatusMessage {
   type: 'SYNC_STATUS';
-  status: 'idle' | 'starting' | 'syncing' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  status: 'idle' | 'starting' | 'syncing' | 'paused' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   timestamp: number;
 }
 
@@ -105,6 +116,8 @@ export interface AppBackgroundMessage {
 export type SyncMessage =
   | SyncRequestMessage
   | CancelSyncMessage
+  | PauseSyncMessage
+  | ResumeSyncMessage
   | SyncStatusMessage
   | SyncProgressMessage
   | SyncCompleteMessage
@@ -135,6 +148,22 @@ export const SyncMessages = {
     return {
       type: 'CANCEL_SYNC',
       reason
+    };
+  },
+
+  pauseSync(reason?: string): PauseSyncMessage {
+    const message: PauseSyncMessage = {
+      type: 'PAUSE_SYNC'
+    };
+    if (reason !== undefined) {
+      message.reason = reason;
+    }
+    return message;
+  },
+
+  resumeSync(): ResumeSyncMessage {
+    return {
+      type: 'RESUME_SYNC'
     };
   },
   

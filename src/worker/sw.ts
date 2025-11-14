@@ -344,6 +344,22 @@ function stopPeriodicSyncFallback(): void {
 }
 
 /**
+ * Clean up sync state and resources
+ */
+function cleanupSyncState(): void {
+  syncInProgress = false;
+  currentSyncProgress = null;
+  keepaliveManager.stop();
+
+  // Release Web Lock if held
+  if (currentLockRelease) {
+    logInfo('sync', 'Releasing Web Lock during cleanup');
+    currentLockRelease();
+    currentLockRelease = null;
+  }
+}
+
+/**
  * Perform background sync directly in the service worker with Web Lock coordination
  */
 async function performBackgroundSync(settings: AppSettings, fullSync = false): Promise<void> {
@@ -403,9 +419,7 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
     const result = await currentSyncService.performSync(settings);
 
     if (result.success) {
-      syncInProgress = false;
-      currentSyncProgress = null;
-      keepaliveManager.stop();
+      cleanupSyncState();
 
       await DatabaseService.resetSyncRetryCount();
       await DatabaseService.setLastSyncError(null);
@@ -427,9 +441,7 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
   } catch (error) {
     logError('backgroundSync', 'Sync operation failed', error);
 
-    syncInProgress = false;
-    currentSyncProgress = null;
-    keepaliveManager.stop();
+    cleanupSyncState();
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') ||
@@ -551,8 +563,7 @@ async function performSync(fullSync = false): Promise<void> {
   } catch (error) {
     logError('performSync', 'Failed to perform sync', error);
 
-    syncInProgress = false;
-    keepaliveManager.stop();
+    cleanupSyncState();
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await DatabaseService.setLastSyncError(errorMessage);
@@ -609,21 +620,40 @@ self.addEventListener('message', async (event) => {
         logInfo('sync', `Received CANCEL_SYNC message: ${message.reason}`);
 
         currentSyncService.cancelSync();
-
-        syncInProgress = false;
-        currentSyncProgress = null;
-        keepaliveManager.stop();
-
-        // Release Web Lock if held
-        if (currentLockRelease) {
-          logInfo('sync', 'Releasing Web Lock after cancellation');
-          currentLockRelease();
-          currentLockRelease = null;
-        }
+        cleanupSyncState();
 
         await broadcastToClients(SyncMessages.syncStatus('cancelled'));
       } else {
         logInfo('sync', 'Received CANCEL_SYNC but no sync is currently active');
+      }
+      break;
+
+    case 'PAUSE_SYNC':
+      // Handle pause as cancellation with manual pause flag
+      if (currentSyncService && syncInProgress) {
+        logInfo('sync', `Received PAUSE_SYNC message: ${message.reason || 'User requested pause'}`);
+        // Set manual pause flag in database
+        await DatabaseService.setManualPauseState(true);
+        // Cancel the sync
+        currentSyncService.cancelSync();
+        cleanupSyncState();
+
+        await broadcastToClients(SyncMessages.syncStatus('paused'));
+      } else {
+        logInfo('sync', 'Received PAUSE_SYNC but no sync is currently active');
+      }
+      break;
+
+    case 'RESUME_SYNC':
+      // Handle resume as clearing manual pause flag and starting new sync
+      logInfo('sync', 'Received RESUME_SYNC message');
+      const wasManuallyPaused = await DatabaseService.getManualPauseState();
+      if (wasManuallyPaused) {
+        await DatabaseService.clearManualPauseState();
+        // Start a new sync
+        await performSync(false);
+      } else {
+        logInfo('sync', 'Received RESUME_SYNC but sync was not manually paused');
       }
       break;
 
@@ -642,16 +672,7 @@ self.addEventListener('message', async (event) => {
 
         try {
           currentSyncService.cancelSync();
-          syncInProgress = false;
-          currentSyncProgress = null;
-          keepaliveManager.stop();
-
-          // Release Web Lock if held
-          if (currentLockRelease) {
-            logInfo('visibility', 'Releasing Web Lock after foreground transition');
-            currentLockRelease();
-            currentLockRelease = null;
-          }
+          cleanupSyncState();
 
           await broadcastToClients(SyncMessages.syncStatus('cancelled'));
         } catch (error) {
@@ -741,35 +762,42 @@ self.addEventListener('message', async (event) => {
           ));
         }
       } else {
-        // Check if there are bookmarks that still need syncing (interrupted sync recovery)
-        try {
-          const { DatabaseService } = await import('../services/database');
-          const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
-          const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
-
-          if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
-            logInfo('sync', `Detected interrupted sync: ${bookmarksNeedingAssetSync.length} bookmarks need asset sync, ${bookmarksNeedingReadSync.length} need read sync`);
-            // Don't auto-resume here, let the UI decide
-            await broadcastToClients(SyncMessages.syncStatus('interrupted'));
-          }
-        } catch (error) {
-          logError('sync', 'Failed to check for interrupted sync', error);
-        }
-        // Check if periodic sync is available and permitted
-        if ('periodicSync' in self.registration && 'permissions' in self) {
+        // Check if sync was manually paused
+        const isManuallyPaused = await DatabaseService.getManualPauseState();
+        if (isManuallyPaused) {
+          logInfo('sync', 'Sync is manually paused');
+          await broadcastToClients(SyncMessages.syncStatus('paused'));
+        } else {
+          // Check if there are bookmarks that still need syncing (interrupted sync recovery)
           try {
-            const permission = await (self as any).permissions.query({ name: 'periodic-background-sync' });
-            await broadcastToClients({
-              type: 'SYNC_STATUS',
-              status: permission.state === 'granted' ? 'idle' : 'failed',
-              timestamp: Date.now()
-            });
-          } catch {
-            // Permission API not available for periodic-background-sync
+            const { DatabaseService } = await import('../services/database');
+            const bookmarksNeedingAssetSync = await DatabaseService.getBookmarksNeedingAssetSync();
+            const bookmarksNeedingReadSync = await DatabaseService.getBookmarksNeedingReadSync();
+
+            if (bookmarksNeedingAssetSync.length > 0 || bookmarksNeedingReadSync.length > 0) {
+              logInfo('sync', `Detected interrupted sync: ${bookmarksNeedingAssetSync.length} bookmarks need asset sync, ${bookmarksNeedingReadSync.length} need read sync`);
+              // Don't auto-resume here, let the UI decide
+              await broadcastToClients(SyncMessages.syncStatus('interrupted'));
+            }
+          } catch (error) {
+            logError('sync', 'Failed to check for interrupted sync', error);
+          }
+          // Check if periodic sync is available and permitted
+          if ('periodicSync' in self.registration && 'permissions' in self) {
+            try {
+              const permission = await (self as any).permissions.query({ name: 'periodic-background-sync' });
+              await broadcastToClients({
+                type: 'SYNC_STATUS',
+                status: permission.state === 'granted' ? 'idle' : 'failed',
+                timestamp: Date.now()
+              });
+            } catch {
+              // Permission API not available for periodic-background-sync
+              await broadcastToClients(SyncMessages.syncStatus('idle'));
+            }
+          } else {
             await broadcastToClients(SyncMessages.syncStatus('idle'));
           }
-        } else {
-          await broadcastToClients(SyncMessages.syncStatus('idle'));
         }
       }
       break;
@@ -793,15 +821,7 @@ if (PWA_CAPABILITIES.backgroundSync) {
           logError('backgroundSync', 'Background sync event failed', error);
 
           // Ensure cleanup on error
-          syncInProgress = false;
-          currentSyncProgress = null;
-          keepaliveManager.stop();
-
-          if (currentLockRelease) {
-            logInfo('backgroundSync', 'Releasing Web Lock after sync event error');
-            currentLockRelease();
-            currentLockRelease = null;
-          }
+          cleanupSyncState();
 
           // Don't re-throw to prevent endless retries
         }
@@ -829,15 +849,7 @@ if (PWA_CAPABILITIES.periodicBackgroundSync) {
           logError('periodicSync', 'Periodic sync event failed', error);
 
           // Ensure cleanup on error
-          syncInProgress = false;
-          currentSyncProgress = null;
-          keepaliveManager.stop();
-
-          if (currentLockRelease) {
-            logInfo('periodicSync', 'Releasing Web Lock after periodic sync error');
-            currentLockRelease();
-            currentLockRelease = null;
-          }
+          cleanupSyncState();
 
           // Don't re-throw to prevent endless retries
         }

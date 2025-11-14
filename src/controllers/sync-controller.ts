@@ -2,7 +2,7 @@ import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { SettingsService } from '../services/settings-service';
 import { DatabaseService } from '../services/database';
 import { ReactiveQueryController } from './reactive-query-controller';
-import type { SyncMessage } from '../types/sync-messages';
+import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
 import { SyncWorkerManager } from '../services/sync-worker-manager';
 import { WebLockCoordinator } from '../services/web-lock-coordinator';
@@ -29,6 +29,7 @@ export class SyncController implements ReactiveController {
   #lockPollingInterval: number | null = null;
   #beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
   #pwaCapabilities = detectCapabilities();
+  #manualPauseQuery: ReactiveQueryController<boolean>;
   #periodicSyncRegistered: boolean = false; // Track periodic sync registration state
 
   // Reactive sync state
@@ -128,6 +129,11 @@ export class SyncController implements ReactiveController {
       }
     });
 
+    this.#manualPauseQuery = new ReactiveQueryController(
+      host,
+      () => DatabaseService.getManualPauseState()
+    );
+
     host.addController(this);
   }
 
@@ -177,6 +183,16 @@ export class SyncController implements ReactiveController {
 
     // Phase 1.3: Register periodic background sync if capabilities available and settings allow
     await this.#registerPeriodicBackgroundSyncIfAvailable();
+
+    // Check if sync was manually paused
+    const isManuallyPaused = this.#manualPauseQuery.value;
+    if (isManuallyPaused) {
+      this._syncState = {
+        ...this._syncState,
+        syncStatus: 'paused'
+      };
+      this.#host.requestUpdate();
+    }
   }
 
   private cleanupSync() {
@@ -424,6 +440,7 @@ export class SyncController implements ReactiveController {
     }
   }
 
+
   /**
    * Unregister periodic background sync when auto_sync is disabled
    */
@@ -584,6 +601,12 @@ export class SyncController implements ReactiveController {
       state.retryCount = retryCount;
     }
 
+    // Include manual pause state
+    const isManuallyPaused = this.#manualPauseQuery.value;
+    if (isManuallyPaused) {
+      state.syncStatus = 'paused';
+    }
+
     return state;
   }
 
@@ -696,6 +719,51 @@ export class SyncController implements ReactiveController {
     this.#syncWorkerManager.cancelSync();
   }
 
+  /**
+   * Pause ongoing sync operation (treat as manual cancellation)
+   */
+  async pauseSync(): Promise<void> {
+    if (!this._syncState.isSyncing) return;
+
+    // Mark as manual pause before cancelling
+    await DatabaseService.setManualPauseState(true);
+    this._syncState = {
+      ...this._syncState,
+      syncStatus: 'paused'
+    };
+    this.#host.requestUpdate();
+
+    // Send pause message to service worker
+    if (this.#serviceWorkerReady && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage(SyncMessages.pauseSync('User requested pause'));
+    }
+  }
+
+  /**
+   * Resume paused sync operation
+   */
+  async resumeSync(): Promise<void> {
+    const isManuallyPaused = this.#manualPauseQuery.value;
+    if (!isManuallyPaused && this._syncState.syncStatus !== 'paused') return;
+
+    // Send resume message to service worker
+    if (this.#serviceWorkerReady && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage(SyncMessages.resumeSync());
+    }
+  }
+
+  /**
+   * Enable or disable periodic background sync
+   */
+  async setPeriodicSync(enabled: boolean): Promise<void> {
+    if (this.#serviceWorkerReady && navigator.serviceWorker.controller) {
+      if (enabled) {
+        navigator.serviceWorker.controller.postMessage(SyncMessages.registerPeriodicSync());
+      } else {
+        navigator.serviceWorker.controller.postMessage(SyncMessages.unregisterPeriodicSync());
+      }
+    }
+  }
 
   /**
    * Check if sync is currently in progress
@@ -719,6 +787,13 @@ export class SyncController implements ReactiveController {
     return { ...this.#pwaCapabilities };
   }
 
+
+  /**
+   * Check if sync is manually paused
+   */
+  get isManuallyPaused(): boolean {
+    return this.#manualPauseQuery.value || false;
+  }
 
   /**
    * Get IDs of recently synced bookmarks
