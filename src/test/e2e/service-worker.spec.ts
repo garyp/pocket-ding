@@ -11,6 +11,7 @@ import {
   triggerSync,
   waitForSyncComplete,
   navigateToBookmarks,
+  navigateToRoute,
   getBookmarkCount,
   clickBookmark,
   waitForServiceWorker,
@@ -219,12 +220,18 @@ test.describe('Service Worker E2E Tests', () => {
     // Go offline
     await goOffline(page);
 
-    // Try to navigate to different views
-    await page.goto('/settings');
-    await page.waitForSelector('settings-panel', { timeout: 10000 });
+    // Try to navigate to different views using client-side navigation
+    // (page.goto() doesn't work when offline due to context.setOffline() blocking)
+    await navigateToRoute(page, '/settings', { waitForSelector: 'settings-panel' });
 
-    await page.goto('/bookmarks');
-    await page.waitForSelector('bookmark-list', { timeout: 10000 });
+    await navigateToRoute(page, '/bookmarks');
+    // Wait for bookmark list using the shadow DOM traversal
+    await page.waitForFunction(() => {
+      const appRoot = document.querySelector('app-root');
+      if (!appRoot?.shadowRoot) return false;
+      const container = appRoot.shadowRoot.querySelector('bookmark-list-container');
+      return container !== null;
+    }, { timeout: 10000 });
 
     // Verify app still functions
     const isAppFunctional = await page.evaluate(() => {

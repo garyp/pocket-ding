@@ -318,7 +318,21 @@ export async function waitForSyncComplete(
  * @param page - Playwright page object
  */
 export async function navigateToBookmarks(page: Page): Promise<void> {
-  await page.goto('/');
+  // Check if we're offline by testing if setOffline was called
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+
+  if (isOffline) {
+    // When offline, use client-side navigation instead of page.goto()
+    // because setOffline() blocks all network requests including navigation
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  } else {
+    // When online, use normal navigation
+    await page.goto('/');
+  }
+
   await page.waitForSelector('app-root');
 
   // Wait for bookmark-list to be rendered and ready
@@ -347,8 +361,57 @@ export async function navigateToReader(
   page: Page,
   bookmarkId: number
 ): Promise<void> {
-  await page.goto(`/read/${bookmarkId}`);
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+
+  if (isOffline) {
+    // Use client-side navigation when offline
+    await page.evaluate((id) => {
+      window.history.pushState({}, '', `/read/${id}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, bookmarkId);
+  } else {
+    await page.goto(`/read/${bookmarkId}`);
+  }
+
   await page.waitForSelector('bookmark-reader');
+}
+
+/**
+ * Navigate to a specific route (offline-safe)
+ *
+ * IMPORTANT: When offline, this uses client-side navigation (history.pushState + popstate)
+ * which does NOT go through the service worker's fetch handler. This tests the app's
+ * client-side routing logic, but NOT the service worker's ability to serve cached pages
+ * during navigation.
+ *
+ * The service worker's offline caching IS tested separately via page.reload() in other tests.
+ * This limitation exists because context.setOffline() blocks ALL navigation requests
+ * (including page.goto() and link clicks) at the Chromium network layer, even with
+ * PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS enabled.
+ *
+ * @param page - Playwright page object
+ * @param route - Route to navigate to (e.g., '/', '/settings', '/read/123')
+ * @param options - Optional wait options
+ */
+export async function navigateToRoute(page: Page, route: string, options?: { waitForSelector?: string }): Promise<void> {
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+
+  if (isOffline) {
+    // When offline, use client-side navigation to avoid ERR_INTERNET_DISCONNECTED
+    // This tests client-side routing but bypasses service worker fetch handlers
+    await page.evaluate((path) => {
+      window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, route);
+  } else {
+    // When online, use normal navigation which goes through service worker
+    await page.goto(route);
+  }
+
+  // Wait for the specified selector if provided
+  if (options?.waitForSelector) {
+    await page.waitForSelector(options.waitForSelector, { timeout: 10000 });
+  }
 }
 
 /**
@@ -605,21 +668,56 @@ export async function isOfflineCapable(page: Page): Promise<boolean> {
 }
 
 /**
- * Simulate offline mode
+ * Simulate offline mode with service worker support
+ *
+ * With PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1 and serviceWorkers: 'allow',
+ * we can use context.setOffline() which properly sets navigator.onLine in all contexts
+ * (including service worker), and the experimental feature should allow the service
+ * worker to still access the Cache API.
+ *
+ * IMPORTANT: This must be called AFTER the page is loaded and service worker is registered.
+ * It will wait for the service worker to be ready before going offline.
  *
  * @param page - Playwright page object
  */
 export async function goOffline(page: Page): Promise<void> {
-  await page.context().setOffline(true);
+  // First, ensure service worker is registered and active
+  // This prevents race conditions where we go offline before SW is ready
+  await waitForServiceWorker(page);
+
+  const context = page.context();
+
+  // With experimental service worker network events enabled,
+  // setOffline should work properly
+  await context.setOffline(true);
+
+  // Verify that offline mode was set correctly in both page and service worker contexts
+  const isOffline = await page.evaluate(() => !navigator.onLine);
+  if (!isOffline) {
+    throw new Error('Failed to set offline mode: navigator.onLine is still true');
+  }
+
+  // Give service worker a moment to process the offline state change
+  await page.waitForTimeout(500);
 }
 
 /**
- * Simulate online mode
+ * Simulate online mode (restores from offline)
  *
  * @param page - Playwright page object
  */
 export async function goOnline(page: Page): Promise<void> {
-  await page.context().setOffline(false);
+  const context = page.context();
+  await context.setOffline(false);
+
+  // Verify that online mode was restored
+  const isOnline = await page.evaluate(() => navigator.onLine);
+  if (!isOnline) {
+    throw new Error('Failed to restore online mode: navigator.onLine is still false');
+  }
+
+  // Give service worker a moment to process the online state change
+  await page.waitForTimeout(500);
 }
 
 /**
