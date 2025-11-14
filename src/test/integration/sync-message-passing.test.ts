@@ -472,27 +472,204 @@ describe('Sync Message Passing Integration', () => {
         value: undefined,
         writable: true
       });
-      
+
       const component2 = document.createElement('test-sync-component') as TestSyncComponent;
       document.body.appendChild(component2);
       await waitForComponentReady(component2);
-      
+
       // Should not throw when trying to sync
       await expect(component2.syncController.requestSync()).resolves.not.toThrow();
     });
-    
+
     it('should handle settings not configured', async () => {
       vi.spyOn(SettingsService, 'getSettings').mockResolvedValue(undefined);
-      
+
       const component2 = document.createElement('test-sync-component') as TestSyncComponent;
       document.body.appendChild(component2);
       await waitForComponentReady(component2);
-      
+
       await component2.syncController.requestSync();
-      
+
       // Should not start sync without settings
       const state = component2.syncController.getSyncState();
       expect(state.isSyncing).toBe(false);
+    });
+  });
+
+  describe('Visibility Change Handling (Sleep/Wake)', () => {
+    it('should cancel sync when page becomes hidden during sync', async () => {
+      // Mock document.hidden to be visible initially
+      Object.defineProperty(document, 'hidden', {
+        value: false,
+        writable: true,
+        configurable: true
+      });
+
+      // Start sync
+      await component.syncController.requestSync();
+      await component.updateComplete;
+
+      // Should be syncing
+      let state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(true);
+
+      // Clear the cancelSync spy to track new calls
+      mockSyncWorkerManager.cancelSync.mockClear();
+
+      // Simulate page becoming hidden (phone goes to sleep)
+      Object.defineProperty(document, 'hidden', {
+        value: true,
+        writable: true,
+        configurable: true
+      });
+
+      // Trigger visibility change event
+      const visibilityChangeEvent = new Event('visibilitychange');
+      document.dispatchEvent(visibilityChangeEvent);
+
+      await component.updateComplete;
+
+      // Should have cancelled the sync
+      expect(mockSyncWorkerManager.cancelSync).toHaveBeenCalled();
+
+      // State should be interrupted
+      state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+      expect(state.syncStatus).toBe('interrupted');
+    });
+
+    it('should not cancel sync when page becomes visible during sync', async () => {
+      // Mock document.hidden to be hidden initially
+      Object.defineProperty(document, 'hidden', {
+        value: true,
+        writable: true,
+        configurable: true
+      });
+
+      // Start sync
+      await component.syncController.requestSync();
+      await component.updateComplete;
+
+      // Should be syncing
+      let state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(true);
+
+      // Clear the cancelSync spy
+      mockSyncWorkerManager.cancelSync.mockClear();
+
+      // Simulate page becoming visible (phone wakes up)
+      Object.defineProperty(document, 'hidden', {
+        value: false,
+        writable: true,
+        configurable: true
+      });
+
+      // Trigger visibility change event
+      const visibilityChangeEvent = new Event('visibilitychange');
+      document.dispatchEvent(visibilityChangeEvent);
+
+      await component.updateComplete;
+
+      // Should NOT have cancelled the sync
+      expect(mockSyncWorkerManager.cancelSync).not.toHaveBeenCalled();
+
+      // State should still be syncing
+      state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(true);
+    });
+
+    it('should not cancel when page becomes hidden if no sync is in progress', async () => {
+      // Mock document.hidden to be visible initially
+      Object.defineProperty(document, 'hidden', {
+        value: false,
+        writable: true,
+        configurable: true
+      });
+
+      // Ensure not syncing
+      let state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+
+      // Clear the cancelSync spy
+      mockSyncWorkerManager.cancelSync.mockClear();
+
+      // Simulate page becoming hidden
+      Object.defineProperty(document, 'hidden', {
+        value: true,
+        writable: true,
+        configurable: true
+      });
+
+      // Trigger visibility change event
+      const visibilityChangeEvent = new Event('visibilitychange');
+      document.dispatchEvent(visibilityChangeEvent);
+
+      await component.updateComplete;
+
+      // Should NOT have called cancelSync since no sync was in progress
+      expect(mockSyncWorkerManager.cancelSync).not.toHaveBeenCalled();
+    });
+
+    it('should preserve sync progress and phase when interrupted by visibility change', async () => {
+      // Mock document.hidden to be visible initially
+      Object.defineProperty(document, 'hidden', {
+        value: false,
+        writable: true,
+        configurable: true
+      });
+
+      // Start sync and simulate progress
+      await component.syncController.requestSync();
+      await component.updateComplete;
+
+      // Simulate progress via callback
+      if (mockCallbacks.onProgress) {
+        mockCallbacks.onProgress(25, 100, 'assets');
+      }
+      await component.updateComplete;
+
+      // Verify progress state
+      let state = component.syncController.getSyncState();
+      expect(state.syncProgress).toBe(25);
+      expect(state.syncTotal).toBe(100);
+      expect(state.syncPhase).toBe('assets');
+
+      // Simulate page becoming hidden
+      Object.defineProperty(document, 'hidden', {
+        value: true,
+        writable: true,
+        configurable: true
+      });
+
+      // Trigger visibility change event
+      const visibilityChangeEvent = new Event('visibilitychange');
+      document.dispatchEvent(visibilityChangeEvent);
+
+      await component.updateComplete;
+
+      // Should preserve progress and phase for potential resume
+      state = component.syncController.getSyncState();
+      expect(state.isSyncing).toBe(false);
+      expect(state.syncStatus).toBe('interrupted');
+      expect(state.syncProgress).toBe(25); // Preserved
+      expect(state.syncTotal).toBe(100); // Preserved
+      expect(state.syncPhase).toBe('assets'); // Preserved
+    });
+
+    it('should cleanup visibility change listener on component disconnect', async () => {
+      // Create a new component to test cleanup
+      const testComponent = document.createElement('test-sync-component') as TestSyncComponent;
+      document.body.appendChild(testComponent);
+      await waitForComponentReady(testComponent);
+
+      // Verify event listener was added
+      const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+
+      // Disconnect the component
+      document.body.removeChild(testComponent);
+
+      // Should have removed the visibility change listener
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     });
   });
 });
