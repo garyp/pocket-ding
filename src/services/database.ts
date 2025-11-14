@@ -521,8 +521,9 @@ export class DatabaseService {
 
   static async clearManualPauseState(): Promise<void> {
     const metadata = await db.syncMetadata.toCollection().first();
-    if (metadata) {
-      await db.syncMetadata.update(metadata.id!, { is_manual_pause: undefined } as any);
+    if (metadata && metadata.id) {
+      // Only update the is_manual_pause field, retaining all other metadata
+      await db.syncMetadata.update(metadata.id, { is_manual_pause: undefined } as any);
     }
   }
 

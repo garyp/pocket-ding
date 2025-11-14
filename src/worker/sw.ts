@@ -344,6 +344,22 @@ function stopPeriodicSyncFallback(): void {
 }
 
 /**
+ * Clean up sync state and resources
+ */
+function cleanupSyncState(): void {
+  syncInProgress = false;
+  currentSyncProgress = null;
+  keepaliveManager.stop();
+
+  // Release Web Lock if held
+  if (currentLockRelease) {
+    logInfo('sync', 'Releasing Web Lock during cleanup');
+    currentLockRelease();
+    currentLockRelease = null;
+  }
+}
+
+/**
  * Perform background sync directly in the service worker with Web Lock coordination
  */
 async function performBackgroundSync(settings: AppSettings, fullSync = false): Promise<void> {
@@ -403,9 +419,7 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
     const result = await currentSyncService.performSync(settings);
 
     if (result.success) {
-      syncInProgress = false;
-      currentSyncProgress = null;
-      keepaliveManager.stop();
+      cleanupSyncState();
 
       await DatabaseService.resetSyncRetryCount();
       await DatabaseService.setLastSyncError(null);
@@ -427,9 +441,7 @@ async function performBackgroundSync(settings: AppSettings, fullSync = false): P
   } catch (error) {
     logError('backgroundSync', 'Sync operation failed', error);
 
-    syncInProgress = false;
-    currentSyncProgress = null;
-    keepaliveManager.stop();
+    cleanupSyncState();
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') ||
@@ -551,8 +563,7 @@ async function performSync(fullSync = false): Promise<void> {
   } catch (error) {
     logError('performSync', 'Failed to perform sync', error);
 
-    syncInProgress = false;
-    keepaliveManager.stop();
+    cleanupSyncState();
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await DatabaseService.setLastSyncError(errorMessage);
@@ -609,17 +620,7 @@ self.addEventListener('message', async (event) => {
         logInfo('sync', `Received CANCEL_SYNC message: ${message.reason}`);
 
         currentSyncService.cancelSync();
-
-        syncInProgress = false;
-        currentSyncProgress = null;
-        keepaliveManager.stop();
-
-        // Release Web Lock if held
-        if (currentLockRelease) {
-          logInfo('sync', 'Releasing Web Lock after cancellation');
-          currentLockRelease();
-          currentLockRelease = null;
-        }
+        cleanupSyncState();
 
         await broadcastToClients(SyncMessages.syncStatus('cancelled'));
       } else {
@@ -635,16 +636,7 @@ self.addEventListener('message', async (event) => {
         await DatabaseService.setManualPauseState(true);
         // Cancel the sync
         currentSyncService.cancelSync();
-        syncInProgress = false;
-        currentSyncProgress = null;
-        keepaliveManager.stop();
-
-        // Release Web Lock if held
-        if (currentLockRelease) {
-          logInfo('sync', 'Releasing Web Lock after pause');
-          currentLockRelease();
-          currentLockRelease = null;
-        }
+        cleanupSyncState();
 
         await broadcastToClients(SyncMessages.syncStatus('paused'));
       } else {
@@ -680,16 +672,7 @@ self.addEventListener('message', async (event) => {
 
         try {
           currentSyncService.cancelSync();
-          syncInProgress = false;
-          currentSyncProgress = null;
-          keepaliveManager.stop();
-
-          // Release Web Lock if held
-          if (currentLockRelease) {
-            logInfo('visibility', 'Releasing Web Lock after foreground transition');
-            currentLockRelease();
-            currentLockRelease = null;
-          }
+          cleanupSyncState();
 
           await broadcastToClients(SyncMessages.syncStatus('cancelled'));
         } catch (error) {
@@ -838,15 +821,7 @@ if (PWA_CAPABILITIES.backgroundSync) {
           logError('backgroundSync', 'Background sync event failed', error);
 
           // Ensure cleanup on error
-          syncInProgress = false;
-          currentSyncProgress = null;
-          keepaliveManager.stop();
-
-          if (currentLockRelease) {
-            logInfo('backgroundSync', 'Releasing Web Lock after sync event error');
-            currentLockRelease();
-            currentLockRelease = null;
-          }
+          cleanupSyncState();
 
           // Don't re-throw to prevent endless retries
         }
@@ -874,15 +849,7 @@ if (PWA_CAPABILITIES.periodicBackgroundSync) {
           logError('periodicSync', 'Periodic sync event failed', error);
 
           // Ensure cleanup on error
-          syncInProgress = false;
-          currentSyncProgress = null;
-          keepaliveManager.stop();
-
-          if (currentLockRelease) {
-            logInfo('periodicSync', 'Releasing Web Lock after periodic sync error');
-            currentLockRelease();
-            currentLockRelease = null;
-          }
+          cleanupSyncState();
 
           // Don't re-throw to prevent endless retries
         }
