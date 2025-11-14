@@ -287,10 +287,11 @@ export class SyncService {
             await this.#syncUnarchivedBookmarkAssets(api, bookmark.id);
           }
 
-          // For unarchived bookmarks, preload favicon in background
+          // For unarchived bookmarks, preload favicon
           // Archived bookmarks will load favicons on-demand only
+          // Awaiting prevents connection pool exhaustion
           if (bookmark.favicon_url && !bookmark.is_archived) {
-            FaviconService.preloadFavicon(bookmark.id, bookmark.favicon_url);
+            await FaviconService.preloadFavicon(bookmark.id, bookmark.favicon_url);
           }
 
           // Mark asset sync as completed for this bookmark
