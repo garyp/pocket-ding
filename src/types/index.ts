@@ -1,4 +1,4 @@
-export type SyncPhase = 'bookmarks' | 'archived-bookmarks' | 'assets' | 'read-status' | 'complete';
+export type SyncPhase = 'bookmarks' | 'archived-bookmarks' | 'deletion' | 'assets' | 'read-status' | 'complete';
 
 export interface LinkdingBookmark {
   id: number;

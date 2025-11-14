@@ -10,6 +10,8 @@ interface SyncMetadata {
   retry_count?: number;
   last_error?: string;
   retry_queue?: string; // JSON string of retry queue items
+  synced_unarchived_ids?: string; // JSON array of synced unarchived bookmark IDs
+  synced_archived_ids?: string;   // JSON array of synced archived bookmark IDs
 }
 
 
@@ -162,6 +164,13 @@ export class DatabaseService {
   }
 
   static async deleteBookmark(id: number): Promise<void> {
+    // Delete all associated assets first
+    await db.assets.where('bookmark_id').equals(id).delete();
+    
+    // Delete read progress
+    await db.readProgress.where('bookmark_id').equals(id).delete();
+    
+    // Finally delete the bookmark itself
     await db.bookmarks.delete(id);
   }
 
@@ -309,6 +318,7 @@ export class DatabaseService {
       last_sync_timestamp: timestamp,
       unarchived_offset: 0,
       archived_offset: 0
+      // Synced IDs are cleared by not including them (they're optional)
     });
   }
 
@@ -497,6 +507,81 @@ export class DatabaseService {
     } catch (error) {
       DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'database', 'Failed to parse retry queue data');
       return null;
+    }
+  }
+
+  // Methods for managing synced bookmark IDs during full sync
+  static async getSyncedUnarchivedIds(): Promise<Set<number>> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata?.synced_unarchived_ids) {
+      try {
+        const ids = JSON.parse(metadata.synced_unarchived_ids);
+        return new Set(ids);
+      } catch (error) {
+        DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'database', 'Failed to parse synced_unarchived_ids');
+        return new Set();
+      }
+    }
+    return new Set();
+  }
+
+  static async getSyncedArchivedIds(): Promise<Set<number>> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata?.synced_archived_ids) {
+      try {
+        const ids = JSON.parse(metadata.synced_archived_ids);
+        return new Set(ids);
+      } catch (error) {
+        DebugService.logError(error instanceof Error ? error : new Error(String(error)), 'database', 'Failed to parse synced_archived_ids');
+        return new Set();
+      }
+    }
+    return new Set();
+  }
+
+  static async updateSyncedUnarchivedIds(ids: Set<number>): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+
+    // Get existing IDs and merge with new ones
+    const existingIds = await this.getSyncedUnarchivedIds();
+    const mergedIds = new Set([...existingIds, ...ids]);
+    const idsJson = JSON.stringify(Array.from(mergedIds));
+
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { synced_unarchived_ids: idsJson });
+    } else {
+      await db.syncMetadata.add({
+        last_sync_timestamp: '',
+        synced_unarchived_ids: idsJson
+      });
+    }
+  }
+
+  static async updateSyncedArchivedIds(ids: Set<number>): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+
+    // Get existing IDs and merge with new ones
+    const existingIds = await this.getSyncedArchivedIds();
+    const mergedIds = new Set([...existingIds, ...ids]);
+    const idsJson = JSON.stringify(Array.from(mergedIds));
+
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, { synced_archived_ids: idsJson });
+    } else {
+      await db.syncMetadata.add({
+        last_sync_timestamp: '',
+        synced_archived_ids: idsJson
+      });
+    }
+  }
+
+  static async clearSyncedIds(): Promise<void> {
+    const metadata = await db.syncMetadata.toCollection().first();
+    if (metadata) {
+      await db.syncMetadata.update(metadata.id!, {
+        synced_unarchived_ids: undefined,
+        synced_archived_ids: undefined
+      } as any);
     }
   }
 

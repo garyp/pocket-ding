@@ -59,27 +59,51 @@ export class SyncService {
       // Get last sync timestamp for incremental sync
       const lastSyncTimestamp = await DatabaseService.getLastSyncTimestamp();
       const syncStartTime = new Date().toISOString();
+      const isFullSync = !lastSyncTimestamp;
 
-      logInfo('sync', lastSyncTimestamp ? 'Starting incremental sync' : 'Starting full sync', {
+      logInfo('sync', isFullSync ? 'Starting full sync' : 'Starting incremental sync', {
         lastSyncTimestamp,
         syncStartTime
       });
 
+      // For a fresh full sync (not resumed), clear any previously tracked IDs
+      if (isFullSync) {
+        const unarchivedOffset = await DatabaseService.getUnarchivedOffset();
+        const archivedOffset = await DatabaseService.getArchivedOffset();
+        const isResumedFullSync = unarchivedOffset > 0 || archivedOffset > 0;
+        
+        if (!isResumedFullSync) {
+          // Fresh full sync - clear any old tracked IDs
+          await DatabaseService.clearSyncedIds();
+          logInfo('sync', 'Starting fresh full sync - cleared previously tracked IDs');
+        } else {
+          logInfo('sync', 'Resuming interrupted full sync', {
+            unarchivedOffset,
+            archivedOffset
+          });
+        }
+      }
+
       // Sync will start with first phase (bookmarks) - no initial progress report needed
 
       // Phase 1: Sync unarchived bookmarks
-      const unarchivedProcessed = await this.#syncUnarchivedBookmarks(api, lastSyncTimestamp || undefined);
+      const unarchivedResult = await this.#syncUnarchivedBookmarks(api, lastSyncTimestamp || undefined);
 
       // Phase 2: Sync archived bookmarks
-      const archivedProcessed = await this.#syncArchivedBookmarks(api, lastSyncTimestamp || undefined);
+      const archivedResult = await this.#syncArchivedBookmarks(api, lastSyncTimestamp || undefined);
 
-      // End of bookmark phases: Update timestamp (also resets offsets)
+      // Phase 3: Delete orphaned bookmarks (only for full sync)
+      if (isFullSync) {
+        await this.#deleteOrphanedBookmarks(unarchivedResult.remoteBookmarkIds, archivedResult.remoteBookmarkIds);
+      }
+
+      // End of bookmark phases: Update timestamp (also resets offsets and clears synced IDs)
       await DatabaseService.setLastSyncTimestamp(syncStartTime);
 
-      // Phase 3: Sync assets for bookmarks needing asset sync
+      // Phase 4: Sync assets for bookmarks needing asset sync
       await this.#syncBookmarkAssets(api);
 
-      // Phase 4: Sync read status back to Linkding
+      // Phase 5: Sync read status back to Linkding
       await this.#syncReadStatusToLinkding(api);
 
       // Report completion
@@ -87,8 +111,8 @@ export class SyncService {
 
       logInfo('sync', 'Sync completed successfully', {
         processed: this.#processedCount,
-        unarchived: unarchivedProcessed,
-        archived: archivedProcessed
+        unarchived: unarchivedResult.processedCount,
+        archived: archivedResult.processedCount
       });
 
       return {
@@ -127,16 +151,42 @@ export class SyncService {
     bookmarkType: 'unarchived' | 'archived',
     phase: SyncPhase,
     lastSyncTimestamp?: string
-  ): Promise<number> {
+  ): Promise<{ processedCount: number; remoteBookmarkIds: Set<number> }> {
     const isArchived = bookmarkType === 'archived';
     let offset = isArchived ? await DatabaseService.getArchivedOffset() : await DatabaseService.getUnarchivedOffset();
     let processedCount = 0;
     let totalBookmarksFound = 0;
     const limit = 100; // Page size for pagination
+    
+    // Load previously synced IDs if resuming a full sync
+    let remoteBookmarkIds: Set<number>;
+    if (!lastSyncTimestamp) {
+      // Full sync - load any previously tracked IDs (for resumed sync)
+      remoteBookmarkIds = isArchived 
+        ? await DatabaseService.getSyncedArchivedIds()
+        : await DatabaseService.getSyncedUnarchivedIds();
+      
+      if (remoteBookmarkIds.size > 0) {
+        logInfo('sync', `Loaded ${remoteBookmarkIds.size} previously synced ${bookmarkType} bookmark IDs`, {
+          bookmarkType,
+          previouslySyncedCount: remoteBookmarkIds.size
+        });
+      }
+    } else {
+      // Incremental sync - we don't track IDs
+      remoteBookmarkIds = new Set<number>();
+    }
 
     logInfo('sync', `Starting ${bookmarkType} bookmarks sync`, {
       resumeOffset: offset,
       lastSyncTimestamp
+    });
+
+    // Report start of phase with 0 progress
+    this.#reportProgress({
+      current: 0,
+      total: 0, // Total unknown until we fetch the first page
+      phase
     });
 
     // Get local bookmarks once for comparison
@@ -163,6 +213,11 @@ export class SyncService {
             throw new Error('Sync cancelled');
           }
 
+          // Track all remote bookmark IDs for deletion comparison (only during full sync)
+          if (!lastSyncTimestamp) {
+            remoteBookmarkIds.add(remoteBookmark.id);
+          }
+
           const wasProcessed = await this.#processBookmark(remoteBookmark, localBookmarksMap);
           if (wasProcessed) {
             processedCount++;
@@ -186,6 +241,19 @@ export class SyncService {
         } else {
           await DatabaseService.setUnarchivedOffset(offset);
         }
+        
+        // Persist the tracked IDs after each page during full sync
+        if (!lastSyncTimestamp && remoteBookmarkIds.size > 0) {
+          if (isArchived) {
+            await DatabaseService.updateSyncedArchivedIds(remoteBookmarkIds);
+          } else {
+            await DatabaseService.updateSyncedUnarchivedIds(remoteBookmarkIds);
+          }
+          logInfo('sync', `Persisted ${remoteBookmarkIds.size} ${bookmarkType} bookmark IDs`, {
+            bookmarkType,
+            totalSyncedIds: remoteBookmarkIds.size
+          });
+        }
 
         // Yield control periodically
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -204,10 +272,11 @@ export class SyncService {
     logInfo('sync', `Completed ${bookmarkType} bookmarks sync`, {
       processedCount,
       totalBookmarksFound,
-      finalOffset: offset
+      finalOffset: offset,
+      remoteBookmarkIds: remoteBookmarkIds.size
     });
 
-    return processedCount;
+    return { processedCount, remoteBookmarkIds };
   }
 
   /**
@@ -243,19 +312,19 @@ export class SyncService {
   /**
    * Phase 1: Sync unarchived bookmarks with offset resumption
    */
-  async #syncUnarchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<number> {
+  async #syncUnarchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<{ processedCount: number; remoteBookmarkIds: Set<number> }> {
     return await this.#syncBookmarksWithPagination(api, 'unarchived', 'bookmarks', lastSyncTimestamp);
   }
 
   /**
    * Phase 2: Sync archived bookmarks with offset resumption
    */
-  async #syncArchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<number> {
+  async #syncArchivedBookmarks(api: LinkdingAPI, lastSyncTimestamp?: string): Promise<{ processedCount: number; remoteBookmarkIds: Set<number> }> {
     return await this.#syncBookmarksWithPagination(api, 'archived', 'archived-bookmarks', lastSyncTimestamp);
   }
 
   /**
-   * Phase 3: Sync assets for bookmarks needing asset sync
+   * Phase 4: Sync assets for bookmarks needing asset sync
    */
   async #syncBookmarkAssets(api: LinkdingAPI): Promise<void> {
     try {
@@ -263,6 +332,13 @@ export class SyncService {
 
       logInfo('sync', 'Starting asset sync phase', {
         bookmarksCount: bookmarksNeedingAssetSync.length
+      });
+
+      // Report start of phase with 0 progress
+      this.#reportProgress({
+        current: 0,
+        total: bookmarksNeedingAssetSync.length,
+        phase: 'assets'
       });
 
       if (bookmarksNeedingAssetSync.length === 0) {
@@ -335,7 +411,7 @@ export class SyncService {
   }
 
   /**
-   * Phase 4: Sync read status back to Linkding
+   * Phase 5: Sync read status back to Linkding
    */
   async #syncReadStatusToLinkding(api: LinkdingAPI): Promise<void> {
     try {
@@ -343,6 +419,13 @@ export class SyncService {
 
       logInfo('sync', 'Starting read status sync phase', {
         bookmarksCount: bookmarksNeedingSync.length
+      });
+
+      // Report start of phase with 0 progress
+      this.#reportProgress({
+        current: 0,
+        total: bookmarksNeedingSync.length,
+        phase: 'read-status'
       });
 
       if (bookmarksNeedingSync.length === 0) {
@@ -480,6 +563,90 @@ export class SyncService {
         logError('sync', 'Invalid API response format - expected array', new Error('API returned non-array response'));
       }
       // Don't throw - continue with other bookmarks
+    }
+  }
+
+  /**
+   * Delete local bookmarks that no longer exist on the server (only during full sync)
+   */
+  async #deleteOrphanedBookmarks(
+    unarchivedRemoteIds: Set<number>,
+    archivedRemoteIds: Set<number>
+  ): Promise<void> {
+    try {
+      // Report start of deletion phase
+      this.#reportProgress({
+        current: 0,
+        total: 0,
+        phase: 'deletion'
+      });
+
+      // Combine all remote bookmark IDs
+      const allRemoteIds = new Set([...unarchivedRemoteIds, ...archivedRemoteIds]);
+
+      logInfo('sync', 'Checking for orphaned bookmarks to delete', {
+        remoteBookmarkCount: allRemoteIds.size,
+        unarchivedCount: unarchivedRemoteIds.size,
+        archivedCount: archivedRemoteIds.size
+      });
+
+      // Get all local bookmarks
+      const localBookmarks = await DatabaseService.getAllBookmarks();
+
+      // Find bookmarks that exist locally but not remotely
+      const bookmarksToDelete = localBookmarks.filter(
+        localBookmark => !allRemoteIds.has(localBookmark.id)
+      );
+
+      if (bookmarksToDelete.length === 0) {
+        logInfo('sync', 'No orphaned bookmarks found to delete');
+        // Report completion with 0 items
+        this.#reportProgress({
+          current: 0,
+          total: 0,
+          phase: 'deletion'
+        });
+        return;
+      }
+
+      logInfo('sync', `Found ${bookmarksToDelete.length} orphaned bookmarks to delete`, {
+        orphanedCount: bookmarksToDelete.length,
+        bookmarkIds: bookmarksToDelete.map(b => b.id)
+      });
+
+      // Delete each orphaned bookmark
+      let deletedCount = 0;
+      for (const bookmark of bookmarksToDelete) {
+        try {
+          await DatabaseService.deleteBookmark(bookmark.id);
+          deletedCount++;
+          logInfo('sync', `Deleted orphaned bookmark: ${bookmark.title}`, {
+            bookmarkId: bookmark.id,
+            title: bookmark.title,
+            url: bookmark.url
+          });
+
+          // Report progress after each deletion
+          this.#reportProgress({
+            current: deletedCount,
+            total: bookmarksToDelete.length,
+            phase: 'deletion'
+          });
+        } catch (error) {
+          logError('sync', `Failed to delete orphaned bookmark ${bookmark.id}`, error);
+          // Continue with other deletions even if one fails
+        }
+      }
+
+      logInfo('sync', `Completed deletion of orphaned bookmarks`, {
+        attemptedDeletions: bookmarksToDelete.length,
+        successfulDeletions: deletedCount,
+        failedDeletions: bookmarksToDelete.length - deletedCount
+      });
+
+    } catch (error) {
+      logError('sync', 'Failed to delete orphaned bookmarks', error);
+      // Don't throw - we don't want deletion failures to break the sync
     }
   }
 
