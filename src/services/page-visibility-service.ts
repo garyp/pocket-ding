@@ -2,14 +2,24 @@ import { DebugService } from './debug-service';
 import { SyncMessages } from '../types/sync-messages';
 
 /**
+ * Listener function for page visibility changes
+ * @param isVisible - true if page is visible, false if hidden
+ */
+export type VisibilityChangeListener = (isVisible: boolean) => void;
+
+/**
  * Global service for managing page visibility and coordinating sync behavior.
  * Prevents service worker sync blocking when the app is in the foreground.
+ *
+ * Uses a pub/sub pattern where components can subscribe to visibility changes
+ * instead of adding their own event listeners, ensuring a single source of truth.
  */
 export class PageVisibilityService {
   #isPageVisible = !document.hidden;
   #visibilityHandler: (() => void) | null = null;
   #serviceWorkerReady = false;
   #isInitialized = false;
+  #listeners: Set<VisibilityChangeListener> = new Set();
 
   /**
    * Initialize the service and start monitoring page visibility
@@ -39,6 +49,7 @@ export class PageVisibilityService {
       document.removeEventListener('visibilitychange', this.#visibilityHandler);
       this.#visibilityHandler = null;
     }
+    this.#listeners.clear();
     this.#isInitialized = false;
   }
 
@@ -47,6 +58,23 @@ export class PageVisibilityService {
    */
   isPageVisible(): boolean {
     return this.#isPageVisible;
+  }
+
+  /**
+   * Subscribe to page visibility changes
+   * @param listener - Function to call when visibility changes
+   * @returns Unsubscribe function
+   */
+  subscribe(listener: VisibilityChangeListener): () => void {
+    this.#listeners.add(listener);
+
+    // Call immediately with current state
+    listener(this.#isPageVisible);
+
+    // Return unsubscribe function
+    return () => {
+      this.#listeners.delete(listener);
+    };
   }
 
   /**
@@ -72,8 +100,15 @@ export class PageVisibilityService {
 
   /**
    * Setup page visibility change handler
+   * Also registers a default listener for service worker messaging
    */
   #setupPageVisibilityHandler(): void {
+    // Register default listener for service worker messaging
+    this.subscribe(() => {
+      // Send visibility message to service worker
+      this.#sendVisibilityMessage();
+    });
+
     this.#visibilityHandler = () => {
       const wasVisible = this.#isPageVisible;
       this.#isPageVisible = !document.hidden;
@@ -81,14 +116,30 @@ export class PageVisibilityService {
       if (wasVisible !== this.#isPageVisible) {
         DebugService.logInfo('app', `Page visibility changed: ${this.#isPageVisible ? 'visible' : 'hidden'}`);
 
-        // Send visibility message to service worker
-        this.#sendVisibilityMessage();
+        // Notify all listeners
+        this.#notifyListeners();
       }
     };
 
     document.addEventListener('visibilitychange', this.#visibilityHandler);
   };
 
+  /**
+   * Notify all subscribed listeners of visibility change
+   */
+  #notifyListeners(): void {
+    this.#listeners.forEach(listener => {
+      try {
+        listener(this.#isPageVisible);
+      } catch (error) {
+        DebugService.logError(
+          error instanceof Error ? error : new Error(String(error)),
+          'app',
+          'Error in visibility change listener'
+        );
+      }
+    });
+  }
 
   /**
    * Send visibility message to service worker

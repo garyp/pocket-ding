@@ -6,6 +6,7 @@ import { SyncMessages, type SyncMessage } from '../types/sync-messages';
 import { DebugService } from '../services/debug-service';
 import { SyncWorkerManager } from '../services/sync-worker-manager';
 import { WebLockCoordinator } from '../services/web-lock-coordinator';
+import { pageVisibilityService } from '../services/page-visibility-service';
 import type { AppSettings, SyncState, SyncControllerOptions } from '../types';
 import { detectCapabilities } from '../utils/pwa-capabilities';
 
@@ -28,6 +29,7 @@ export class SyncController implements ReactiveController {
   #syncLockStatus: boolean = true; // Assume available until checked
   #lockPollingInterval: number | null = null;
   #beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
+  #visibilityUnsubscribe: (() => void) | null = null;
   #pwaCapabilities = detectCapabilities();
   #manualPauseQuery: ReactiveQueryController<boolean>;
   #periodicSyncRegistered: boolean = false; // Track periodic sync registration state
@@ -140,11 +142,13 @@ export class SyncController implements ReactiveController {
   hostConnected(): void {
     this.initializeSync();
     this.#setupBeforeUnloadHandler();
+    this.#setupVisibilityChangeHandler();
   }
 
   hostDisconnected(): void {
     this.cleanupSync();
     this.#cleanupBeforeUnloadHandler();
+    this.#cleanupVisibilityChangeHandler();
   }
 
   hostUpdate(): void {
@@ -256,6 +260,50 @@ export class SyncController implements ReactiveController {
     if (this.#beforeUnloadHandler) {
       window.removeEventListener('beforeunload', this.#beforeUnloadHandler);
       this.#beforeUnloadHandler = null;
+    }
+  }
+
+  /**
+   * Setup visibility change handler to cancel sync when page becomes hidden (e.g., phone sleeps)
+   * This prevents sync from getting stuck with stale network connections
+   *
+   * Uses PageVisibilityService subscription instead of direct event listener
+   * to avoid duplication with other visibility handling.
+   */
+  #setupVisibilityChangeHandler(): void {
+    this.#visibilityUnsubscribe = pageVisibilityService.subscribe((isVisible) => {
+      // Only care about visibility changes when sync is in progress
+      if (!this._syncState.isSyncing) {
+        return;
+      }
+
+      // When page becomes hidden (phone goes to sleep, user switches apps, etc.)
+      if (!isVisible) {
+        DebugService.logInfo('sync', 'Page became hidden during sync - cancelling to prevent stuck state');
+
+        // Cancel the sync to prevent network requests from getting stuck
+        this.#syncWorkerManager.cancelSync();
+
+        // Update state to indicate interrupted status so it can be resumed later
+        this._syncState = {
+          ...this._syncState,
+          isSyncing: false,
+          syncStatus: 'interrupted',
+          // Preserve current progress and phase for potential resume
+        };
+        this.#host.requestUpdate();
+      }
+      // Note: When page becomes visible again, the #checkAndResumeSync() will handle resumption
+    });
+  }
+
+  /**
+   * Cleanup visibility change handler
+   */
+  #cleanupVisibilityChangeHandler(): void {
+    if (this.#visibilityUnsubscribe) {
+      this.#visibilityUnsubscribe();
+      this.#visibilityUnsubscribe = null;
     }
   }
 
