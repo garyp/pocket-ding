@@ -261,6 +261,30 @@ export class DebugView extends LitElement {
     // No need to manually update this.logs - the reactive controller handles it
   }
 
+  async #handleCopyLogs() {
+    if (this.logs.length === 0) {
+      return;
+    }
+
+    // Format logs as text
+    const logsText = this.logs.map(log => {
+      const timestamp = this.#formatTimestamp(log.timestamp);
+      const header = `[${timestamp}] [${log.level.toUpperCase()}] [${log.category}] ${log.operation}`;
+      const message = log.message;
+      const details = log.details ? `\nDetails: ${this.#formatDetails(log.details)}` : '';
+      const error = log.error ? `\nError: ${this.#formatError(log.error)}` : '';
+
+      return `${header}\n${message}${details}${error}\n`;
+    }).join('\n');
+
+    try {
+      await navigator.clipboard.writeText(logsText);
+      // Optional: Could add a toast notification here to confirm copy
+    } catch (error) {
+      console.error('Failed to copy logs to clipboard:', error);
+    }
+  }
+
   #handleRefresh() {
     // Refresh app state query manually (logs are always fresh)
     this.#appStateQuery.refresh();
@@ -470,13 +494,20 @@ export class DebugView extends LitElement {
           <div class="section-header">
             <h3>Debug Logs</h3>
             <div class="section-controls">
+              <md-text-button
+                @click=${this.#handleCopyLogs}
+                ?disabled=${this.logs.length === 0}
+              >
+                <md-icon slot="icon">content_copy</md-icon>
+                Copy Logs
+              </md-text-button>
               <md-text-button @click=${this.#handleClearLogs}>
                 <md-icon slot="icon">clear_all</md-icon>
                 Clear Logs
               </md-text-button>
             </div>
           </div>
-          
+
           ${this.#renderLogs()}
         </md-outlined-card>
       </div>

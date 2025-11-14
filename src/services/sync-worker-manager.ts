@@ -4,6 +4,8 @@ import type {
 } from '../types/worker-messages';
 import { SyncWorkerMessages } from '../types/worker-messages';
 import { WebLockCoordinator } from './web-lock-coordinator';
+// Use Vite's worker import syntax for production builds
+import SyncWorkerUrl from '../worker/sync-worker.ts?worker&url';
 
 export interface SyncWorkerCallbacks {
   onProgress?: (current: number, total: number, phase: SyncPhase) => void;
@@ -55,25 +57,31 @@ export class SyncWorkerManager {
 
     this.#creatingWorker = true;
     try {
-      // Create the dedicated sync worker using Vite's worker import syntax
-      this.#worker = new Worker(
-        new URL('../worker/sync-worker.ts', import.meta.url),
-        { type: 'module' }
-      );
+      console.log('[SyncWorkerManager] Creating sync worker with URL:', SyncWorkerUrl);
+
+      // Use Vite's static worker URL import instead of dynamic URL resolution
+      // This ensures the worker loads correctly in both dev and production builds
+      this.#worker = new Worker(SyncWorkerUrl, { type: 'module' });
+
+      console.log('[SyncWorkerManager] Sync worker created successfully');
 
       // Handle messages from worker and call appropriate callbacks
       this.#worker.addEventListener('message', (event: MessageEvent<SyncWorkerResponseMessage>) => {
+        console.log('[SyncWorkerManager] Received message from worker:', event.data.type);
         this.#handleWorkerMessage(event.data);
       });
 
       // Handle worker errors
       this.#worker.addEventListener('error', (error) => {
-        console.error('Sync worker error:', error);
+        console.error('[SyncWorkerManager] Sync worker error:', error);
         this.#callbacks.onError?.(`Worker error: ${error.message}`, false);
         this.cleanup();
       });
 
       return this.#worker;
+    } catch (error) {
+      console.error('[SyncWorkerManager] Failed to create sync worker:', error);
+      throw error;
     } finally {
       this.#creatingWorker = false;
     }

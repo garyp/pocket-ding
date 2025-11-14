@@ -6,16 +6,42 @@ import { BookmarkReader } from '../../components/bookmark-reader';
 import type { LocalBookmark, AppSettings } from '../../types';
 
 // Mock Database Service to provide test data
-vi.mock('../../services/database', () => ({
-  DatabaseService: {
-    getBookmark: vi.fn(),
-    getSettings: vi.fn(),
-    getReadProgress: vi.fn(),
-    saveReadProgress: vi.fn(),
-    getCompletedAssetsByBookmarkId: vi.fn(),
-    markBookmarkAsRead: vi.fn(),
-  },
-}));
+vi.mock('../../services/database', async () => {
+  const actual = await vi.importActual('../../services/database');
+  return {
+    ...actual,
+    DatabaseService: {
+      getBookmark: vi.fn(),
+      getSettings: vi.fn(),
+      getReadProgress: vi.fn(),
+      saveReadProgress: vi.fn(),
+      getCompletedAssetsByBookmarkId: vi.fn(),
+      markBookmarkAsRead: vi.fn(),
+      saveBookmark: vi.fn(),
+    },
+    db: {
+      bookmarks: {
+        get: vi.fn(),
+      },
+      readProgress: {
+        where: vi.fn(() => ({
+          equals: vi.fn(() => ({
+            first: vi.fn(),
+          })),
+        })),
+      },
+      assets: {
+        where: vi.fn(() => ({
+          equals: vi.fn(() => ({
+            and: vi.fn(() => ({
+              toArray: vi.fn(),
+            })),
+          })),
+        })),
+      },
+    },
+  };
+});
 
 // Mock Content Fetcher
 vi.mock('../../services/content-fetcher', () => ({
@@ -25,7 +51,7 @@ vi.mock('../../services/content-fetcher', () => ({
   },
 }));
 
-import { DatabaseService } from '../../services/database';
+import { DatabaseService, db } from '../../services/database';
 import { ContentFetcher } from '../../services/content-fetcher';
 
 const mockBookmark: LocalBookmark = {
@@ -73,23 +99,41 @@ describe('Reader Scrolling Experience', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Setup mock data for successful content loading
-    vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
-    vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
-    vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
-    vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
-    vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([{
+    const mockAssets = [{
       id: 1,
       bookmark_id: 1,
       asset_type: 'text',
       display_name: 'Test Article HTML',
       content_type: 'text/html',
       file_size: 1024,
-      status: 'complete',
+      status: 'complete' as const,
       date_created: '2024-01-01T00:00:00Z',
       cached_at: '2024-01-01T00:00:00Z',
       content: new TextEncoder().encode('<html><body><h1>Test Article</h1><p>Long content for scrolling...</p></body></html>').buffer as ArrayBuffer
-    }]);
+    }];
+
+    // Setup mock data for successful content loading
+    vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmark);
+    vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
+    vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.saveBookmark).mockResolvedValue(undefined);
+    vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue(mockAssets);
+
+    // Mock db object methods used by reactive queries
+    vi.mocked(db.bookmarks.get).mockResolvedValue(mockBookmark);
+    vi.mocked(db.readProgress.where).mockReturnValue({
+      equals: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue(undefined),
+      }),
+    } as any);
+    vi.mocked(db.assets.where).mockReturnValue({
+      equals: vi.fn().mockReturnValue({
+        and: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue(mockAssets),
+        }),
+      }),
+    } as any);
 
     vi.mocked(ContentFetcher.getAvailableContentSources).mockReturnValue([
       { type: 'asset', label: 'Test Article HTML', assetId: 1 },
@@ -178,9 +222,9 @@ describe('Reader Scrolling Experience', () => {
       return toolbar !== null;
     }, { timeout: 3000 });
 
-    // Should have mode switching controls
-    const modeButtons = element.shadowRoot?.querySelectorAll('md-filled-button, md-text-button');
-    expect(modeButtons?.length).toBeGreaterThan(0);
+    // Should have mode switching controls (using processing-mode-button class)
+    const modeButton = element.shadowRoot?.querySelector('.processing-mode-button');
+    expect(modeButton).toBeTruthy();
   });
 
   it('handles reading progress without UI disruption', async () => {

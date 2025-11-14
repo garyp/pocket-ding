@@ -15,6 +15,9 @@ Pocket Ding is a Progressive Web App (PWA) that provides an offline reading expe
 - **Run unit tests only**: `npm run test:unit`
 - **Run integration tests only**: `npm run test:integration`
 - **Run tests in watch mode**: `npm run test:watch`
+- **Run E2E tests**: `npm run test:e2e` (requires Docker, runs headless)
+- **Run E2E tests (quick)**: `npm run test:e2e:quick` (chromium only, faster)
+- **Debug E2E tests**: `npm run test:e2e:debug` (opens browser with inspector)
 
 ## Architecture & Tech Stack
 
@@ -59,16 +62,6 @@ Pocket Ding is a Progressive Web App (PWA) that provides an offline reading expe
 - Dual reading modes (original HTML vs. Readability processed)
 - Background sync with configurable intervals
 - PWA capabilities with service worker
-
-## Testing
-
-Tests use Vitest with Happy DOM environment. The setup includes:
-- **Unit tests**: Individual service and utility testing
-- **Integration tests**: Full component interaction flows
-- **Mocking**: Database and API services are mocked for reliable testing
-- **Custom Elements**: Lit components are properly registered for testing
-
-All tests should pass before considering features complete. The CI expects zero test failures.
 
 ## Code Style Guidelines
 
@@ -169,196 +162,41 @@ class MyComponent extends LitElement {
 - Simplified component logic
 - Better performance through targeted updates
 
-## Testing Philosophy
+## Testing
 
-**IMPORTANT**: This codebase follows a **user-behavior-focused testing approach** that prioritizes maintainability and clarity over implementation coverage.
+**IMPORTANT**: This codebase follows a **user-behavior-focused testing approach** that prioritizes maintainability and clarity over implementation coverage. All tests should pass before considering features complete.
 
-### Core Testing Principles:
-1. **Test User Behavior, Not Implementation**: Focus on what users can do and see, not internal code structure
-2. **Minimal Mocking**: Only mock external dependencies (APIs, databases), never internal services
-3. **Integration Over Units**: Prefer integration tests that exercise complete user workflows
-4. **Regression Protection**: Tests should catch bugs that break real user functionality
-5. **Fast & Reliable**: Test suite runs in <3 seconds with zero flaky tests
+### Quick Reference
 
-### Test Suite Architecture:
+For comprehensive testing documentation, including:
+- Test organization and directory structure
+- When to use each test type (unit/integration/workflow/E2E)
+- Testing philosophy and best practices
+- Component-aware testing utilities
+- E2E testing with TestContainers and Playwright
+- Troubleshooting guide
 
-**Test Categories:**
-1. **Unit Tests** (`src/test/unit/`): Core service logic (ContentFetcher, SecurityService)
-2. **Integration Tests** (`src/test/integration/`): Component interactions and security workflows
-3. **Workflow Tests** (`src/test/workflows/`): User journeys, error scenarios, and accessibility testing
+**See [src/test/README.md](src/test/README.md)** for the complete testing guide.
 
-### Testing Guidelines:
+### Core Principles
 
-**✅ DO Test:**
-- Complete user workflows (bookmark sync, reading content, security features)
-- Critical service functionality (content fetching, security processing)  
-- Error scenarios users encounter (network failures, invalid content)
-- Component interactions and UI state changes
-- Regression scenarios from real bugs
+1. **Test User Behavior, Not Implementation**: Focus on what users can do and see
+2. **Minimal Mocking**: Only mock external dependencies (APIs, databases)
+3. **Integration Over Units**: Prefer integration tests that exercise complete workflows
+4. **Fast & Reliable**: Test suite runs in <6 seconds with zero flaky tests
 
-**❌ DON'T Test:**
-- Internal method calls or implementation details
-- Every possible code path or edge case
-- Mock interactions between internal services
-- Component lifecycle methods unless user-visible
-- Trivial getters/setters or utility functions
+### Common Commands
 
-### New Feature Testing:
+```bash
+# Run all unit/integration/workflow tests
+npm test
 
-When adding new features, write **all tests necessary to validate the user workflows**:
-1. **Integration tests** covering all user workflows enabled by the feature
-2. **Unit tests** for complex service logic with edge cases
-3. **Error handling tests** for user-visible failure scenarios
-4. **Accessibility tests** when the feature affects user interaction
+# Run E2E tests (requires Docker)
+npm run test:e2e:quick
 
-Focus on **quality and conciseness over quantity** - write comprehensive tests for user journeys and error scenarios, but avoid testing implementation details.
-
-### Test Writing Patterns:
-
-**✅ Good - User-focused test:**
-```typescript
-it('should display bookmarks when user loads app with valid settings', async () => {
-  // Setup: User has valid settings
-  DatabaseService.getSettingsLive.mockReturnValue(of(validSettings));
-  DatabaseService.getBookmarksLive.mockReturnValue(of(mockBookmarks));
-  
-  // Action: User loads app  
-  const element = await fixture(html`<app-root></app-root>`);
-  await element.updateComplete;
-  
-  // Verify: User sees bookmarks
-  expect(element.shadowRoot.querySelector('bookmark-list')).to.exist;
-  expect(element.shadowRoot.textContent).to.include('Test Bookmark');
-});
+# Run tests in watch mode
+npm run test:watch
 ```
-
-**❌ Bad - Implementation-focused test:**
-```typescript  
-it('should call syncBookmarks method when sync button clicked', async () => {
-  const syncSpy = vi.spyOn(component, 'syncBookmarks');
-  
-  component.handleSyncClick();
-  
-  expect(syncSpy).toHaveBeenCalled();
-});
-```
-
-### Coverage Philosophy:
-
-- **Focus on critical user paths** rather than overall coverage percentages
-- **Prioritize branch coverage** over statement coverage  
-- **100% coverage not required** - quality and user-behavior focus is more important
-- **Security services should have comprehensive coverage** due to their critical nature
-
-### Testing Instead of Manual Validation
-
-**IMPORTANT**: Always use tests to verify changes instead of running the development server.
-
-- When implementing fixes or new features, write tests to validate the behavior
-- Do NOT use `npm run dev` or manual testing to verify changes work correctly  
-- Tests provide reliable, repeatable validation and prevent regressions
-- Manual testing with the dev server should only be used for exploratory work, not validation
-
-### Component-Aware Testing Utilities
-
-**IMPORTANT**: Use component-aware utilities for testing Lit components with timing dependencies.
-
-#### waitForComponent() - Enhanced waitFor with Timer Management
-
-Use `waitForComponent()` instead of regular `waitFor()` for component operations:
-
-**✅ Good - Component-aware waiting:**
-```typescript
-import { waitForComponent, waitForComponentReady } from '../utils/component-aware-wait-for';
-
-it('should display bookmarks when component loads', async () => {
-  const appRoot = document.createElement('app-root') as AppRoot;
-  document.body.appendChild(appRoot);
-  
-  // Wait for component initialization
-  await waitForComponentReady(appRoot);
-  
-  // Wait for specific UI state
-  await waitForComponent(() => {
-    const container = appRoot.shadowRoot?.querySelector('bookmark-list-container');
-    expect(container).toBeTruthy();
-    return container;
-  });
-});
-```
-
-**❌ Bad - setTimeout delays (antipattern):**
-```typescript
-// Don't do this - brittle and non-deterministic
-await new Promise(resolve => setTimeout(resolve, 100));
-```
-
-#### Targeted Fake Timers for Specific Tests
-
-For testing specific timing behavior, use targeted fake timers:
-
-```typescript
-import { withFakeTimers, createTestTimeout } from '../utils/targeted-fake-timers';
-
-it('should debounce user input', async () => {
-  await withFakeTimers(async () => {
-    const mockSave = vi.fn();
-    component.onInput('search term');
-    
-    // Advance time to trigger debounce
-    vi.advanceTimersByTime(300);
-    expect(mockSave).toHaveBeenCalledWith('search term');
-  });
-});
-```
-
-#### Testing Patterns:
-
-**Component Creation:**
-```typescript
-// Create component and wait for ready state
-const component = document.createElement('my-component') as MyComponent;
-document.body.appendChild(component);
-await waitForComponentReady(component);
-```
-
-**Waiting for UI Changes:**
-```typescript
-// Wait for specific DOM state with automatic timer handling
-await waitForComponent(() => {
-  const element = component.shadowRoot?.querySelector('.expected-class');
-  expect(element).toBeTruthy();
-  return element;
-});
-```
-
-**Custom Timing Options:**
-```typescript
-// Customize timeout and timer advancement for slow operations
-await waitForComponent(() => {
-  expect(component.isFullyLoaded).toBe(true);
-}, {
-  timeout: 10000,
-  interval: 100,
-  timerAdvancement: 50
-});
-```
-
-**Disable Timer Advancement:**
-```typescript
-// For non-component operations, disable timer advancement
-await waitForComponent(() => {
-  expect(mockApi.callCount).toBe(3);
-}, { 
-  advanceTimers: false 
-});
-```
-
-#### Key Benefits:
-- **Component-compatible**: Works seamlessly with Lit component lifecycle
-- **Deterministic**: Controlled timer advancement eliminates flakiness  
-- **Flexible**: Can be customized or disabled per test scenario
-- **Drop-in replacement**: Gradual adoption without breaking existing tests
 
 ### Reader View Optimization
 

@@ -23,7 +23,8 @@ import '../../components/settings-panel';
 
 describe('Mock Mode Integration', () => {
   let settingsPanel: any;
-  
+  let originalFetch: typeof global.fetch;
+
   const mockSettings: AppSettings = {
     linkding_url: MOCK_URL,
     linkding_token: 'any-token-value',
@@ -34,16 +35,22 @@ describe('Mock Mode Integration', () => {
   beforeEach(async () => {
     // Clear all mocks
     vi.clearAllMocks();
-    
+
+    // Save the original fetch mock to restore it later
+    originalFetch = global.fetch;
+
     // Create settings panel component
     settingsPanel = document.createElement('settings-panel');
     document.body.appendChild(settingsPanel);
-    
+
     // Wait for component to be ready
     vi.advanceTimersByTime(100);
   });
 
   afterEach(() => {
+    // Restore the original fetch mock to prevent pollution across tests
+    global.fetch = originalFetch;
+
     if (settingsPanel) {
       document.body.removeChild(settingsPanel);
     }

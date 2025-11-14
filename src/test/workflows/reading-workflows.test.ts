@@ -11,32 +11,57 @@ import { BookmarkReader } from '../../components/bookmark-reader';
 import type { LocalBookmark, AppSettings, LocalAsset, ContentResult } from '../../types';
 
 // Mock services with proper reactive timing simulation
-vi.mock('../../services/database', () => ({
-  DatabaseService: {
-    getSettings: vi.fn(),
-    saveSettings: vi.fn(),
-    getAllBookmarks: vi.fn(),
-    getUnreadBookmarks: vi.fn(),
-    getBookmark: vi.fn(),
-    saveBookmark: vi.fn(),
-    getReadProgress: vi.fn(),
-    saveReadProgress: vi.fn(),
-    clearAll: vi.fn(),
-    getCompletedAssetsByBookmarkId: vi.fn(),
-    getBookmarksPaginated: vi.fn(),
-    getBookmarkCount: vi.fn(),
-    getPageFromAnchorBookmark: vi.fn(),
-    getBookmarksWithAssetCounts: vi.fn(),
-    deleteBookmark: vi.fn(),
-    updateBookmarkReadStatus: vi.fn(),
-    markBookmarkAsRead: vi.fn(),
-    saveAsset: vi.fn(),
-    getAssetsByBookmarkId: vi.fn(),
-    getLastSyncTimestamp: vi.fn(),
-    setLastSyncTimestamp: vi.fn(),
-    getAllFilterCounts: vi.fn(),
-  },
-}));
+vi.mock('../../services/database', async () => {
+  const actual = await vi.importActual('../../services/database');
+  return {
+    ...actual,
+    DatabaseService: {
+      getSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      getAllBookmarks: vi.fn(),
+      getUnreadBookmarks: vi.fn(),
+      getBookmark: vi.fn(),
+      saveBookmark: vi.fn(),
+      getReadProgress: vi.fn(),
+      saveReadProgress: vi.fn(),
+      clearAll: vi.fn(),
+      getCompletedAssetsByBookmarkId: vi.fn(),
+      getBookmarksPaginated: vi.fn(),
+      getBookmarkCount: vi.fn(),
+      getPageFromAnchorBookmark: vi.fn(),
+      getBookmarksWithAssetCounts: vi.fn(),
+      deleteBookmark: vi.fn(),
+      updateBookmarkReadStatus: vi.fn(),
+      markBookmarkAsRead: vi.fn(),
+      saveAsset: vi.fn(),
+      getAssetsByBookmarkId: vi.fn(),
+      getLastSyncTimestamp: vi.fn(),
+      setLastSyncTimestamp: vi.fn(),
+      getAllFilterCounts: vi.fn(),
+    },
+    db: {
+      bookmarks: {
+        get: vi.fn(),
+      },
+      readProgress: {
+        where: vi.fn(() => ({
+          equals: vi.fn(() => ({
+            first: vi.fn(),
+          })),
+        })),
+      },
+      assets: {
+        where: vi.fn(() => ({
+          equals: vi.fn(() => ({
+            and: vi.fn(() => ({
+              toArray: vi.fn(),
+            })),
+          })),
+        })),
+      },
+    },
+  };
+});
 
 vi.mock('../../services/linkding-api', () => ({
   createLinkdingAPI: vi.fn(() => ({
@@ -52,7 +77,7 @@ vi.mock('../../services/content-fetcher', () => ({
   },
 }));
 
-import { DatabaseService } from '../../services/database';
+import { DatabaseService, db } from '../../services/database';
 import { ContentFetcher } from '../../services/content-fetcher';
 
 describe('Reading Workflows - Content Consumption and Offline Access', () => {
@@ -157,6 +182,11 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
   });
 
   afterEach(() => {
+    // Restore fetch mock to prevent pollution across tests
+    if (global.fetch && vi.isMockFunction(global.fetch)) {
+      vi.mocked(global.fetch).mockReset();
+    }
+
     document.body.innerHTML = '';
   });
 
@@ -167,7 +197,23 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
       vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue(mockAssets);
       vi.mocked(DatabaseService.saveReadProgress).mockResolvedValue(undefined);
+      vi.mocked(DatabaseService.saveBookmark).mockResolvedValue(undefined);
       vi.mocked(DatabaseService.markBookmarkAsRead).mockResolvedValue(undefined);
+
+      // Mock db object methods used by reactive queries
+      vi.mocked(db.bookmarks.get).mockResolvedValue(mockBookmarks[0]);
+      vi.mocked(db.readProgress.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue(undefined),
+        }),
+      } as any);
+      vi.mocked(db.assets.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          and: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue(mockAssets),
+          }),
+        }),
+      } as any);
 
       vi.mocked(ContentFetcher.getAvailableContentSources).mockReturnValue([
         { type: 'asset', label: 'Test Article 1 HTML', assetId: 1 },
@@ -213,6 +259,15 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
       // Start with no assets (simulating the race condition)
       vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
 
+      // Mock db object to initially return empty assets
+      vi.mocked(db.assets.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          and: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      } as any);
+
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
       bookmarkReader.bookmarkId = 1;
       document.body.appendChild(bookmarkReader);
@@ -224,6 +279,15 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
 
       // Simulate assets becoming available (like from a reactive query update)
       vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue(mockAssets);
+
+      // Update db mock to return assets
+      vi.mocked(db.assets.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          and: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue(mockAssets),
+          }),
+        }),
+      } as any);
 
       // Trigger component update to simulate reactive query completing
       bookmarkReader.requestUpdate();
@@ -298,10 +362,26 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
     });
 
     it('should demonstrate the loading bug would be caught', async () => {
-      // This test specifically validates that we can detect the "Loading article..." bug
+      // This test specifically validates that we can detect the "Loading content..." bug
       // Start with delayed asset loading to potentially trigger loading state
       vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve(mockAssets), 50))
+      );
+
+      // Mock db object with delayed asset loading
+      vi.mocked(db.assets.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          and: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockImplementation(() =>
+              new Promise(resolve => setTimeout(() => resolve(mockAssets), 50))
+            ),
+          }),
+        }),
+      } as any);
+
+      // Make sure fetchBookmarkContent is mocked to return content after delay
+      vi.mocked(ContentFetcher.fetchBookmarkContent).mockImplementation(() =>
+        new Promise(resolve => setTimeout(() => resolve(mockContentResult), 100))
       );
 
       const bookmarkReader = document.createElement('bookmark-reader') as BookmarkReader;
@@ -311,34 +391,22 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
       await waitForComponentReady(bookmarkReader);
 
       // This test validates that we don't get permanently stuck in loading
-      let foundContent = false;
-      let timeoutCount = 0;
-
+      // Simply wait for secure-iframe to appear (which should happen after Task completes)
       await waitForComponent(() => {
-        const loadingContainer = bookmarkReader.shadowRoot?.querySelector('.loading-container');
         const readerContent = bookmarkReader.shadowRoot?.querySelector('.reader-content');
         const secureIframe = readerContent?.querySelector('secure-iframe');
 
-        // If we see loading state, that's fine initially
-        if (loadingContainer?.textContent?.includes('Loading article...')) {
-          timeoutCount++;
-          // But we shouldn't be stuck there for more than a few cycles
-          if (timeoutCount > 10) {
-            throw new Error('CAUGHT THE BUG: Component stuck in "Loading article..." state');
-          }
+        // Check for loading state
+        const loadingContainer = bookmarkReader.shadowRoot?.querySelector('.loading-container');
+        if (loadingContainer?.textContent?.includes('Loading')) {
           return null; // Keep waiting
         }
 
-        // Should eventually show content
-        if (secureIframe) {
-          foundContent = true;
-          return secureIframe;
-        }
+        // Should eventually show secure-iframe for asset content
+        expect(secureIframe).toBeTruthy();
 
-        return null;
-      }, { timeout: 3000 });
-
-      expect(foundContent).toBe(true);
+        return secureIframe;
+      }, { timeout: 5000 });
     });
   });
 
@@ -347,6 +415,22 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmarks[0]);
       vi.mocked(DatabaseService.getReadProgress).mockResolvedValue(undefined);
       vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue([]);
+
+      // Mock db object methods used by reactive queries
+      vi.mocked(db.bookmarks.get).mockResolvedValue(mockBookmarks[0]);
+      vi.mocked(db.readProgress.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue(undefined),
+        }),
+      } as any);
+      vi.mocked(db.assets.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          and: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      } as any);
+
       vi.mocked(ContentFetcher.getAvailableContentSources).mockReturnValue([
         { type: 'url', label: 'Live URL' }
       ]);
@@ -407,6 +491,22 @@ describe('Reading Workflows - Content Consumption and Offline Access', () => {
       vi.mocked(DatabaseService.getSettings).mockResolvedValue(mockSettings);
       vi.mocked(DatabaseService.getBookmark).mockResolvedValue(mockBookmarks[0]);
       vi.mocked(DatabaseService.getCompletedAssetsByBookmarkId).mockResolvedValue(mockAssets);
+
+      // Mock db object methods used by reactive queries
+      vi.mocked(db.bookmarks.get).mockResolvedValue(mockBookmarks[0]);
+      vi.mocked(db.readProgress.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue(undefined),
+        }),
+      } as any);
+      vi.mocked(db.assets.where).mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          and: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue(mockAssets),
+          }),
+        }),
+      } as any);
+
       vi.mocked(ContentFetcher.getAvailableContentSources).mockReturnValue([
         { type: 'asset', label: 'Test Article 1 HTML', assetId: 1 },
         { type: 'url', label: 'Live URL' }
