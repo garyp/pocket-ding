@@ -15,6 +15,7 @@ Users shall be able to filter bookmarks by the following metadata:
 - **Tags**: Select one or more tags
 - **Read Status**: Unread, Read, or both
 - **Archived Status**: Archived, Unarchived, or both
+- **Has Assets Status**: Has offline content, No offline content, or both
 - **Date Added**: Filter by when bookmarks were added to Linkding
 
 **Out of Scope for Initial Release:**
@@ -26,7 +27,7 @@ Users shall be able to filter bookmarks by the following metadata:
 - Example: Selecting tag "tech" AND "unread" shows only unread bookmarks with the tech tag
 - Within the same filter type, behavior depends on the filter:
   - Tags: OR logic (bookmark must have ANY selected tag)
-  - Status filters: User selects one option (read/unread/both, archived/unarchived/both)
+  - Status filters: User selects one option (read/unread/both, archived/unarchived/both, has assets/no assets/both)
 
 #### 3. User Interface
 
@@ -37,7 +38,7 @@ Users shall be able to filter bookmarks by the following metadata:
 **Filter Dialog Layout:**
 - Grouped by filter type (Tags, Status, Date)
 - **Tags Section**: Chip/badge selection interface for choosing tags
-- **Status Section**: Radio buttons or toggle options for read/unread and archived/unarchived
+- **Status Section**: Radio buttons or toggle options for read/unread, archived/unarchived, and has assets/no assets
 - **Date Section**:
   - Predefined ranges: Today, Last 7 days, Last 30 days, This year
   - Custom date range picker (from/to dates)
@@ -90,6 +91,7 @@ Users shall be able to filter bookmarks by the following metadata:
     tags: string[];
     readStatus: 'all' | 'read' | 'unread';
     archivedStatus: 'all' | 'archived' | 'unarchived';
+    hasAssetsStatus: 'all' | 'has-assets' | 'no-assets';
     dateFilter: {
       type: 'all' | 'preset' | 'custom';
       preset?: 'today' | 'last7days' | 'last30days' | 'thisyear';
@@ -112,6 +114,7 @@ Users shall be able to filter bookmarks by the following metadata:
 - Tag filtering: Check if bookmark has ANY of the selected tags (OR logic)
 - Read status: Filter based on `is_archived` or custom read tracking
 - Archived status: Filter based on `is_archived` field
+- Has assets status: Filter based on whether bookmark has cached offline content (check database for stored assets)
 - Date filtering: Compare bookmark `date_added` against selected range
 
 #### 1.3 Reactive Query Updates
@@ -182,6 +185,9 @@ class FilterDialog extends LitElement {
   }
   if (this.#filters.archivedStatus !== 'all') {
     parts.push(this.#filters.archivedStatus === 'archived' ? 'Archived' : 'Active');
+  }
+  if (this.#filters.hasAssetsStatus !== 'all') {
+    parts.push(this.#filters.hasAssetsStatus === 'has-assets' ? 'With offline content' : 'No offline content');
   }
   if (this.#filters.dateFilter.type !== 'all') {
     parts.push(this.#getDateFilterLabel());
@@ -270,7 +276,7 @@ Following the project's user-behavior-focused testing approach:
 - Test filter logic with various combinations
 - Edge cases: empty filters, all filters applied, date boundaries
 - Tag matching (OR logic within tags)
-- Status filtering (read/unread, archived/unarchived)
+- Status filtering (read/unread, archived/unarchived, has assets/no assets)
 - Date range calculations
 
 #### 5.2 Integration Tests
@@ -374,7 +380,7 @@ Following the project's user-behavior-focused testing approach:
 
 ## Success Criteria
 
-- ✅ Users can filter bookmarks by tags, read status, archived status, and date
+- ✅ Users can filter bookmarks by tags, read status, archived status, has assets status, and date
 - ✅ Multiple filters work together with AND logic
 - ✅ Filters persist across app sessions
 - ✅ Filter dialog is accessible and mobile-friendly
@@ -416,3 +422,6 @@ Following the project's user-behavior-focused testing approach:
 
 10. **Q:** Clear all filters option?
     **A:** Yes, include "Clear All Filters" button in dialog
+
+11. **Q:** Filter by has assets (offline content)?
+    **A:** Yes, as a three-state option (all/has assets/no assets) in the Status section
