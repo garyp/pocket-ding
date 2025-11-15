@@ -16,6 +16,7 @@ export class BookmarkList extends LitElement {
   // Data props - provided by container
   @property({ type: Array }) bookmarks: LocalBookmark[] = [];
   @property({ type: Boolean }) isLoading = false;
+  @property({ type: Boolean }) hasActiveFilters = false;
 
   // Assets query - uses bookmarks data to determine which bookmarks to check
   // Dependency function tracks bookmark IDs so query re-runs when bookmarks change
@@ -721,8 +722,13 @@ export class BookmarkList extends LitElement {
     return html`
       ${this.bookmarks.length === 0 ? html`
         <div class="empty-state">
-          <h3>No bookmarks found</h3>
-          <p>Your bookmarks will appear here after syncing.</p>
+          ${this.hasActiveFilters ? html`
+            <h3>No bookmarks match your filters</h3>
+            <p>Try adjusting or clearing your filters to see more results.</p>
+          ` : html`
+            <h3>No bookmarks found</h3>
+            <p>Your bookmarks will appear here after syncing.</p>
+          `}
         </div>
       ` : html`
         <div class="bookmark-list">

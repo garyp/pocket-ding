@@ -146,6 +146,19 @@ export interface BookmarkListCallbacks {
 // Bookmark List State Types
 export type BookmarkFilter = 'all' | 'unread' | 'archived';
 
+export interface FilterState {
+  tags: string[];
+  readStatus: 'all' | 'read' | 'unread';
+  archivedStatus: 'all' | 'archived' | 'unarchived';
+  hasAssetsStatus: 'all' | 'has-assets' | 'no-assets';
+  dateFilter: {
+    type: 'all' | 'preset' | 'custom';
+    preset?: 'today' | 'last7days' | 'last30days' | 'thisyear';
+    customFrom?: string;
+    customTo?: string;
+  };
+}
+
 export interface BookmarkListState {
   scrollPosition: number;
 }

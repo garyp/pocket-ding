@@ -184,9 +184,11 @@ describe('Browsing Workflows - Bookmark Discovery and Navigation', () => {
       expect(DatabaseService.getBookmarksPaginated).toHaveBeenCalled();
       expect(DatabaseService.getAllFilterCounts).toHaveBeenCalled();
 
-      // Verify filter buttons are present
-      const filterButtons = bookmarkContainer.shadowRoot?.querySelectorAll('md-filled-button, md-text-button');
-      expect(filterButtons?.length).toBeGreaterThan(0);
+      // Verify filter UI is present (icon button and dialog)
+      const filterIconButton = bookmarkContainer.shadowRoot?.querySelector('md-icon-button');
+      const filterDialog = bookmarkContainer.shadowRoot?.querySelector('filter-dialog');
+      expect(filterIconButton).toBeTruthy();
+      expect(filterDialog).toBeTruthy();
     });
   });
 });

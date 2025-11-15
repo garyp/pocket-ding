@@ -2,14 +2,17 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { db } from '../services/database';
 import { DatabaseService } from '../services/database';
+import { FilterService } from '../services/filter-service';
 import { SyncController } from '../controllers/sync-controller';
 import { FaviconController } from '../controllers/favicon-controller';
 import { StateController } from '../controllers/state-controller';
 import { ReactiveQueryController } from '../controllers/reactive-query-controller';
-import type { LocalBookmark, PaginationState, BookmarkListContainerState, BookmarkFilter } from '../types';
+import type { LocalBookmark, PaginationState, BookmarkListContainerState, BookmarkFilter, FilterState } from '../types';
 import '@material/web/labs/badge/badge.js';
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
+import '@material/web/button/outlined-button.js';
+import '@material/web/iconbutton/icon-button.js';
 import '@material/web/icon/icon.js';
 import '@material/web/progress/linear-progress.js';
 import './bookmark-list';
@@ -17,6 +20,7 @@ import './pagination-controls';
 import './paginated-list';
 import './sync-progress';
 import './sync-error-notification';
+import './filter-dialog';
 
 @customElement('bookmark-list-container')
 export class BookmarkListContainer extends LitElement {
@@ -30,9 +34,28 @@ export class BookmarkListContainer extends LitElement {
 
     .filters {
       display: flex;
-      gap: 0.5rem;
+      align-items: center;
+      gap: 0.75rem;
       margin-bottom: 1rem;
       padding: 0 0.25rem;
+    }
+
+    .filter-summary {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--md-sys-color-on-surface-variant);
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .filter-summary-text {
+      flex: 1;
+    }
+
+    .clear-filters-btn {
+      font-size: 0.75rem;
     }
 
     sync-progress {
@@ -50,8 +73,12 @@ export class BookmarkListContainer extends LitElement {
 
       .filters {
         padding: 0;
-        gap: 0.375rem; /* 6px - tighter on mobile */
+        gap: 0.5rem;
         margin-bottom: 0.75rem;
+      }
+
+      .filter-summary {
+        font-size: 0.8125rem;
       }
     }
   `;
@@ -60,6 +87,12 @@ export class BookmarkListContainer extends LitElement {
   @state() private pageSize: number = 25;
   @state() private filter: 'all' | 'unread' | 'archived' = 'all';
   @state() private anchorBookmarkId?: number;
+
+  // Advanced filter state (private state - no decorators on # fields)
+  #filterState: FilterState = FilterService.getDefaultFilterState();
+  #filterDialogOpen = false;
+  #filteredBookmarks: LocalBookmark[] = [];
+  #isApplyingFilters = false;
 
   // Removed containerState - data now handled by reactive queries in bookmark-list
   // Removed totalCount, totalPages, filterCounts - computed by reactive queries
@@ -192,6 +225,8 @@ export class BookmarkListContainer extends LitElement {
     // StateController automatically handles persistence via observedProperties
     void this.#stateController; // Suppress TS6133: declared but never read warning
     this.addEventListener('sync-requested', this.#handleSyncRequested);
+    // Load filter state from database
+    this.#loadFilterState();
     // No need to loadBookmarks - data now handled by reactive queries in bookmark-list
   }
 
@@ -280,24 +315,113 @@ export class BookmarkListContainer extends LitElement {
     }
   };
 
-  #handleFilterChange = (filter: BookmarkFilter) => {
-    if (filter !== this.filter) {
-      // StateController will automatically persist these changes
-      this.filter = filter;
-
-      // Use anchor bookmark ID to find the correct page in the new filter
-      // The reactive query will update when filter changes, so we defer this calculation
-      // to the next microtask when the new positions are available
-      queueMicrotask(() => {
-        const targetPage = this.#getPageFromAnchorBookmark(this.anchorBookmarkId, 1);
-        if (targetPage !== this.currentPage) {
-          this.currentPage = targetPage;
-        }
-      });
-
-      // No need to manually load bookmarks - reactive queries handle this
+  // Advanced filter handlers
+  async #loadFilterState() {
+    try {
+      const savedState = await FilterService.loadFilterState();
+      this.#filterState = savedState || FilterService.getDefaultFilterState();
+      await this.#applyFilters();
+    } catch (error) {
+      // Gracefully handle database errors (e.g., in test environments)
+      this.#filterState = FilterService.getDefaultFilterState();
     }
+  }
+
+  #handleFilterDialogOpen = () => {
+    this.#filterDialogOpen = true;
+    this.requestUpdate();
   };
+
+  #handleFilterDialogClose = () => {
+    this.#filterDialogOpen = false;
+    this.requestUpdate();
+  };
+
+  #handleApplyFilters = async (event: CustomEvent<FilterState>) => {
+    this.#filterState = event.detail;
+    await FilterService.saveFilterState(this.#filterState);
+    await this.#applyFilters();
+    this.currentPage = 1; // Reset to first page when filters change
+    this.requestUpdate();
+  };
+
+  #handleClearFilters = async () => {
+    this.#filterState = FilterService.getDefaultFilterState();
+    await FilterService.clearFilterState();
+    await this.#applyFilters();
+    this.currentPage = 1; // Reset to first page when filters are cleared
+    this.requestUpdate();
+  };
+
+  async #applyFilters() {
+    this.#isApplyingFilters = true;
+    this.requestUpdate();
+
+    const rawBookmarks = this.bookmarks;
+
+    // First apply synchronous filters (tags, read status, archived status, date)
+    let filtered = FilterService.applyFilters(rawBookmarks, this.#filterState);
+
+    // Then apply asynchronous has assets filter
+    if (this.#filterState.hasAssetsStatus !== 'all') {
+      const bookmarkIds = filtered.map(b => b.id);
+      const allowedIds = await FilterService.applyHasAssetsFilter(
+        bookmarkIds,
+        this.#filterState.hasAssetsStatus
+      );
+      filtered = filtered.filter(b => allowedIds.has(b.id));
+    }
+
+    this.#filteredBookmarks = filtered;
+    this.#isApplyingFilters = false;
+    this.requestUpdate();
+  }
+
+  #getFilterSummary(): string {
+    if (!FilterService.hasActiveFilters(this.#filterState)) {
+      return 'All bookmarks';
+    }
+
+    const parts: string[] = [];
+
+    if (this.#filterState.tags.length > 0) {
+      parts.push(`${this.#filterState.tags.length} tag${this.#filterState.tags.length > 1 ? 's' : ''}`);
+    }
+
+    if (this.#filterState.readStatus !== 'all') {
+      parts.push(this.#filterState.readStatus === 'read' ? 'Read' : 'Unread');
+    }
+
+    if (this.#filterState.archivedStatus !== 'all') {
+      parts.push(this.#filterState.archivedStatus === 'archived' ? 'Archived' : 'Active');
+    }
+
+    if (this.#filterState.hasAssetsStatus !== 'all') {
+      parts.push(
+        this.#filterState.hasAssetsStatus === 'has-assets'
+          ? 'With offline content'
+          : 'No offline content'
+      );
+    }
+
+    if (this.#filterState.dateFilter.type !== 'all') {
+      if (this.#filterState.dateFilter.type === 'preset' && this.#filterState.dateFilter.preset) {
+        const presetLabels = {
+          today: 'Today',
+          last7days: 'Last 7 days',
+          last30days: 'Last 30 days',
+          thisyear: 'This year'
+        } as const;
+        const preset = this.#filterState.dateFilter.preset;
+        // Non-null assertion safe because we check preset exists above
+        parts.push(presetLabels[preset!]);
+      } else if (this.#filterState.dateFilter.type === 'custom') {
+        parts.push('Custom date range');
+      }
+    }
+
+    return parts.length > 0 ? parts.join(', ') : 'All bookmarks';
+  }
 
 
   get filterCounts() {
@@ -305,11 +429,23 @@ export class BookmarkListContainer extends LitElement {
   }
 
   get bookmarks(): LocalBookmark[] {
-    return this.#bookmarksQuery.value || [];
+    const rawBookmarks = this.#bookmarksQuery.value || [];
+
+    // Apply filters if any are active
+    if (FilterService.hasActiveFilters(this.#filterState)) {
+      // Return filtered bookmarks (computed asynchronously via #applyFilters)
+      // Trigger re-application if raw bookmarks changed
+      if (rawBookmarks.length > 0 && this.#filteredBookmarks.length === 0 && !this.#isApplyingFilters) {
+        queueMicrotask(() => this.#applyFilters());
+      }
+      return this.#filteredBookmarks;
+    }
+
+    return rawBookmarks;
   }
 
   get isLoading(): boolean {
-    return this.#bookmarksQuery.loading || this.#filterCountsQuery.loading;
+    return this.#bookmarksQuery.loading || this.#filterCountsQuery.loading || this.#isApplyingFilters;
   }
 
   get totalCount(): number {
@@ -342,46 +478,28 @@ export class BookmarkListContainer extends LitElement {
       ` : ''}
 
       <div class="filters">
-        ${this.filter === 'all' ? html`
-          <md-filled-button
-            @click=${() => this.#handleFilterChange('all')}
-          >
-            All (${this.filterCounts.all})
-          </md-filled-button>
-        ` : html`
-          <md-text-button
-            @click=${() => this.#handleFilterChange('all')}
-          >
-            All (${this.filterCounts.all})
-          </md-text-button>
-        `}
-        ${this.filter === 'unread' ? html`
-          <md-filled-button
-            @click=${() => this.#handleFilterChange('unread')}
-          >
-            Unread (${this.filterCounts.unread})
-          </md-filled-button>
-        ` : html`
-          <md-text-button
-            @click=${() => this.#handleFilterChange('unread')}
-          >
-            Unread (${this.filterCounts.unread})
-          </md-text-button>
-        `}
-        ${this.filter === 'archived' ? html`
-          <md-filled-button
-            @click=${() => this.#handleFilterChange('archived')}
-          >
-            Archived (${this.filterCounts.archived})
-          </md-filled-button>
-        ` : html`
-          <md-text-button
-            @click=${() => this.#handleFilterChange('archived')}
-          >
-            Archived (${this.filterCounts.archived})
-          </md-text-button>
-        `}
+        <div class="filter-summary">
+          <span class="filter-summary-text">${this.#getFilterSummary()}</span>
+          ${FilterService.hasActiveFilters(this.#filterState) ? html`
+            <md-text-button
+              class="clear-filters-btn"
+              @click=${this.#handleClearFilters}
+            >
+              Clear filters
+            </md-text-button>
+          ` : ''}
+        </div>
+        <md-icon-button @click=${this.#handleFilterDialogOpen}>
+          <md-icon>filter_list</md-icon>
+        </md-icon-button>
       </div>
+
+      <filter-dialog
+        .open=${this.#filterDialogOpen}
+        .filters=${this.#filterState}
+        @apply-filters=${this.#handleApplyFilters}
+        @close=${this.#handleFilterDialogClose}
+      ></filter-dialog>
 
       <paginated-list
         .totalCount=${this.totalCount}
@@ -393,6 +511,7 @@ export class BookmarkListContainer extends LitElement {
         <bookmark-list
           .bookmarks=${this.bookmarks}
           .isLoading=${false}
+          .hasActiveFilters=${FilterService.hasActiveFilters(this.#filterState)}
           .faviconCache=${faviconState.faviconCache}
           .paginationState=${this.paginationState}
           .syncedBookmarkIds=${syncState.syncedBookmarkIds}
