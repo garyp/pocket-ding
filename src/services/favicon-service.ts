@@ -376,27 +376,29 @@ export class FaviconService extends EventTarget {
 
   static async preloadFavicon(bookmarkId: number, faviconUrl?: string): Promise<void> {
     if (!faviconUrl) return;
-    
+
     // Check if already cached or failed
     const existingAssets = await DatabaseService.getAssetsByBookmarkId(bookmarkId);
     const existingFavicon = existingAssets.find(asset => asset.asset_type === this.FAVICON_ASSET_TYPE);
-    
+
     if (existingFavicon) {
       // Skip if we already have a successful cache or recent failure
-      const hoursSinceCache = existingFavicon.cached_at 
+      const hoursSinceCache = existingFavicon.cached_at
         ? (Date.now() - new Date(existingFavicon.cached_at).getTime()) / (1000 * 60 * 60)
         : Infinity;
-      
+
       // For successful cache, never retry. For failures, retry after 24 hours (could be network issues)
       if (existingFavicon.status === 'complete' || hoursSinceCache < 24) {
         return;
       }
     }
 
-    // Use the main favicon loading logic which handles demo mode and external URLs
-    this.getFaviconForBookmark(bookmarkId, faviconUrl).catch(error => {
+    // Await the favicon fetch to prevent connection pool exhaustion
+    try {
+      await this.getFaviconForBookmark(bookmarkId, faviconUrl);
+    } catch (error) {
       console.debug(`Background favicon fetch failed for bookmark ${bookmarkId}:`, error);
-    });
+    }
   }
 
   static async clearFaviconCache(bookmarkId: number): Promise<void> {
