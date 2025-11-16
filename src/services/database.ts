@@ -20,6 +20,7 @@ export class PocketDingDatabase extends Dexie {
   settings!: Table<AppSettings>;
   syncMetadata!: Table<SyncMetadata>;
   assets!: Table<LocalAsset>;
+  filterState!: Table<any>;
 
   constructor() {
     super('PocketDingDB');
@@ -91,6 +92,16 @@ export class PocketDingDatabase extends Dexie {
           bookmark.needs_asset_sync = bookmark.needs_asset_sync ? 1 : 0;
         }
       });
+    });
+
+    // Version 9: Add filter state table for advanced filtering
+    this.version(9).stores({
+      bookmarks: '++id, url, title, is_archived, unread, date_added, cached_at, last_read_at, needs_read_sync, needs_asset_sync',
+      readProgress: '++id, bookmark_id, last_read_at, dark_mode_override',
+      settings: '++id, linkding_url, linkding_token',
+      syncMetadata: '++id, last_sync_timestamp, unarchived_offset, archived_offset, retry_count, last_error, is_manual_pause',
+      assets: '++id, bookmark_id, asset_type, content_type, display_name, status, date_created, cached_at',
+      filterState: '++id'
     });
   }
 }

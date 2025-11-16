@@ -1,0 +1,137 @@
+<svg width="1200" height="800" xmlns="http://www.w3.org/2000/svg">
+  <!-- Filter Summary Bar - Default State -->
+  <g id="filter-summary-default">
+    <text x="20" y="30" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+      Filter Summary Bar - Default State
+    </text>
+
+    <!-- Background -->
+    <rect x="20" y="50" width="600" height="60" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="1"/>
+
+    <!-- Summary Text -->
+    <text x="40" y="85" font-family="Arial, sans-serif" font-size="16" fill="#666">
+      All bookmarks
+    </text>
+
+    <!-- Filter Icon Button -->
+    <circle cx="580" cy="80" r="20" fill="#1976d2" opacity="0.1"/>
+    <text x="572" y="87" font-family="Arial, sans-serif" font-size="20" fill="#1976d2">⚙</text>
+  </g>
+
+  <!-- Filter Summary Bar - Active Filters -->
+  <g id="filter-summary-active" transform="translate(0, 140)">
+    <text x="20" y="30" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+      Filter Summary Bar - Active Filters
+    </text>
+
+    <!-- Background -->
+    <rect x="20" y="50" width="600" height="60" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="1"/>
+
+    <!-- Summary Text -->
+    <text x="40" y="85" font-family="Arial, sans-serif" font-size="16" fill="#333" font-weight="500">
+      2 tags, Unread, Last 7 days
+    </text>
+
+    <!-- Clear Button -->
+    <rect x="430" y="70" width="100" height="32" rx="16" fill="transparent" stroke="#1976d2" stroke-width="1"/>
+    <text x="455" y="92" font-family="Arial, sans-serif" font-size="14" fill="#1976d2">Clear</text>
+
+    <!-- Filter Icon Button -->
+    <circle cx="580" cy="80" r="20" fill="#1976d2" opacity="0.1"/>
+    <text x="572" y="87" font-family="Arial, sans-serif" font-size="20" fill="#1976d2">⚙</text>
+  </g>
+
+  <!-- Filter Dialog Preview -->
+  <g id="filter-dialog" transform="translate(650, 0)">
+    <text x="0" y="30" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+      Filter Dialog
+    </text>
+
+    <!-- Dialog Background -->
+    <rect x="0" y="50" width="520" height="720" rx="12" fill="white" stroke="#ddd" stroke-width="2"/>
+
+    <!-- Dialog Header -->
+    <rect x="0" y="50" width="520" height="60" rx="12" fill="#f8f9fa"/>
+    <text x="20" y="88" font-family="Arial, sans-serif" font-size="18" font-weight="500" fill="#333">
+      Filter Bookmarks
+    </text>
+
+    <!-- Tags Section -->
+    <text x="20" y="140" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#666" letter-spacing="1">
+      TAGS
+    </text>
+
+    <!-- Tag Chips -->
+    <rect x="20" y="155" width="70" height="32" rx="16" fill="#1976d2" opacity="0.2" stroke="#1976d2" stroke-width="1"/>
+    <text x="35" y="176" font-family="Arial, sans-serif" font-size="13" fill="#1976d2">tech ✓</text>
+
+    <rect x="100" y="155" width="95" height="32" rx="16" fill="transparent" stroke="#999" stroke-width="1"/>
+    <text x="115" y="176" font-family="Arial, sans-serif" font-size="13" fill="#666">typescript</text>
+
+    <rect x="205" y="155" width="60" height="32" rx="16" fill="transparent" stroke="#999" stroke-width="1"/>
+    <text x="220" y="176" font-family="Arial, sans-serif" font-size="13" fill="#666">pwa</text>
+
+    <!-- Read Status Section -->
+    <text x="20" y="230" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#666" letter-spacing="1">
+      READ STATUS
+    </text>
+
+    <!-- Radio Options -->
+    <circle cx="30" cy="255" r="8" fill="white" stroke="#999" stroke-width="2"/>
+    <text x="50" y="261" font-family="Arial, sans-serif" font-size="14" fill="#666">All</text>
+
+    <circle cx="30" cy="285" r="8" fill="white" stroke="#1976d2" stroke-width="2"/>
+    <circle cx="30" cy="285" r="4" fill="#1976d2"/>
+    <text x="50" y="291" font-family="Arial, sans-serif" font-size="14" fill="#333" font-weight="500">Unread only</text>
+
+    <circle cx="30" cy="315" r="8" fill="white" stroke="#999" stroke-width="2"/>
+    <text x="50" y="321" font-family="Arial, sans-serif" font-size="14" fill="#666">Read only</text>
+
+    <!-- Archived Status Section -->
+    <text x="20" y="370" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#666" letter-spacing="1">
+      ARCHIVED STATUS
+    </text>
+
+    <circle cx="30" cy="395" r="8" fill="white" stroke="#1976d2" stroke-width="2"/>
+    <circle cx="30" cy="395" r="4" fill="#1976d2"/>
+    <text x="50" y="401" font-family="Arial, sans-serif" font-size="14" fill="#333" font-weight="500">Active only</text>
+
+    <!-- Date Section -->
+    <text x="20" y="460" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#666" letter-spacing="1">
+      DATE ADDED
+    </text>
+
+    <!-- Date Preset Buttons -->
+    <rect x="20" y="475" width="110" height="36" rx="8" fill="#1976d2" opacity="0.15" stroke="#1976d2" stroke-width="1"/>
+    <text x="43" y="498" font-family="Arial, sans-serif" font-size="13" fill="#1976d2" font-weight="500">All time</text>
+
+    <rect x="140" y="475" width="80" height="36" rx="8" fill="transparent" stroke="#999" stroke-width="1"/>
+    <text x="160" y="498" font-family="Arial, sans-serif" font-size="13" fill="#666">Today</text>
+
+    <rect x="230" y="475" width="110" height="36" rx="8" fill="transparent" stroke="#999" stroke-width="1"/>
+    <text x="245" y="498" font-family="Arial, sans-serif" font-size="13" fill="#666">Last 7 days</text>
+
+    <!-- Custom Date Range -->
+    <text x="20" y="545" font-family="Arial, sans-serif" font-size="13" fill="#666">Custom range:</text>
+
+    <rect x="20" y="555" width="220" height="40" rx="4" fill="white" stroke="#999" stroke-width="1"/>
+    <text x="30" y="563" font-family="Arial, sans-serif" font-size="10" fill="#999">From date</text>
+    <text x="30" y="583" font-family="Arial, sans-serif" font-size="13" fill="#333">2024-01-01</text>
+
+    <rect x="260" y="555" width="220" height="40" rx="4" fill="white" stroke="#999" stroke-width="1"/>
+    <text x="270" y="563" font-family="Arial, sans-serif" font-size="10" fill="#999">To date</text>
+    <text x="270" y="583" font-family="Arial, sans-serif" font-size="13" fill="#333">2024-12-31</text>
+
+    <!-- Dialog Actions -->
+    <line x1="10" y1="680" x2="510" y2="680" stroke="#ddd" stroke-width="1"/>
+
+    <rect x="20" y="695" width="100" height="36" rx="18" fill="transparent" stroke="#666" stroke-width="1"/>
+    <text x="43" y="718" font-family="Arial, sans-serif" font-size="14" fill="#666">Clear All</text>
+
+    <rect x="340" y="695" width="80" height="36" rx="18" fill="transparent" stroke="#666" stroke-width="1"/>
+    <text x="358" y="718" font-family="Arial, sans-serif" font-size="14" fill="#666">Cancel</text>
+
+    <rect x="430" y="695" width="70" height="36" rx="18" fill="#1976d2"/>
+    <text x="451" y="718" font-family="Arial, sans-serif" font-size="14" fill="white" font-weight="500">Apply</text>
+  </g>
+</svg>
