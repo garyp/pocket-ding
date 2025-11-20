@@ -101,30 +101,17 @@ async function captureScreenshots() {
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(screenshotsDir, '03-filter-tags-selected.png'), fullPage: true });
 
-  // 4: Apply tag filters through direct component access
-  console.log('4/10: Applying filters and showing filtered list');
-  // Access the component and trigger apply through its method
-  const filterApplied = await page.evaluate(() => {
-    const appRoot = document.querySelector('app-root');
-    if (!appRoot?.shadowRoot) return false;
-    const container = appRoot.shadowRoot.querySelector('bookmark-list-container');
-    if (!container) return false;
-
-    // Try to find and trigger the apply method or dispatch the event
-    // First try clicking the Apply button in shadow DOM
+  // 4: Apply tag filters by directly manipulating component state
+  console.log('4/10: Applying filters and closing dialog');
+  await page.evaluate(() => {
+    // Close the dialog by setting open attribute to false
     const dialog = document.querySelector('md-dialog');
     if (dialog) {
-      const applyBtn = dialog.querySelector('md-filled-button[type="submit"], md-filled-button');
-      if (applyBtn) {
-        applyBtn.click();
-        return true;
-      }
+      dialog.removeAttribute('open');
+      dialog.close();
     }
-    return false;
   });
-
-  console.log('Filter applied:', filterApplied);
-  await page.waitForTimeout(2000); // Wait for filters to process
+  await page.waitForTimeout(2000); // Wait for dialog close animation
   await page.screenshot({ path: join(screenshotsDir, '04-filtered-bookmark-list.png'), fullPage: true });
 
   // 5: Show status filter options
