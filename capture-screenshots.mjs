@@ -101,21 +101,41 @@ async function captureScreenshots() {
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(screenshotsDir, '03-filter-tags-selected.png'), fullPage: true });
 
-  // 4: Reset and show status filter
-  console.log('4/10: Status filter options');
-  await page.locator('md-text-button').filter({ hasText: 'Clear All' }).click();
-  await page.waitForTimeout(300);
+  // 4: Apply tag filters through direct component access
+  console.log('4/10: Applying filters and showing filtered list');
+  // Access the component and trigger apply through its method
+  const filterApplied = await page.evaluate(() => {
+    const appRoot = document.querySelector('app-root');
+    if (!appRoot?.shadowRoot) return false;
+    const container = appRoot.shadowRoot.querySelector('bookmark-list-container');
+    if (!container) return false;
+
+    // Try to find and trigger the apply method or dispatch the event
+    // First try clicking the Apply button in shadow DOM
+    const dialog = document.querySelector('md-dialog');
+    if (dialog) {
+      const applyBtn = dialog.querySelector('md-filled-button[type="submit"], md-filled-button');
+      if (applyBtn) {
+        applyBtn.click();
+        return true;
+      }
+    }
+    return false;
+  });
+
+  console.log('Filter applied:', filterApplied);
+  await page.waitForTimeout(2000); // Wait for filters to process
+  await page.screenshot({ path: join(screenshotsDir, '04-filtered-bookmark-list.png'), fullPage: true });
+
+  // 5: Show status filter options
+  console.log('5/10: Status filter options');
+  await helpers.clickFilterButton(page);
+  await page.waitForSelector('md-dialog[open]', { timeout: 5000 });
   await page.locator('md-radio[value="unread"]').click();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: join(screenshotsDir, '04-filter-status-options.png'), fullPage: true });
+  await page.screenshot({ path: join(screenshotsDir, '05-filter-status-options.png'), fullPage: true });
 
-  // 5: Archived status
-  console.log('5/10: Archived filter options');
-  await page.locator('md-radio[value="archived"]').click();
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: join(screenshotsDir, '05-filter-archived-options.png'), fullPage: true });
-
-  // 6: Scroll to date range
+  // 6: Scroll to date range section
   console.log('6/10: Date range section');
   await page.evaluate(() => {
     const dialog = document.querySelector('md-dialog');
@@ -124,14 +144,16 @@ async function captureScreenshots() {
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(screenshotsDir, '06-filter-date-range.png'), fullPage: true });
 
-  // 7: Offline content filter
-  console.log('7/10: Offline content filter');
+  // 7: Archived status options
+  console.log('7/10: Archived filter options');
   await page.evaluate(() => {
     const dialog = document.querySelector('md-dialog');
-    if (dialog) dialog.scrollTop = dialog.scrollHeight;
+    if (dialog) dialog.scrollTop = 0; // Scroll back to top
   });
+  await page.waitForTimeout(300);
+  await page.locator('md-radio[value="archived"]').click();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: join(screenshotsDir, '07-filter-offline-content.png'), fullPage: true });
+  await page.screenshot({ path: join(screenshotsDir, '07-filter-archived-options.png'), fullPage: true });
 
   // 8: Dark mode
   console.log('8/10: Dark mode filter dialog');
