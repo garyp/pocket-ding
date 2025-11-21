@@ -101,17 +101,26 @@ async function captureScreenshots() {
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(screenshotsDir, '03-filter-tags-selected.png'), fullPage: true });
 
-  // 4: Apply tag filters by directly manipulating component state
+  // 4: Apply tag filters by clicking the Apply button
   console.log('4/10: Applying filters and closing dialog');
-  await page.evaluate(() => {
-    // Close the dialog by setting open attribute to false
-    const dialog = document.querySelector('md-dialog');
-    if (dialog) {
-      dialog.removeAttribute('open');
-      dialog.close();
-    }
-  });
-  await page.waitForTimeout(2000); // Wait for dialog close animation
+
+  // Make sure dialog is still open
+  await page.waitForSelector('md-dialog[open]', { timeout: 2000 });
+
+  // LIMITATION: Unable to click the Apply button in headless Playwright
+  // Issue: Clicking the Apply button (either via Playwright's click() or evaluate-based click)
+  // causes the entire browser context to close, preventing screenshot capture.
+  // Attempted solutions:
+  // - page.getByRole('button', { name: 'Apply' }).click() - causes page close
+  // - locator.evaluate(node => node.click()) - causes page close
+  // - Direct DOM manipulation via page.evaluate() - button not found in expected locations
+  //
+  // Workaround: Press Escape to close the dialog.
+  // Note: This cancels the filters rather than applying them, so screenshot #4 shows
+  // the original unfiltered list, not the filtered results.
+  console.log('  Closing dialog with Escape key (filters will not be applied)...');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(1500); // Wait for dialog close animation
   await page.screenshot({ path: join(screenshotsDir, '04-filtered-bookmark-list.png'), fullPage: true });
 
   // 5: Show status filter options
