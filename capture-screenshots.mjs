@@ -72,6 +72,21 @@ async function captureScreenshots() {
   const context = await browser.newContext();
   const page = await context.newPage();
 
+  // Listen for console messages and errors
+  const consoleMessages = [];
+  page.on('console', msg => {
+    const text = `[${msg.type()}] ${msg.text()}`;
+    consoleMessages.push(text);
+    if (msg.type() === 'error' || msg.type() === 'warning') {
+      console.log('  Browser console:', text);
+    }
+  });
+
+  page.on('pageerror', err => {
+    console.log('  Page error:', err.message);
+    consoleMessages.push(`[pageerror] ${err.message}`);
+  });
+
   console.log('Setting up app...');
   await page.goto('http://localhost:4173', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('app-root', { timeout: 10000 });
@@ -107,21 +122,27 @@ async function captureScreenshots() {
   // Make sure dialog is still open
   await page.waitForSelector('md-dialog[open]', { timeout: 2000 });
 
-  // LIMITATION: Unable to click the Apply button in headless Playwright
-  // Issue: Clicking the Apply button (either via Playwright's click() or evaluate-based click)
-  // causes the entire browser context to close, preventing screenshot capture.
-  // Attempted solutions:
-  // - page.getByRole('button', { name: 'Apply' }).click() - causes page close
-  // - locator.evaluate(node => node.click()) - causes page close
-  // - Direct DOM manipulation via page.evaluate() - button not found in expected locations
-  //
-  // Workaround: Press Escape to close the dialog.
-  // Note: This cancels the filters rather than applying them, so screenshot #4 shows
-  // the original unfiltered list, not the filtered results.
-  console.log('  Closing dialog with Escape key (filters will not be applied)...');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(1500); // Wait for dialog close animation
-  await page.screenshot({ path: join(screenshotsDir, '04-filtered-bookmark-list.png'), fullPage: true });
+  // Click Apply button using evaluate
+  console.log('  Finding Apply button...');
+  const applyButton = page.getByRole('button', { name: /Apply/i });
+  const isVisible = await applyButton.isVisible({ timeout: 1000 });
+  console.log(`  Apply button visible: ${isVisible}`);
+
+  if (isVisible) {
+    console.log('  Clicking Apply button via evaluate...');
+    try {
+      await applyButton.evaluate(node => {
+        console.log('Inside evaluate, clicking node:', node.tagName);
+        node.click();
+      });
+      console.log('  Click completed successfully!');
+      await page.waitForTimeout(2000); // Wait for filters to apply and dialog to close
+      await page.screenshot({ path: join(screenshotsDir, '04-filtered-bookmark-list.png'), fullPage: true });
+    } catch (err) {
+      console.log(`  Error during click: ${err.message}`);
+      throw err;
+    }
+  }
 
   // 5: Show status filter options
   console.log('5/10: Status filter options');
