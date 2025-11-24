@@ -63,6 +63,10 @@ export class AppRoot extends LitElement {
       z-index: 4;
     }
 
+    .app-header.hidden {
+      display: none;
+    }
+
     .app-title {
       margin: 0;
       font-size: 1.375rem; /* 22px at 16px root - Material Design title-large */
@@ -428,6 +432,10 @@ export class AppRoot extends LitElement {
     this.updateUrl('reader', bookmarkId);
   }
 
+  private handleNavigateBack() {
+    this.handleBackClick();
+  }
+
   private async handleSettingsSave(e: CustomEvent) {
     // The reactive query controller will automatically update with new settings
     const newSettings = e.detail.settings;
@@ -468,9 +476,10 @@ export class AppRoot extends LitElement {
 
   private renderHeader() {
     const showBack = this.currentView !== 'bookmarks' && this.currentView !== 'not-found';
-    
+    const hideHeader = this.currentView === 'reader';
+
     return html`
-      <div class="app-header">
+      <div class="app-header ${hideHeader ? 'hidden' : ''}">
         <div class="header-content">
           ${showBack ? html`
             <md-text-button
@@ -480,13 +489,13 @@ export class AppRoot extends LitElement {
             </md-text-button>
           ` : ''}
           <h1 class="app-title md-typescale-title-large">
-            ${this.currentView === 'bookmarks' ? 'My Bookmarks' : 
-              this.currentView === 'reader' ? 'Reading' : 
-              this.currentView === 'settings' ? 'Settings' : 
+            ${this.currentView === 'bookmarks' ? 'My Bookmarks' :
+              this.currentView === 'reader' ? 'Reading' :
+              this.currentView === 'settings' ? 'Settings' :
               this.currentView === 'debug' ? 'Debug' : 'Page Not Found'}
           </h1>
         </div>
-        
+
         <div class="header-actions">
           ${this.currentView === 'bookmarks' && this.settings ? html`
             <md-text-button
@@ -558,6 +567,7 @@ export class AppRoot extends LitElement {
         return html`
           <bookmark-reader
             .bookmarkId=${this.selectedBookmarkId}
+            @navigate-back=${this.handleNavigateBack}
           ></bookmark-reader>
         `;
       case 'settings':

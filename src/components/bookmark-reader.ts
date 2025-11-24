@@ -213,6 +213,16 @@ export class BookmarkReader extends LitElement {
       min-height: 3rem; /* 48px - reduced from 3.5rem */
     }
 
+    .reader-title {
+      margin: 0;
+      font-size: 1.25rem; /* 20px - Material Design title-large */
+      font-weight: 400;
+      line-height: 1.5rem; /* 24px */
+      letter-spacing: 0;
+      color: var(--md-sys-color-on-surface);
+      white-space: nowrap;
+    }
+
     .reading-mode-toggle {
       display: flex;
       gap: 0.5rem;
@@ -449,28 +459,33 @@ export class BookmarkReader extends LitElement {
         min-height: 2.75rem; /* 44px - reduced from 3rem */
         gap: 0.375rem; /* Increased from 0.25rem for better spacing */
       }
-      
+
+      .reader-title {
+        font-size: 1.125rem; /* 18px - slightly smaller on mobile */
+        line-height: 1.375rem; /* 22px */
+      }
+
       .content-source-selector {
         min-width: 70px; /* Slightly increased from 60px */
         max-width: 90px; /* Increased from 80px to prevent text cutoff */
         flex-shrink: 0; /* Prevent shrinking that could cause overlap */
       }
-      
+
       .processing-mode-toggle {
         gap: 0.25rem; /* Increased from 0.125rem */
         flex-shrink: 0; /* Prevent shrinking */
       }
-      
+
       .toolbar-section md-icon-button {
         --md-icon-button-icon-size: 18px;
         flex-shrink: 0; /* Prevent icon buttons from shrinking */
       }
-      
+
       .processing-mode-button {
         --md-icon-button-icon-size: 18px;
         flex-shrink: 0; /* Prevent shrinking */
       }
-      
+
       .progress-section {
         flex: 1 1 0;
         min-width: 0;
@@ -479,12 +494,12 @@ export class BookmarkReader extends LitElement {
         margin-left: 0.25rem;
         margin-right: 0.25rem;
       }
-      
+
       .toolbar-section {
         gap: 0.375rem; /* Increased from 0.25rem */
         flex-shrink: 0; /* Prevent toolbar sections from shrinking */
       }
-      
+
       .reading-mode-toggle {
         gap: 0.25rem; /* Increased from 0.125rem */
       }
@@ -1137,6 +1152,14 @@ export class BookmarkReader extends LitElement {
     }
   }
 
+  private handleBackClick = () => {
+    // Dispatch custom event to navigate back
+    this.dispatchEvent(new CustomEvent('navigate-back', {
+      bubbles: true,
+      composed: true
+    }));
+  }
+
   private handleInfoClick = () => {
     this.showInfoModal = true;
   }
@@ -1395,7 +1418,7 @@ export class BookmarkReader extends LitElement {
       const assetCount = (this.availableContentSources || []).filter(s => s.type === 'asset').length;
       return assetCount > 1 ? `Saved (${assetCount})` : 'Saved';
     }
-    return 'Live URL';
+    return 'Live';
   }
   
   private getCurrentSourceValue(): string {
@@ -1464,6 +1487,17 @@ export class BookmarkReader extends LitElement {
     return html`
       <div class="reader-container">
         <div class="reader-toolbar">
+          <!-- Back button and title -->
+          <div class="toolbar-section">
+            <md-icon-button
+              @click=${this.handleBackClick}
+              title="Back to bookmarks"
+            >
+              <md-icon>arrow_back</md-icon>
+            </md-icon-button>
+            <h1 class="reader-title">Reading</h1>
+          </div>
+
           <div class="toolbar-section">
             <!-- Content Source Selection -->
             <md-outlined-select
@@ -1471,7 +1505,7 @@ export class BookmarkReader extends LitElement {
               .value=${this.getCurrentSourceValue()}
               @change=${this.handleContentSourceChange}
             >
-              ${this.shouldShowIndividualAssets() ? 
+              ${this.shouldShowIndividualAssets() ?
                 // Show individual assets when multiple exist
                 (this.availableContentSources || []).filter(s => s.type === 'asset').map(source => html`
                   <md-select-option value="asset-${source.assetId}">
@@ -1489,7 +1523,7 @@ export class BookmarkReader extends LitElement {
                 ${this.getContentSourceLabel('live')}
               </md-select-option>
             </md-outlined-select>
-            
+
             <!-- Processing Mode Toggle -->
             <div class="processing-mode-toggle">
               ${this.readingMode === 'readability' ? html`
@@ -1512,7 +1546,7 @@ export class BookmarkReader extends LitElement {
                 </md-icon-button>
               `}
             </div>
-            
+
             <!-- Dark Mode Toggle (readability only) OR Info Button (non-readability) -->
             ${this.readingMode === 'readability' ? html`
               <md-icon-button
@@ -1530,19 +1564,19 @@ export class BookmarkReader extends LitElement {
               </md-icon-button>
             `}
           </div>
-          
+
           ${this.contentResult?.content_type !== 'iframe' ? html`
             <div class="progress-section">
               <span class="progress-text">
                 ${Math.round(this.readProgress)}% read
               </span>
-              <md-linear-progress 
+              <md-linear-progress
                 .value=${this.readProgress / 100}
                 class="flex-1"
               ></md-linear-progress>
             </div>
           ` : ''}
-          
+
           <!-- Open External Link -->
           <div style="flex-shrink: 0;">
             <md-icon-button
@@ -1553,7 +1587,7 @@ export class BookmarkReader extends LitElement {
             </md-icon-button>
           </div>
         </div>
-        
+
         <div class="reader-content" data-content-loaded="${!this.isLoadingContent}">
           ${this.renderContent()}
         </div>
